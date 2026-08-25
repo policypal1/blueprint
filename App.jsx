@@ -1058,9 +1058,10 @@ function Properties({selected,project,updateElement,deleteSelected,wallLengthInc
   return <div className="propStack">
     <div className="badge">{selected.type.toUpperCase()}</div>
     {selected.type === 'wall' && <>
-      <div className="metric"><span>Wall length</span><strong>{inchesLabel(wallLengthInches)}</strong></div>
-      <div className="metric"><span>Thickness</span><strong>{selected.thicknessInches||4.5}&quot;</strong></div>
-      <div className="hint compactHint">Wall resize handles are disabled to keep selection clean. Move the wall if needed, or delete and redraw it with angle lock / Shift precision.</div>
+      <label className="field"><span>Exact wall length</span><input key={selected.id+fmt(wallLengthInches)} defaultValue={inchesLabel(wallLengthInches)} placeholder={`8' 10" or 106`} onBlur={e=>applyExactLength(e.target.value)} onKeyDown={e=>{ if (e.key === 'Enter') e.currentTarget.blur(); }}/></label>
+      <label className="field"><span>Wall thickness (inches)</span><NumberInput value={selected.thicknessInches||4.5} min={0.25} step="0.25" onCommit={v=>set('thicknessInches',v)}/></label>
+      <div className="metric"><span>Current length</span><strong>{inchesLabel(wallLengthInches)}</strong></div>
+      <div className="hint compactHint">Edit walls here with exact numbers. Canvas corner/end resize handles stay disabled so the wall is not cluttered or accidentally distorted.</div>
     </>}
     {['door','window'].includes(selected.type) && <>
       {selected.type==='door' && <label className="field"><span>Door type</span><select value={selected.doorStyle||'single-left'} onChange={e=>set('doorStyle',e.target.value)}><option value="single-left">Single left</option><option value="single-right">Single right</option><option value="double">Double</option><option value="pocket">Pocket</option><option value="sliding">Sliding</option><option value="bifold">Bifold</option></select></label>}

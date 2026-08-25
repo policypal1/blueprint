@@ -1,4 +1,4 @@
-# Blueprint Studio V4
+# Blueprint Studio V6 V4
 
 Browser-based 2D floor-plan editor for creating and modifying residential blueprints.
 
@@ -44,3 +44,7 @@ Project data autosaves in IndexedDB in the browser. Use JSON backups for portabl
 - Restored strong wall angle locking. Hold Shift only for free-angle precision; release Shift to immediately restore the lock.
 - Doors now snap to nearby walls on placement and while being moved, automatically matching the wall angle.
 - Numeric size/rotation fields now allow natural typing and accept values like `1` without immediately forcing a preset minimum.
+
+
+## V6 wall editing
+Walls are edited numerically in the properties panel (exact length and thickness). Canvas drag-resize handles remain disabled for walls; fixture, door, and window resize handles remain enabled.
