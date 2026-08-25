@@ -1,6 +1,6 @@
-# Blueprint Studio V3
+# Blueprint Studio V4
 
-A browser-based 2D floor-plan editor for creating and modifying residential blueprints.
+Browser-based 2D floor-plan editor for creating and modifying residential blueprints.
 
 ## Run locally
 
@@ -11,19 +11,27 @@ npm run dev
 
 ## Deploy to Vercel
 
-This ZIP is intentionally **GitHub-root ready** for the current `policypal1/blueprint` repository. Upload the files directly to the repository root. Vercel should detect Vite automatically and run `npm run build`.
+This ZIP is **GitHub-root ready** for the current `policypal1/blueprint` repository. Upload/replace the files directly in the repository root. Vercel should detect Vite and run `npm run build`.
 
-## V3 controls
+## V4 controls
 
-- **Wall:** normal drawing uses angle/grid snapping plus stronger magnetic snapping to existing wall endpoints and edges.
-- **Shift while drawing a wall:** precision mode. It turns off angle/grid presets while keeping useful wall magnet snapping. The live exact length appears in the top status bar, not on the plan.
-- **Exact wall length:** select a wall and enter either `106` or `8' 10"` in Properties.
-- **Resize:** select a fixture, window, or door and drag its blue resize handle.
-- **Rotate:** select a fixture, window, or door and press **R** to rotate 90 degrees.
-- **Brush erase:** select Brush erase, then change brush size with the slider in the left panel.
-- **Set blueprint scale:** click two known points on an imported plan, then enter their real distance in inches.
+- **Automatic drawing order:** walls render behind doors/windows; fixtures and text render above openings.
+- **Door/window openings:** doors and windows visually mask the wall underneath them instead of being buried by it.
+- **Wall drawing:** angle lock + magnetic wall-end/edge snapping. Starting a new wall on top of another wall no longer lets that starting wall pull the new wall off-axis.
+- **Shift while drawing a wall:** free precision mode.
+- **Wall resize:** select a wall and drag either blue endpoint. Drag the white side handle to change thickness.
+- **Exact wall dimensions:** select a wall and type an exact length or thickness in Properties.
+- **Measure:** drag between any two points to see the real distance using the current blueprint scale. This is temporary and is not added to the drawing.
+- **Window size:** windows have editable width and height/wall-depth and a 2D resize handle.
+- **Fixtures:** select and drag the blue bottom-right handle to resize.
+- **Rotate:** select a door, window, or fixture and press **R**.
+- **Copy / Paste:** select an object, then use **Ctrl/Cmd+C** and **Ctrl/Cmd+V**.
+- **Brush erase:** adjustable brush size.
+- **Clean area:** destructive cleanup. It permanently whites out that area of the imported blueprint and cuts/removes added walls and objects inside the box. Undo restores the previous state.
+- **Zoom:** 25% through 300%.
+- **Set blueprint scale:** click two known points, then enter their real distance in inches.
 - **Undo / Redo:** Ctrl/Cmd+Z and Ctrl/Cmd+Y.
-- **Delete:** select an object and press Delete/Backspace.
+- **Delete:** Delete/Backspace.
 
 ## Included fixture set
 

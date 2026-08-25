@@ -110,9 +110,24 @@ function closestPointOnSegment(p, a, b) {
   return { x: a.x + dx * t, y: a.y + dy * t };
 }
 
+function pointLineDistance(p, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (!len) return dist(p, a);
+  return Math.abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / len;
+}
+
 function snapPoint(point, elements, options = {}) {
   const opts = typeof options === 'boolean' ? { grid: options } : options;
-  const { grid = true, align = true, magnet = true } = opts;
+  const {
+    grid = true,
+    align = true,
+    magnet = true,
+    excludeSegmentWallIds = [],
+    lineFrom = null,
+    lineTolerance = 10,
+  } = opts;
   let p = { ...point };
   const walls = elements.filter(el => el.type === 'wall');
 
@@ -120,7 +135,10 @@ function snapPoint(point, elements, options = {}) {
     let best = null;
     let bestD = 20;
     for (const el of walls) {
-      for (const candidate of [el.a, el.b, closestPointOnSegment(p, el.a, el.b)]) {
+      const candidates = [el.a, el.b];
+      if (!excludeSegmentWallIds.includes(el.id)) candidates.push(closestPointOnSegment(p, el.a, el.b));
+      for (const candidate of candidates) {
+        if (lineFrom && pointLineDistance(candidate, lineFrom.a, lineFrom.b) > lineTolerance) continue;
         const d = dist(p, candidate);
         if (d < bestD) { best = candidate; bestD = d; }
       }
@@ -159,10 +177,111 @@ function angleSnap(a, b, stepDeg = 15) {
   return { x: a.x + Math.cos(snapped) * len, y: a.y + Math.sin(snapped) * len };
 }
 
+function rectsIntersect(a, b) {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function segmentOutsideRect(a, b, rect) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  let t0 = 0, t1 = 1;
+  const checks = [
+    [-dx, a.x - rect.x],
+    [ dx, rect.x + rect.width - a.x],
+    [-dy, a.y - rect.y],
+    [ dy, rect.y + rect.height - a.y],
+  ];
+  for (const [p, q] of checks) {
+    if (p === 0) {
+      if (q < 0) return [[a, b]];
+      continue;
+    }
+    const r = q / p;
+    if (p < 0) {
+      if (r > t1) return [[a, b]];
+      if (r > t0) t0 = r;
+    } else {
+      if (r < t0) return [[a, b]];
+      if (r < t1) t1 = r;
+    }
+  }
+  if (t0 <= 0 && t1 >= 1) return [];
+  const at = (t) => ({ x: a.x + dx * t, y: a.y + dy * t });
+  const pieces = [];
+  if (t0 > 0.0001) pieces.push([a, at(t0)]);
+  if (t1 < 0.9999) pieces.push([at(t1), b]);
+  return pieces.filter(([p1,p2]) => dist(p1,p2) > 1);
+}
+
+function elementBounds(el, units) {
+  if (el.type === 'wall' || el.type === 'line') {
+    const pad = el.type === 'wall' ? Math.max(4, (el.thicknessInches || 4.5) * units / 2) : (el.strokeWidth || 2);
+    return {
+      x: Math.min(el.a.x,el.b.x)-pad,
+      y: Math.min(el.a.y,el.b.y)-pad,
+      width: Math.abs(el.a.x-el.b.x)+pad*2,
+      height: Math.abs(el.a.y-el.b.y)+pad*2,
+    };
+  }
+  if (el.type === 'rect' || el.type === 'clean') return { x:el.x, y:el.y, width:el.width, height:el.height };
+  if (el.type === 'door') {
+    const w=(el.widthInches||30)*units;
+    return {x:el.x-w*.15,y:el.y-w*1.15,width:w*1.35,height:w*1.35};
+  }
+  if (el.type === 'window') {
+    const w=(el.widthInches||30)*units, h=Math.max(12,(el.heightInches||4.5)*units);
+    return {x:el.x-w/2,y:el.y-h/2,width:w,height:h};
+  }
+  if (el.type === 'symbol') {
+    const w=(el.widthInches||24)*units,h=(el.heightInches||24)*units;
+    return {x:el.x-w/2,y:el.y-h/2,width:w,height:h};
+  }
+  if (el.type === 'text') return {x:el.x-10,y:el.y-(el.fontSize||24),width:Math.max(30,(el.text||'').length*(el.fontSize||24)*.6),height:(el.fontSize||24)*1.4};
+  if (el.type === 'erase') {
+    const xs=el.points.map(p=>p.x), ys=el.points.map(p=>p.y), pad=(el.size||36)/2;
+    return {x:Math.min(...xs)-pad,y:Math.min(...ys)-pad,width:Math.max(...xs)-Math.min(...xs)+pad*2,height:Math.max(...ys)-Math.min(...ys)+pad*2};
+  }
+  return {x:-99999,y:-99999,width:0,height:0};
+}
+
+function cleanElementsInRect(elements, rect, units) {
+  const out = [];
+  for (const el of elements) {
+    if (el.type === 'wall' || el.type === 'line') {
+      const pieces = segmentOutsideRect(el.a, el.b, rect);
+      if (!pieces.length) continue;
+      pieces.forEach((piece, i) => out.push({ ...el, id: i === 0 ? el.id : uid(), a: piece[0], b: piece[1] }));
+      continue;
+    }
+    if (el.type === 'erase') {
+      out.push(el);
+      continue;
+    }
+    if (rectsIntersect(elementBounds(el, units), rect)) continue;
+    out.push(el);
+  }
+  return out;
+}
+
+function offsetElement(el, amount = 24) {
+  const clone = JSON.parse(JSON.stringify(el));
+  clone.id = uid();
+  if (clone.a && clone.b) {
+    clone.a.x += amount; clone.a.y += amount;
+    clone.b.x += amount; clone.b.y += amount;
+  } else if (Array.isArray(clone.points)) {
+    clone.points = clone.points.map(p => ({x:p.x+amount,y:p.y+amount}));
+  } else if (Number.isFinite(clone.x) && Number.isFinite(clone.y)) {
+    clone.x += amount; clone.y += amount;
+  }
+  return clone;
+}
+
 function App() {
   const svgRef = useRef(null);
   const fileRef = useRef(null);
   const backupRef = useRef(null);
+  const clipboardRef = useRef(null);
   const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(() => emptyProject('Johnson Remodel'));
   const [hydrated, setHydrated] = useState(false);
@@ -178,6 +297,7 @@ function App() {
   const [calibration, setCalibration] = useState(null);
   const [projectMenu, setProjectMenu] = useState(false);
   const [eraseSize, setEraseSize] = useState(28);
+  const [measurement, setMeasurement] = useState(null);
 
   const selected = project.elements.find(e => e.id === selectedId) || null;
 
@@ -264,11 +384,29 @@ function App() {
     setSelectedId(null);
   };
 
+  const copySelected = () => {
+    if (!selected) return;
+    clipboardRef.current = JSON.parse(JSON.stringify(selected));
+    setStatus('Copied');
+  };
+
+  const pasteCopied = () => {
+    if (!clipboardRef.current) return;
+    pushHistory();
+    const clone = offsetElement(clipboardRef.current, 24);
+    updateProject(p => ({ ...p, elements:[...p.elements, clone] }));
+    setSelectedId(clone.id);
+    setTool('select');
+    setStatus('Pasted copy');
+  };
+
   useEffect(() => {
     const onKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
       const typing = ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); redo(); }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !typing) { e.preventDefault(); copySelected(); }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !typing) { e.preventDefault(); pasteCopied(); }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !typing) deleteSelected();
       if (e.key.toLowerCase() === 'r' && !typing && selected && ['door','window','symbol'].includes(selected.type)) {
         e.preventDefault();
@@ -276,7 +414,7 @@ function App() {
         updateElement(selected.id, { rotation: ((selected.rotation || 0) + 90) % 360 });
         setStatus('Rotated 90°');
       }
-      if (e.key === 'Escape') { setDraft(null); setSelectedId(null); setCalibration(null); }
+      if (e.key === 'Escape') { setDraft(null); setSelectedId(null); setCalibration(null); setMeasurement(null); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -306,8 +444,16 @@ function App() {
       return;
     }
 
-    if (['wall','line','rect'].includes(tool)) {
-      setDraft({ type: tool, a: point, b: point });
+    if (['wall','line','rect','measure'].includes(tool)) {
+      if (tool === 'wall') {
+        const startWallIds = project.elements
+          .filter(el => el.type === 'wall' && dist(point, closestPointOnSegment(point, el.a, el.b)) < 8)
+          .map(el => el.id);
+        setDraft({ type: tool, a: point, b: point, startWallIds });
+      } else {
+        setDraft({ type: tool, a: point, b: point });
+      }
+      if (tool === 'measure') setMeasurement(null);
       return;
     }
 
@@ -333,7 +479,7 @@ function App() {
 
     const common = { x: point.x, y: point.y, rotation: 0 };
     if (tool.startsWith('door-')) addElement({ type:'door', ...common, widthInches:30, doorStyle:tool.replace('door-','') });
-    if (tool === 'window') addElement({ type:'window', ...common, widthInches:30 });
+    if (tool === 'window') addElement({ type:'window', ...common, widthInches:30, heightInches:4.5 });
     if (tool === 'text') addElement({ type:'text', ...common, text:'Room label', fontSize:22 });
     if (tool === 'toilet') addElement({ type:'symbol', symbol:'toilet', ...common, widthInches:14, heightInches:18 });
     if (tool === 'sink') addElement({ type:'symbol', symbol:'sink', ...common, widthInches:18, heightInches:12 });
@@ -348,9 +494,19 @@ function App() {
     const raw = clientToWorld(e);
     const precisionWall = draft?.type === 'wall' && e.shiftKey;
     const wallTarget = precisionWall ? raw : angleSnap(draft?.a || raw, raw);
-    const angledPoint = snapPoint(wallTarget, project.elements, { grid: !precisionWall, align: true, magnet: true });
+    const angledPoint = draft?.type === 'wall'
+      ? snapPoint(wallTarget, project.elements, {
+          grid:false,
+          align:false,
+          magnet:true,
+          excludeSegmentWallIds:draft.startWallIds || [],
+          lineFrom: precisionWall ? null : {a:draft.a,b:wallTarget},
+          lineTolerance:10,
+        })
+      : snapPoint(wallTarget, project.elements, { grid: !e.shiftKey, align: true, magnet: true });
     const freePoint = snapPoint(raw, project.elements, { grid: !e.shiftKey, align: true, magnet: true });
     if (draft && ['wall','line'].includes(draft.type)) setDraft(d => ({ ...d, b: angledPoint }));
+    if (draft?.type === 'measure') setDraft(d => ({ ...d, b: raw }));
     if (draft?.type === 'rect') setDraft(d => ({ ...d, b: freePoint }));
     if (draft?.type === 'wall') {
       const length = dist(draft.a, angledPoint) / project.unitsPerInch;
@@ -367,7 +523,7 @@ function App() {
       const base = drag.base;
       if (selected.type === 'wall' || selected.type === 'dimension' || selected.type === 'line') {
         updateElement(selected.id, { a:{x:base.a.x+dx,y:base.a.y+dy}, b:{x:base.b.x+dx,y:base.b.y+dy} });
-      } else if (selected.type === 'clean' || selected.type === 'rect' || selected.type === 'ellipse') {
+      } else if (selected.type === 'rect') {
         updateElement(selected.id, { x:base.x+dx, y:base.y+dy });
       } else if (selected.type === 'erase') {
         updateElement(selected.id, { points:base.points.map(p => ({x:p.x+dx,y:p.y+dy})) });
@@ -377,20 +533,35 @@ function App() {
     }
     if (drag?.kind === 'resize') {
       const base = drag.base;
-      const angle = -(base.rotation || 0) * Math.PI / 180;
-      const dx = raw.x - (base.x || 0);
-      const dy = raw.y - (base.y || 0);
-      const localX = dx * Math.cos(angle) - dy * Math.sin(angle);
-      const localY = dx * Math.sin(angle) + dy * Math.cos(angle);
-      if (base.type === 'symbol') {
-        updateElement(base.id, {
-          widthInches: Math.max(4, (Math.abs(localX) * 2) / project.unitsPerInch),
-          heightInches: Math.max(4, (Math.abs(localY) * 2) / project.unitsPerInch),
-        });
-      } else if (base.type === 'window') {
-        updateElement(base.id, { widthInches: Math.max(6, (Math.abs(localX) * 2) / project.unitsPerInch) });
-      } else if (base.type === 'door') {
-        updateElement(base.id, { widthInches: Math.max(6, Math.abs(localX) / project.unitsPerInch) });
+      if (base.type === 'wall') {
+        if (drag.handle === 'wall-a' || drag.handle === 'wall-b') {
+          const other = drag.handle === 'wall-a' ? base.b : base.a;
+          const snapped = snapPoint(raw, project.elements.filter(el=>el.id!==base.id), {grid:false,align:true,magnet:true});
+          updateElement(base.id, drag.handle === 'wall-a' ? {a:snapped,b:other} : {a:other,b:snapped});
+        } else if (drag.handle === 'wall-thickness') {
+          const lineDistance = pointLineDistance(raw, base.a, base.b);
+          const thickness = Math.max(0.5, (Math.max(2,lineDistance-18) * 2) / project.unitsPerInch);
+          updateElement(base.id, {thicknessInches:Math.round(thickness*2)/2});
+        }
+      } else {
+        const angle = -(base.rotation || 0) * Math.PI / 180;
+        const dx = raw.x - (base.x || 0);
+        const dy = raw.y - (base.y || 0);
+        const localX = dx * Math.cos(angle) - dy * Math.sin(angle);
+        const localY = dx * Math.sin(angle) + dy * Math.cos(angle);
+        if (base.type === 'symbol') {
+          updateElement(base.id, {
+            widthInches: Math.max(4, (Math.abs(localX) * 2) / project.unitsPerInch),
+            heightInches: Math.max(4, (Math.abs(localY) * 2) / project.unitsPerInch),
+          });
+        } else if (base.type === 'window') {
+          updateElement(base.id, {
+            widthInches: Math.max(6, (Math.abs(localX) * 2) / project.unitsPerInch),
+            heightInches: Math.max(1, (Math.abs(localY) * 2) / project.unitsPerInch),
+          });
+        } else if (base.type === 'door') {
+          updateElement(base.id, { widthInches: Math.max(6, Math.abs(localX) / project.unitsPerInch) });
+        }
       }
     }
     if (drag?.kind === 'pan') {
@@ -398,7 +569,31 @@ function App() {
     }
   };
 
-  const handlePointerUp = () => {
+  const cleanBackgroundRect = async (rect) => {
+    let nextBackground = project.background;
+    if (project.background) {
+      try {
+        const img = new Image();
+        await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=project.background;});
+        const canvas = document.createElement('canvas');
+        canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+        ctx.drawImage(img,0,0,W,H);
+        ctx.fillStyle='#fff'; ctx.fillRect(rect.x,rect.y,rect.width,rect.height);
+        nextBackground = canvas.toDataURL('image/webp',0.96);
+      } catch (err) {
+        console.error('Clean background failed', err);
+      }
+    }
+    pushHistory();
+    const cleaned = cleanElementsInRect(project.elements, rect, project.unitsPerInch);
+    updateProject(p => ({...p,background:nextBackground,elements:cleaned}));
+    setSelectedId(null);
+    setStatus('Area permanently cleaned');
+  };
+
+  const handlePointerUp = async () => {
     if (draft?.type === 'wall' && dist(draft.a, draft.b) > 3) addElement({ type:'wall', a:draft.a, b:draft.b, thicknessInches:4.5 });
     if (draft?.type === 'line' && dist(draft.a, draft.b) > 3) addElement({ type:'line', a:draft.a, b:draft.b, strokeWidth:2 });
     if (draft?.type === 'rect') {
@@ -406,10 +601,14 @@ function App() {
       const width = Math.abs(draft.a.x - draft.b.x), height = Math.abs(draft.a.y - draft.b.y);
       if (width > 3 && height > 3) addElement({ type:'rect', x, y, width, height, strokeWidth:2 });
     }
+    if (draft?.type === 'measure' && dist(draft.a,draft.b) > 2) {
+      setMeasurement({a:draft.a,b:draft.b});
+      setStatus(`Measured ${inchesLabel(dist(draft.a,draft.b)/project.unitsPerInch)}`);
+    }
     if (draft?.type === 'clean') {
       const x = Math.min(draft.a.x, draft.b.x), y = Math.min(draft.a.y, draft.b.y);
       const width = Math.abs(draft.a.x - draft.b.x), height = Math.abs(draft.a.y - draft.b.y);
-      if (width > 3 && height > 3) addElement({ type:'clean', x,y,width,height });
+      if (width > 3 && height > 3) await cleanBackgroundRect({x,y,width,height});
     }
     setDraft(null);
     setDrag(null);
@@ -424,13 +623,13 @@ function App() {
     setDrag({ kind:'move', start:p, base:JSON.parse(JSON.stringify(el)) });
   };
 
-  const startResize = (e, el) => {
+  const startResize = (e, el, handle='corner') => {
     if (tool !== 'select') return;
     e.preventDefault();
     e.stopPropagation();
     setSelectedId(el.id);
     pushHistory();
-    setDrag({ kind:'resize', base:JSON.parse(JSON.stringify(el)) });
+    setDrag({ kind:'resize', base:JSON.parse(JSON.stringify(el)), handle });
   };
 
   async function handleImport(file) {
@@ -603,10 +802,12 @@ function App() {
             <ToolButton tool={tool} id="select" setTool={setTool} icon="↖" label="Select" />
             <ToolButton tool={tool} id="pan" setTool={setTool} icon="✋" label="Pan" />
             <ToolButton tool={tool} id="wall" setTool={setTool} icon="━" label="Wall" />
-            {tool === 'wall' && <div className="toolNote"><b>Smart wall snapping</b><span>Wall ends magnetically snap to existing wall ends and edges. Hold <b>Shift</b> while drawing for free precision, then select the wall to type an exact length.</span></div>}
+            {tool === 'wall' && <div className="toolNote"><b>Smart wall snapping</b><span>Walls lock to clean angles and magnetically snap to other wall ends/edges. Starting on top of another wall no longer pulls the new wall off-axis. Hold <b>Shift</b> for free precision, then select the wall for exact length/thickness.</span></div>}
             <ToolButton tool={tool} id="window" setTool={setTool} icon="▥" label="Window" />
             <ToolButton tool={tool} id="line" setTool={setTool} icon="╱" label="Line" />
             <ToolButton tool={tool} id="rect" setTool={setTool} icon="▭" label="Rectangle" />
+            <ToolButton tool={tool} id="measure" setTool={setTool} icon="↔" label="Measure" />
+            {tool === 'measure' && <div className="toolNote"><b>Temporary measurement</b><span>Drag between any two points to read the real distance using the current blueprint scale. Useful for matching existing wall thickness.</span></div>}
             <ToolButton tool={tool} id="text" setTool={setTool} icon="T" label="Text" />
           </Section>
           <Section title="DOORS">
@@ -621,6 +822,7 @@ function App() {
             <ToolButton tool={tool} id="erase" setTool={setTool} icon="◌" label="Brush erase" />
             {tool === 'erase' && <label className="brushControl"><span>Brush size <strong>{eraseSize}px</strong></span><input type="range" min="8" max="120" step="2" value={eraseSize} onChange={e=>setEraseSize(Number(e.target.value))}/></label>}
             <ToolButton tool={tool} id="clean" setTool={setTool} icon="□" label="Clean area" />
+            {tool === 'clean' && <div className="toolNote"><b>Destructive clean</b><span>Drag a box to permanently remove that area from the imported image and cut through added walls/objects. Undo restores it.</span></div>}
             <ToolButton tool={tool} id="calibrate" setTool={setTool} icon="⌁" label="Set blueprint scale" />
             {tool === 'calibrate' && <div className="toolNote"><b>What this does</b><span>Click two points on the imported blueprint whose real distance you know. Then enter that distance so wall measurements are accurate.</span></div>}
             {calibration?.stage === 2 && <button className="wide primary" onClick={finishCalibration}>Set real distance</button>}
@@ -647,13 +849,17 @@ function App() {
               <rect width={W} height={H} fill="url(#grid)"/>
               {project.background && project.showBackground && <image href={project.background} x="0" y="0" width={W} height={H} preserveAspectRatio="xMidYMid meet" opacity={project.backgroundOpacity}/>}              
               {project.elements.filter(e=>e.type==='clean' || e.type==='erase').map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
-              {project.elements.filter(e=>e.type!=='clean' && e.type!=='erase').map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
+              {project.elements.filter(e=>['wall','line','rect'].includes(e.type)).map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
+              {project.elements.filter(e=>['door','window'].includes(e.type)).map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
+              {project.elements.filter(e=>e.type==='symbol').map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
+              {project.elements.filter(e=>e.type==='text').map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
+              {measurement && <MeasureOverlay measurement={measurement} project={project}/>}
               {draft && <Draft draft={draft} project={project}/>} 
               {calibration && <g pointerEvents="none"><line x1={calibration.a.x} y1={calibration.a.y} x2={calibration.b.x} y2={calibration.b.y} stroke="#e5484d" strokeWidth="4" strokeDasharray="10 8"/><circle cx={calibration.a.x} cy={calibration.a.y} r="7" fill="#e5484d"/><circle cx={calibration.b.x} cy={calibration.b.y} r="7" fill="#e5484d"/></g>}
             </svg>
           </div>
           <div className="zoomBox">
-            <button onClick={()=>setZoom(z=>clamp(z-0.1,0.25,2))}>−</button><span>{Math.round(zoom*100)}%</span><button onClick={()=>setZoom(z=>clamp(z+0.1,0.25,2))}>＋</button><button onClick={()=>{setZoom(0.75);setPan({x:0,y:0})}}>Fit</button>
+            <button onClick={()=>setZoom(z=>clamp(z-0.1,0.25,3))}>−</button><span>{Math.round(zoom*100)}%</span><button onClick={()=>setZoom(z=>clamp(z+0.1,0.25,3))}>＋</button><button onClick={()=>{setZoom(0.75);setPan({x:0,y:0})}}>Fit</button>
           </div>
         </main>
 
@@ -667,6 +873,7 @@ function App() {
           <label className="check"><input type="checkbox" checked={project.showBackground} onChange={e=>updateProject(p=>({...p,showBackground:e.target.checked}))}/> Show imported blueprint</label>
           <div className="metric"><span>Scale</span><strong>{fmt(project.unitsPerInch)} units/in</strong></div>
           <div className="hint">Use <b>Set blueprint scale</b>: click two points with a known distance, then enter that distance in inches. This makes wall lengths match the imported plan.</div>
+          <div className="hint">Layering is automatic: <b>walls → doors/windows → fixtures → text</b>. Doors and windows mask the wall below them. Select anything and use <b>Ctrl/Cmd+C</b>, then <b>Ctrl/Cmd+V</b> to duplicate it.</div>
         </aside>
       </div>
     </div>
@@ -679,13 +886,18 @@ function ToolButton({tool,id,setTool,icon,label}) { return <button className={`t
 function Element({el,project,selected,onDown,onResizeDown}) {
   const common = { onPointerDown:(e)=>onDown(e,el), style:{cursor:'pointer'} };
   const outline = selected ? '#2563eb' : '#111';
-  if (el.type === 'clean') return <rect {...common} x={el.x} y={el.y} width={el.width} height={el.height} fill="#fff" stroke={selected?'#2563eb':'none'} strokeWidth="3"/>;
+  if (el.type === 'clean') return <rect x={el.x} y={el.y} width={el.width} height={el.height} fill="#fff" pointerEvents="none"/>;
   if (el.type === 'erase') {
     const d = el.points.map((p,i)=>`${i?'L':'M'} ${p.x} ${p.y}`).join(' ');
     return <path {...common} d={d} fill="none" stroke="#fff" strokeWidth={el.size||36} strokeLinecap="round" strokeLinejoin="round"/>;
   }
   if (el.type === 'wall') {
-    return <g {...common}><line x1={el.a.x} y1={el.a.y} x2={el.b.x} y2={el.b.y} stroke={outline} strokeWidth={Math.max(3,(el.thicknessInches||4.5)*project.unitsPerInch)} strokeLinecap="square"/></g>;
+    const width=Math.max(3,(el.thicknessInches||4.5)*project.unitsPerInch);
+    return <g>
+      {selected && <line x1={el.a.x} y1={el.a.y} x2={el.b.x} y2={el.b.y} stroke="#2563eb" strokeOpacity=".28" strokeWidth={width+10} strokeLinecap="square" pointerEvents="none"/>}
+      <line {...common} x1={el.a.x} y1={el.a.y} x2={el.b.x} y2={el.b.y} stroke="#000" strokeWidth={width} strokeLinecap="square"/>
+      {selected && <SelectionHandles el={el} project={project} onResizeDown={onResizeDown}/>}
+    </g>;
   }
   if (el.type === 'line') return <line {...common} x1={el.a.x} y1={el.a.y} x2={el.b.x} y2={el.b.y} stroke={outline} strokeWidth={el.strokeWidth||2} strokeLinecap="round"/>;
   if (el.type === 'rect') return <rect {...common} x={el.x} y={el.y} width={el.width} height={el.height} fill="none" stroke={outline} strokeWidth={el.strokeWidth||2}/>;
@@ -697,13 +909,15 @@ function Element({el,project,selected,onDown,onResizeDown}) {
   if (el.type === 'door') return <g><DoorSymbol el={el} project={project} outline={outline} common={common}/>{selected && <SelectionHandles el={el} project={project} onResizeDown={onResizeDown}/>}</g>;
   if (el.type === 'window') {
     const width=(el.widthInches||36)*project.unitsPerInch;
+    const height=Math.max(12,(el.heightInches||4.5)*project.unitsPerInch);
     return <g>
       <g {...common} transform={`translate(${el.x} ${el.y}) rotate(${el.rotation||0})`}>
-        <rect x={-width/2} y="-12" width={width} height="24" fill="#fff" stroke={outline} strokeWidth="4"/>
-        <line x1={-width/2+5} y1="-5" x2={width/2-5} y2="-5" stroke={outline} strokeWidth="2"/>
-        <line x1={-width/2+5} y1="5" x2={width/2-5} y2="5" stroke={outline} strokeWidth="2"/>
-        <line x1={-width/2} y1="-18" x2={-width/2} y2="18" stroke={outline} strokeWidth="3"/>
-        <line x1={width/2} y1="-18" x2={width/2} y2="18" stroke={outline} strokeWidth="3"/>
+        <rect x={-width/2-4} y={-height/2-4} width={width+8} height={height+8} fill="#fff" stroke="none"/>
+        <rect x={-width/2} y={-height/2} width={width} height={height} fill="#fff" stroke={outline} strokeWidth="4"/>
+        <line x1={-width/2+5} y1={-height*.18} x2={width/2-5} y2={-height*.18} stroke={outline} strokeWidth="2"/>
+        <line x1={-width/2+5} y1={height*.18} x2={width/2-5} y2={height*.18} stroke={outline} strokeWidth="2"/>
+        <line x1={-width/2} y1={-height/2-6} x2={-width/2} y2={height/2+6} stroke={outline} strokeWidth="3"/>
+        <line x1={width/2} y1={-height/2-6} x2={width/2} y2={height/2+6} stroke={outline} strokeWidth="3"/>
       </g>
       {selected && <SelectionHandles el={el} project={project} onResizeDown={onResizeDown}/>}
     </g>;
@@ -714,27 +928,40 @@ function Element({el,project,selected,onDown,onResizeDown}) {
 }
 
 function SelectionHandles({el,project,onResizeDown}) {
-  if (!onResizeDown || !['symbol','door','window'].includes(el.type)) return null;
+  if (!onResizeDown || !['symbol','door','window','wall'].includes(el.type)) return null;
   const units = project.unitsPerInch;
   const rotation = el.rotation || 0;
+  if (el.type === 'wall') {
+    const dx=el.b.x-el.a.x,dy=el.b.y-el.a.y,len=Math.hypot(dx,dy)||1;
+    const nx=-dy/len,ny=dx/len;
+    const mx=(el.a.x+el.b.x)/2,my=(el.a.y+el.b.y)/2;
+    const offset=((el.thicknessInches||4.5)*units)/2+18;
+    const hx=mx+nx*offset,hy=my+ny*offset;
+    return <g pointerEvents="none">
+      <line x1={mx} y1={my} x2={hx} y2={hy} stroke="#2563eb" strokeWidth="2" strokeDasharray="5 5"/>
+      <circle pointerEvents="all" onPointerDown={e=>onResizeDown(e,el,'wall-a')} cx={el.a.x} cy={el.a.y} r="9" fill="#2563eb" stroke="#fff" strokeWidth="3" style={{cursor:'move'}}/>
+      <circle pointerEvents="all" onPointerDown={e=>onResizeDown(e,el,'wall-b')} cx={el.b.x} cy={el.b.y} r="9" fill="#2563eb" stroke="#fff" strokeWidth="3" style={{cursor:'move'}}/>
+      <circle pointerEvents="all" onPointerDown={e=>onResizeDown(e,el,'wall-thickness')} cx={hx} cy={hy} r="9" fill="#fff" stroke="#2563eb" strokeWidth="4" style={{cursor:'ns-resize'}}/>
+    </g>;
+  }
   if (el.type === 'symbol') {
     const w=(el.widthInches||24)*units, h=(el.heightInches||24)*units;
     return <g transform={`translate(${el.x} ${el.y}) rotate(${rotation})`} pointerEvents="none">
       <rect x={-w/2-5} y={-h/2-5} width={w+10} height={h+10} fill="none" stroke="#2563eb" strokeWidth="2" strokeDasharray="7 6"/>
-      <rect pointerEvents="all" onPointerDown={e=>onResizeDown(e,el)} x={w/2-8} y={h/2-8} width="16" height="16" rx="3" fill="#2563eb" stroke="#fff" strokeWidth="3" style={{cursor:'nwse-resize'}}/>
+      <rect pointerEvents="all" onPointerDown={e=>onResizeDown(e,el,'corner')} x={w/2-8} y={h/2-8} width="16" height="16" rx="3" fill="#2563eb" stroke="#fff" strokeWidth="3" style={{cursor:'nwse-resize'}}/>
     </g>;
   }
   if (el.type === 'window') {
-    const w=(el.widthInches||36)*units;
+    const w=(el.widthInches||36)*units, h=Math.max(12,(el.heightInches||4.5)*units);
     return <g transform={`translate(${el.x} ${el.y}) rotate(${rotation})`} pointerEvents="none">
-      <rect x={-w/2-5} y="-23" width={w+10} height="46" fill="none" stroke="#2563eb" strokeWidth="2" strokeDasharray="7 6"/>
-      <rect pointerEvents="all" onPointerDown={e=>onResizeDown(e,el)} x={w/2-8} y="12" width="16" height="16" rx="3" fill="#2563eb" stroke="#fff" strokeWidth="3" style={{cursor:'ew-resize'}}/>
+      <rect x={-w/2-5} y={-h/2-5} width={w+10} height={h+10} fill="none" stroke="#2563eb" strokeWidth="2" strokeDasharray="7 6"/>
+      <rect pointerEvents="all" onPointerDown={e=>onResizeDown(e,el,'corner')} x={w/2-8} y={h/2-8} width="16" height="16" rx="3" fill="#2563eb" stroke="#fff" strokeWidth="3" style={{cursor:'nwse-resize'}}/>
     </g>;
   }
   const w=(el.widthInches||32)*units;
   return <g transform={`translate(${el.x} ${el.y}) rotate(${rotation})`} pointerEvents="none">
     <line x1="0" y1="0" x2={w} y2="0" stroke="#2563eb" strokeWidth="2" strokeDasharray="7 6"/>
-    <rect pointerEvents="all" onPointerDown={e=>onResizeDown(e,el)} x={w-8} y="-8" width="16" height="16" rx="3" fill="#2563eb" stroke="#fff" strokeWidth="3" style={{cursor:'ew-resize'}}/>
+    <rect pointerEvents="all" onPointerDown={e=>onResizeDown(e,el,'width')} x={w-8} y="-8" width="16" height="16" rx="3" fill="#2563eb" stroke="#fff" strokeWidth="3" style={{cursor:'ew-resize'}}/>
   </g>;
 }
 
@@ -742,13 +969,15 @@ function DoorSymbol({el,project,outline,common}) {
   const w=(el.widthInches||36)*project.unitsPerInch;
   const style=el.doorStyle||'single-left';
   const transform=`translate(${el.x} ${el.y}) rotate(${el.rotation||0})`;
+  const openingDepth=Math.max(30,10*project.unitsPerInch);
   const base={...common,transform,stroke:outline,fill:'none',strokeLinecap:'round',strokeLinejoin:'round'};
-  if (style==='single-right') return <g {...base}><line x1="0" y1="0" x2="0" y2={w} strokeWidth="4"/><path d={`M ${w} 0 A ${w} ${w} 0 0 1 0 ${w}`} strokeWidth="2"/><line x1="0" y1="0" x2={w} y2="0" strokeWidth="2" strokeDasharray="8 8"/></g>;
-  if (style==='double') { const h=w/2; return <g {...base}><line x1="0" y1="0" x2="0" y2={-h} strokeWidth="4"/><line x1={w} y1="0" x2={w} y2={-h} strokeWidth="4"/><path d={`M ${h} 0 A ${h} ${h} 0 0 0 0 ${-h}`} strokeWidth="2"/><path d={`M ${h} 0 A ${h} ${h} 0 0 1 ${w} ${-h}`} strokeWidth="2"/><line x1="0" y1="0" x2={w} y2="0" strokeWidth="2" strokeDasharray="8 8"/></g>; }
-  if (style==='pocket') return <g {...base}><rect x="0" y="-8" width={w} height="16" strokeWidth="3"/><line x1={w*.5} y1="-18" x2={w*1.45} y2="-18" strokeWidth="4"/><line x1={w*.5} y1="18" x2={w*1.45} y2="18" strokeWidth="2" strokeDasharray="8 7"/><path d={`M ${w*.75} -2 L ${w*.95} -2 M ${w*.88} -9 L ${w*.95} -2 L ${w*.88} 5`} strokeWidth="2"/></g>;
-  if (style==='sliding') return <g {...base}><rect x="0" y="-12" width={w*.58} height="24" strokeWidth="3"/><rect x={w*.42} y="-3" width={w*.58} height="24" strokeWidth="3"/><line x1={w*.15} y1="22" x2={w*.85} y2="22" strokeWidth="2"/><path d={`M ${w*.35} 17 L ${w*.25} 22 L ${w*.35} 27 M ${w*.65} 17 L ${w*.75} 22 L ${w*.65} 27`} strokeWidth="2"/></g>;
-  if (style==='bifold') { const q=w/4; return <g {...base}><polyline points={`0,0 ${q},${-q*.8} ${q*2},0 ${q*3},${-q*.8} ${w},0`} strokeWidth="4"/><line x1="0" y1="0" x2={w} y2="0" strokeWidth="2" strokeDasharray="7 7"/></g>; }
-  return <g {...base}><line x1="0" y1="0" x2="0" y2={-w} strokeWidth="4"/><path d={`M ${w} 0 A ${w} ${w} 0 0 0 0 ${-w}`} strokeWidth="2"/><line x1="0" y1="0" x2={w} y2="0" strokeWidth="2" strokeDasharray="8 8"/></g>;
+  const mask=<rect x="-5" y={-openingDepth/2} width={w+10} height={openingDepth} fill="#fff" stroke="none"/>;
+  if (style==='single-right') return <g {...base}>{mask}<line x1="0" y1="0" x2="0" y2={w} strokeWidth="4"/><path d={`M ${w} 0 A ${w} ${w} 0 0 1 0 ${w}`} strokeWidth="2"/><line x1="0" y1="0" x2={w} y2="0" strokeWidth="2" strokeDasharray="8 8"/></g>;
+  if (style==='double') { const h=w/2; return <g {...base}>{mask}<line x1="0" y1="0" x2="0" y2={-h} strokeWidth="4"/><line x1={w} y1="0" x2={w} y2={-h} strokeWidth="4"/><path d={`M ${h} 0 A ${h} ${h} 0 0 0 0 ${-h}`} strokeWidth="2"/><path d={`M ${h} 0 A ${h} ${h} 0 0 1 ${w} ${-h}`} strokeWidth="2"/><line x1="0" y1="0" x2={w} y2="0" strokeWidth="2" strokeDasharray="8 8"/></g>; }
+  if (style==='pocket') return <g {...base}>{mask}<rect x="0" y="-8" width={w} height="16" strokeWidth="3"/><line x1={w*.5} y1="-18" x2={w*1.45} y2="-18" strokeWidth="4"/><line x1={w*.5} y1="18" x2={w*1.45} y2="18" strokeWidth="2" strokeDasharray="8 7"/><path d={`M ${w*.75} -2 L ${w*.95} -2 M ${w*.88} -9 L ${w*.95} -2 L ${w*.88} 5`} strokeWidth="2"/></g>;
+  if (style==='sliding') return <g {...base}>{mask}<rect x="0" y="-12" width={w*.58} height="24" strokeWidth="3"/><rect x={w*.42} y="-3" width={w*.58} height="24" strokeWidth="3"/><line x1={w*.15} y1="22" x2={w*.85} y2="22" strokeWidth="2"/><path d={`M ${w*.35} 17 L ${w*.25} 22 L ${w*.35} 27 M ${w*.65} 17 L ${w*.75} 22 L ${w*.65} 27`} strokeWidth="2"/></g>;
+  if (style==='bifold') { const q=w/4; return <g {...base}>{mask}<polyline points={`0,0 ${q},${-q*.8} ${q*2},0 ${q*3},${-q*.8} ${w},0`} strokeWidth="4"/><line x1="0" y1="0" x2={w} y2="0" strokeWidth="2" strokeDasharray="7 7"/></g>; }
+  return <g {...base}>{mask}<line x1="0" y1="0" x2="0" y2={-w} strokeWidth="4"/><path d={`M ${w} 0 A ${w} ${w} 0 0 0 0 ${-w}`} strokeWidth="2"/><line x1="0" y1="0" x2={w} y2="0" strokeWidth="2" strokeDasharray="8 8"/></g>;
 }
 
 function Symbol({el,selected,common,project}) {
@@ -772,11 +1001,28 @@ function Symbol({el,selected,common,project}) {
 }
 
 function Draft({draft,project}) {
-  if (draft.type === 'wall') return <line x1={draft.a.x} y1={draft.a.y} x2={draft.b.x} y2={draft.b.y} stroke="#111" strokeOpacity="0.72" strokeWidth={Math.max(3,4.5*project.unitsPerInch)} strokeLinecap="square"/>;
+  if (draft.type === 'wall') return <line x1={draft.a.x} y1={draft.a.y} x2={draft.b.x} y2={draft.b.y} stroke="#000" strokeOpacity="0.82" strokeWidth={Math.max(3,4.5*project.unitsPerInch)} strokeLinecap="square"/>;
   if (draft.type === 'line') return <line x1={draft.a.x} y1={draft.a.y} x2={draft.b.x} y2={draft.b.y} stroke="#2563eb" strokeWidth="2"/>;
   if (draft.type === 'rect') return <rect x={Math.min(draft.a.x,draft.b.x)} y={Math.min(draft.a.y,draft.b.y)} width={Math.abs(draft.a.x-draft.b.x)} height={Math.abs(draft.a.y-draft.b.y)} fill="none" stroke="#2563eb" strokeWidth="2"/>;
+  if (draft.type === 'measure') {
+    const inches=dist(draft.a,draft.b)/project.unitsPerInch;
+    const mx=(draft.a.x+draft.b.x)/2,my=(draft.a.y+draft.b.y)/2;
+    return <g pointerEvents="none"><line x1={draft.a.x} y1={draft.a.y} x2={draft.b.x} y2={draft.b.y} stroke="#2563eb" strokeWidth="3" strokeDasharray="8 6"/><circle cx={draft.a.x} cy={draft.a.y} r="5" fill="#2563eb"/><circle cx={draft.b.x} cy={draft.b.y} r="5" fill="#2563eb"/><rect x={mx-52} y={my-31} width="104" height="26" rx="6" fill="#fff" stroke="#2563eb"/><text x={mx} y={my-13} textAnchor="middle" fill="#111827" fontWeight="700" fontSize="17">{inchesLabel(inches)}</text></g>;
+  }
   if (draft.type === 'clean') return <rect x={Math.min(draft.a.x,draft.b.x)} y={Math.min(draft.a.y,draft.b.y)} width={Math.abs(draft.a.x-draft.b.x)} height={Math.abs(draft.a.y-draft.b.y)} fill="#fff" fillOpacity="0.8" stroke="#2563eb" strokeWidth="3" strokeDasharray="10 8"/>;
   return null;
+}
+
+function MeasureOverlay({measurement,project}) {
+  const inches=dist(measurement.a,measurement.b)/project.unitsPerInch;
+  const mx=(measurement.a.x+measurement.b.x)/2,my=(measurement.a.y+measurement.b.y)/2;
+  return <g pointerEvents="none">
+    <line x1={measurement.a.x} y1={measurement.a.y} x2={measurement.b.x} y2={measurement.b.y} stroke="#0f766e" strokeWidth="3"/>
+    <circle cx={measurement.a.x} cy={measurement.a.y} r="5" fill="#0f766e"/>
+    <circle cx={measurement.b.x} cy={measurement.b.y} r="5" fill="#0f766e"/>
+    <rect x={mx-56} y={my-31} width="112" height="27" rx="6" fill="#fff" stroke="#0f766e"/>
+    <text x={mx} y={my-13} textAnchor="middle" fill="#111827" fontWeight="800" fontSize="17">{inchesLabel(inches)}</text>
+  </g>;
 }
 
 function symbolLabel(symbol) {
@@ -791,13 +1037,15 @@ function Properties({selected,project,updateElement,deleteSelected,wallLengthInc
       <label className="field"><span>Exact length</span><input key={selected.id+fmt(wallLengthInches)} defaultValue={inchesLabel(wallLengthInches)} placeholder={`8' 10" or 106`} onBlur={e=>applyExactLength(e.target.value)}/></label>
       <label className="field"><span>Wall thickness (inches)</span><input type="number" step="0.5" value={selected.thicknessInches||4.5} onChange={e=>set('thicknessInches',Number(e.target.value))}/></label>
       <div className="metric"><span>Displayed</span><strong>{inchesLabel(wallLengthInches)}</strong></div>
+      <div className="hint compactHint">Drag either blue endpoint to resize/re-angle the wall. Drag the white side handle to change wall thickness. The wall itself always stays jet black.</div>
     </>}
     {['door','window'].includes(selected.type) && <>
       {selected.type==='door' && <label className="field"><span>Door type</span><select value={selected.doorStyle||'single-left'} onChange={e=>set('doorStyle',e.target.value)}><option value="single-left">Single left</option><option value="single-right">Single right</option><option value="double">Double</option><option value="pocket">Pocket</option><option value="sliding">Sliding</option><option value="bifold">Bifold</option></select></label>}
       <label className="field"><span>Width (inches)</span><input type="number" min="6" value={selected.widthInches||(selected.type==='door'?36:48)} onChange={e=>set('widthInches',Math.max(6,Number(e.target.value)||6))}/></label>
+      {selected.type==='window' && <label className="field"><span>Height / wall depth (inches)</span><input type="number" min="1" step="0.5" value={selected.heightInches||4.5} onChange={e=>set('heightInches',Math.max(1,Number(e.target.value)||1))}/></label>}
       <label className="field"><span>Rotation (degrees)</span><input type="number" value={selected.rotation||0} onChange={e=>set('rotation',Number(e.target.value)||0)}/></label>
       <div className="quickActions"><button onClick={()=>set('rotation',(selected.rotation||0)-90)}>↶ 90°</button><button onClick={()=>set('rotation',(selected.rotation||0)+90)}>↷ 90°</button></div>
-      <div className="hint compactHint">Drag the blue handle to resize. Press <b>R</b> to rotate 90°.</div>
+      <div className="hint compactHint">Drag the blue handle to resize. Windows resize in both width and height/depth. Press <b>R</b> to rotate 90°.</div>
     </>}
     {selected.type === 'text' && <>
       <label className="field"><span>Text</span><input value={selected.text||''} onChange={e=>set('text',e.target.value)}/></label>
