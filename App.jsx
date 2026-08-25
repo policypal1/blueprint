@@ -180,6 +180,129 @@ function angleSnap(a, b, stepDeg = 15) {
   return { x: a.x + Math.cos(snapped) * len, y: a.y + Math.sin(snapped) * len };
 }
 
+
+const BLUEPRINT_IMPORT_SYMBOLS = new Set(['toilet','sink','shower','tub','bed','wh','washerdryer','counter','stove']);
+const BLUEPRINT_DOOR_STYLES = new Set(['single-left','single-right','double','pocket','sliding','bifold']);
+
+function stripCodeFences(value) {
+  const text = String(value || '').trim();
+  if (!text.startsWith('```')) return text;
+  return text.replace(/^```(?:json|javascript|js|text)?\s*/i, '').replace(/\s*```$/, '').trim();
+}
+
+function normalizeBlueprintImport(raw, currentUnitsPerInch = 4) {
+  const data = Array.isArray(raw) ? { version:1, units:'canvas', elements:raw } : raw;
+  if (!data || typeof data !== 'object' || !Array.isArray(data.elements)) throw new Error('The code needs an "elements" array.');
+
+  const unitName = String(data.units || 'inches').toLowerCase();
+  const supportedUnits = ['inches','inch','in','feet','foot','ft','canvas','pixels','pixel','normalized'];
+  if (!supportedUnits.includes(unitName)) throw new Error(`Unsupported units: ${data.units}`);
+  const mode = ['feet','foot','ft'].includes(unitName) ? 'feet' : ['canvas','pixels','pixel'].includes(unitName) ? 'canvas' : unitName === 'normalized' ? 'normalized' : 'inches';
+  const number = (v, fallback=0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
+  const aliases = {
+    bathtub:'tub', bath:'tub', 'water-heater':'wh', waterheater:'wh', 'water heater':'wh',
+    wd:'washerdryer', washerdryer:'washerdryer', 'washer-dryer':'washerdryer', washer:'washerdryer', dryer:'washerdryer',
+    cooktop:'stove', range:'stove', countertop:'counter', vanity:'sink'
+  };
+  const neutral = [];
+
+  for (const source of data.elements) {
+    if (!source || typeof source !== 'object') continue;
+    let type = String(source.type || source.kind || '').toLowerCase().trim();
+    if (!type) continue;
+    type = aliases[type] || type;
+
+    if (type === 'wall' || type === 'line') {
+      const a = source.a || {x:source.x1, y:source.y1};
+      const b = source.b || {x:source.x2, y:source.y2};
+      neutral.push({ type, a:{x:number(a?.x),y:number(a?.y)}, b:{x:number(b?.x),y:number(b?.y)}, thicknessInches:number(source.thicknessInches ?? source.thickness,4.5), strokeWidth:number(source.strokeWidth,2) });
+      continue;
+    }
+    if (type === 'rect' || type === 'rectangle') {
+      neutral.push({type:'rect',x:number(source.x),y:number(source.y),width:Math.abs(number(source.width,12)),height:Math.abs(number(source.height,12)),strokeWidth:number(source.strokeWidth,2)});
+      continue;
+    }
+    if (type === 'text' || type === 'label') {
+      neutral.push({type:'text',x:number(source.x),y:number(source.y),text:String(source.text ?? source.label ?? 'Label'),fontSize:number(source.fontSize,22),rotation:number(source.rotation,0)});
+      continue;
+    }
+    if (type === 'door') {
+      const style=String(source.style ?? source.doorStyle ?? 'single-left').toLowerCase();
+      neutral.push({type:'door',x:number(source.x),y:number(source.y),widthInches:Math.max(1,number(source.widthInches ?? source.width,30)),rotation:number(source.rotation,0),doorStyle:BLUEPRINT_DOOR_STYLES.has(style)?style:'single-left'});
+      continue;
+    }
+    if (type === 'window') {
+      neutral.push({type:'window',x:number(source.x),y:number(source.y),widthInches:Math.max(1,number(source.widthInches ?? source.width,30)),heightInches:Math.max(.25,number(source.heightInches ?? source.height,4.5)),rotation:number(source.rotation,0)});
+      continue;
+    }
+    const symbol=aliases[String(source.symbol || type).toLowerCase()] || String(source.symbol || type).toLowerCase();
+    if (BLUEPRINT_IMPORT_SYMBOLS.has(symbol)) {
+      const defaults={toilet:[14,18],sink:[18,12],shower:[24,24],tub:[36,18],bed:[36,50],wh:[14,14],washerdryer:[30,18],counter:[48,24],stove:[30,26]}[symbol];
+      neutral.push({type:'symbol',symbol,x:number(source.x),y:number(source.y),widthInches:Math.max(1,number(source.widthInches ?? source.width,defaults[0])),heightInches:Math.max(1,number(source.heightInches ?? source.height,defaults[1])),rotation:number(source.rotation,0)});
+    }
+  }
+  if (!neutral.length) throw new Error('No supported editable objects were found in that code.');
+
+  if (mode === 'canvas') return {elements:neutral.map(el=>({id:uid(),...el})),unitsPerInch:currentUnitsPerInch,name:data.name};
+
+  if (mode === 'normalized') {
+    const xScale=W/1000,yScale=H/1000;
+    const elements=neutral.map(el=>{
+      const out={id:uid(),...el};
+      if (out.a&&out.b) {out.a={x:out.a.x*xScale,y:out.a.y*yScale};out.b={x:out.b.x*xScale,y:out.b.y*yScale};}
+      else if (Number.isFinite(out.x)&&Number.isFinite(out.y)) {out.x*=xScale;out.y*=yScale;}
+      if (out.type==='rect') {out.width*=xScale;out.height*=yScale;}
+      return out;
+    });
+    return {elements,unitsPerInch:currentUnitsPerInch,name:data.name,normalized:true};
+  }
+
+  const feetFactor=mode==='feet'?12:1;
+  const points=[];
+  const addPoint=(x,y)=>points.push({x:x*feetFactor,y:y*feetFactor});
+  for (const el of neutral) {
+    if (el.a&&el.b) {addPoint(el.a.x,el.a.y);addPoint(el.b.x,el.b.y);}
+    else if (Number.isFinite(el.x)&&Number.isFinite(el.y)) {
+      const halfW=(el.widthInches||0)/2,halfH=(el.heightInches||0)/2;
+      addPoint(el.x-halfW/feetFactor,el.y-halfH/feetFactor);addPoint(el.x+halfW/feetFactor,el.y+halfH/feetFactor);
+    }
+    if (el.type==='rect') {addPoint(el.x,el.y);addPoint(el.x+el.width,el.y+el.height);}
+  }
+  const minX=Math.min(...points.map(p=>p.x)),maxX=Math.max(...points.map(p=>p.x)),minY=Math.min(...points.map(p=>p.y)),maxY=Math.max(...points.map(p=>p.y));
+  const spanX=Math.max(1,maxX-minX),spanY=Math.max(1,maxY-minY);
+  const unitsPerInch=clamp(Math.min(4,(W-140)/spanX,(H-140)/spanY),0.35,8);
+  const offsetX=(W-spanX*unitsPerInch)/2-minX*unitsPerInch,offsetY=(H-spanY*unitsPerInch)/2-minY*unitsPerInch;
+  const coord=(v,axis)=>v*feetFactor*unitsPerInch+(axis==='x'?offsetX:offsetY);
+  const elements=neutral.map(el=>{
+    const out={id:uid(),...el};
+    if (out.a&&out.b) {out.a={x:coord(out.a.x,'x'),y:coord(out.a.y,'y')};out.b={x:coord(out.b.x,'x'),y:coord(out.b.y,'y')};}
+    else if (Number.isFinite(out.x)&&Number.isFinite(out.y)) {out.x=coord(out.x,'x');out.y=coord(out.y,'y');}
+    if (out.type==='rect') {out.width=out.width*feetFactor*unitsPerInch;out.height=out.height*feetFactor*unitsPerInch;}
+    return out;
+  });
+  return {elements,unitsPerInch,name:data.name};
+}
+
+const CHATGPT_BLUEPRINT_PROMPT = `Analyze the attached floor-plan/blueprint image and return ONLY valid JSON for Blueprint Studio. Do not use markdown fences or explanations.
+
+Use this shape:
+{"version":1,"name":"Project name","units":"inches","elements":[]}
+
+If readable dimensions are present, use units "inches" and use real-world inch coordinates. Put the top-left of the plan near (0,0). If dimensions are not readable, use units "normalized" and map only positional coordinates (x, y, x1, y1, x2, y2) to 0..1000. Keep wall thickness and door/window/fixture width/height as reasonable real-world inches.
+
+Supported editable elements:
+- wall: {"type":"wall","x1":0,"y1":0,"x2":120,"y2":0,"thickness":4.5}
+- line: {"type":"line","x1":0,"y1":0,"x2":120,"y2":0,"strokeWidth":2}
+- door: {"type":"door","x":60,"y":0,"width":30,"rotation":0,"style":"single-left"}
+  Door styles: single-left, single-right, double, pocket, sliding, bifold
+- window: {"type":"window","x":60,"y":0,"width":30,"height":4.5,"rotation":0}
+- fixtures/objects: toilet, sink, shower, tub, bed, wh, washerdryer, counter, stove
+  Example: {"type":"sink","x":100,"y":80,"width":18,"height":12,"rotation":0}
+- text: {"type":"text","x":100,"y":100,"text":"BEDROOM","fontSize":22,"rotation":0}
+- rect: {"type":"rect","x":50,"y":50,"width":100,"height":60,"strokeWidth":2}
+
+Trace all visible walls as separate wall segments. Place doors/windows on the wall centerline with the correct rotation. Include readable room labels and supported fixtures that are visibly present. Do not invent hidden geometry. Output JSON only.`;
+
 function nearestWallSnap(point, elements, threshold = 34, excludeIds = []) {
   let best = null;
   for (const wall of elements) {
@@ -312,6 +435,11 @@ function BlueprintApp() {
   const [calibration, setCalibration] = useState(null);
   const [projectMenu, setProjectMenu] = useState(false);
   const [exportMenu, setExportMenu] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importCode, setImportCode] = useState('');
+  const [importReplace, setImportReplace] = useState(true);
+  const [importError, setImportError] = useState('');
   const [eraseSize, setEraseSize] = useState(28);
   const [measurement, setMeasurement] = useState(null);
 
@@ -686,6 +814,105 @@ function BlueprintApp() {
     }
   }
 
+  const importEditableCode = () => {
+    try {
+      const parsed=JSON.parse(stripCodeFences(importCode));
+      const normalized=normalizeBlueprintImport(parsed,project.unitsPerInch);
+      pushHistory();
+      updateProject(p=>({...p,name:normalized.name&&String(normalized.name).trim()?String(normalized.name).trim():p.name,unitsPerInch:normalized.unitsPerInch,elements:importReplace?normalized.elements:[...p.elements,...normalized.elements]}));
+      setSelectedId(null);setImportOpen(false);setImportError('');setImportCode('');
+      setStatus(normalized.normalized?`Imported ${normalized.elements.length} editable objects · calibrate scale if exact measurements are needed`:`Imported ${normalized.elements.length} editable objects`);
+    } catch (err) {
+      console.error(err);setImportError(err?.message||'Could not read that Blueprint Studio code.');
+    }
+  };
+
+  const copyChatGPTPrompt = async () => {
+    try {await navigator.clipboard.writeText(CHATGPT_BLUEPRINT_PROMPT);setStatus('ChatGPT import prompt copied');}
+    catch {setImportError('Could not copy automatically.');}
+  };
+
+  const exportRaster = async (kind = 'png') => {
+    if (exporting) return;
+    let svgUrl = null;
+    let pngUrl = null;
+    try {
+      setExporting(true);
+      setStatus(kind === 'pdf' ? 'Preparing PDF…' : 'Preparing PNG…');
+
+      // Give React a frame to render the clean export state without selection handles,
+      // temporary measurements, calibration marks, or an in-progress drawing.
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      const svg = svgRef.current;
+      if (!svg) throw new Error('Blueprint canvas is not available.');
+
+      const clone = svg.cloneNode(true);
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+      clone.setAttribute('width', String(W));
+      clone.setAttribute('height', String(H));
+      clone.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+      // Event handlers are React-only and are not serialized, but these attributes
+      // make the exported SVG self-contained and predictable across browsers.
+      const serialized = new XMLSerializer().serializeToString(clone);
+      const svgBlob = new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' });
+      svgUrl = URL.createObjectURL(svgBlob);
+
+      const img = new Image();
+      img.decoding = 'async';
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error('Could not render the blueprint for export.'));
+        img.src = svgUrl;
+      });
+
+      const exportWidth = 3200;
+      const exportHeight = Math.round(exportWidth * H / W);
+      const canvas = document.createElement('canvas');
+      canvas.width = exportWidth;
+      canvas.height = exportHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Could not create an export canvas.');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, exportWidth, exportHeight);
+      ctx.drawImage(img, 0, 0, exportWidth, exportHeight);
+
+      const safeName = project.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'blueprint';
+
+      if (kind === 'pdf') {
+        const png = canvas.toDataURL('image/png', 1);
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'in', format: [17, 11], compress: true });
+        const margin = 0.25;
+        pdf.addImage(png, 'PNG', margin, margin, 16.5, 10.5, undefined, 'FAST');
+        pdf.save(`${safeName}.pdf`);
+        setStatus('PDF exported');
+      } else {
+        const pngBlob = await new Promise((resolve, reject) => {
+          canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not create PNG file.')), 'image/png', 1);
+        });
+        pngUrl = URL.createObjectURL(pngBlob);
+        const a = document.createElement('a');
+        a.href = pngUrl;
+        a.download = `${safeName}.png`;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setStatus('PNG exported');
+      }
+    } catch (err) {
+      console.error('Export failed', err);
+      setStatus('Export failed');
+      alert(`Export failed: ${err?.message || 'Unknown error'}`);
+    } finally {
+      if (svgUrl) URL.revokeObjectURL(svgUrl);
+      if (pngUrl) setTimeout(() => URL.revokeObjectURL(pngUrl), 1500);
+      setExporting(false);
+    }
+  };
+
   const createProject = () => {
     const suggested = `Project ${Math.max(1, projects.length + 1)}`;
     const name = prompt('Name this project', suggested);
@@ -742,8 +969,9 @@ function BlueprintApp() {
         <div className="headerActions">
           <button onClick={undo} disabled={!history.length}>↶ Undo</button>
           <button onClick={redo} disabled={!future.length}>↷ Redo</button>
+          <button className="importButton" onClick={()=>{setImportOpen(true);setImportError('');}}>Import</button>
           <div className="exportWrap">
-            <button className="primary exportButton" onClick={()=>setExportMenu(v=>!v)}>Export <span>▾</span></button>
+            <button className="primary exportButton" disabled={exporting} onClick={()=>setExportMenu(v=>!v)}>{exporting ? 'Exporting…' : 'Export'} {!exporting && <span>▾</span>}</button>
             {exportMenu && <div className="exportMenu">
               <button onClick={()=>{setExportMenu(false);exportRaster('pdf');}}><span className="exportIcon">PDF</span><span><b>PDF</b><small>11 × 17 plan sheet</small></span></button>
               <button onClick={()=>{setExportMenu(false);exportRaster('png');}}><span className="exportIcon">PNG</span><span><b>PNG image</b><small>High-resolution image</small></span></button>
@@ -813,14 +1041,14 @@ function BlueprintApp() {
               <rect width={W} height={H} fill="#fff"/>
               <rect width={W} height={H} fill="url(#grid)"/>
               {project.background && project.showBackground && <image href={project.background} x="0" y="0" width={W} height={H} preserveAspectRatio="xMidYMid meet" opacity={project.backgroundOpacity}/>}              
-              {project.elements.filter(e=>e.type==='clean' || e.type==='erase').map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
-              {project.elements.filter(e=>['wall','line','rect'].includes(e.type)).map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
-              {project.elements.filter(e=>['door','window'].includes(e.type)).map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
-              {project.elements.filter(e=>e.type==='symbol').map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
-              {project.elements.filter(e=>e.type==='text').map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
-              {measurement && <MeasureOverlay measurement={measurement} project={project}/>}
-              {draft && <Draft draft={draft} project={project}/>} 
-              {calibration && <g pointerEvents="none"><line x1={calibration.a.x} y1={calibration.a.y} x2={calibration.b.x} y2={calibration.b.y} stroke="#e5484d" strokeWidth="4" strokeDasharray="10 8"/><circle cx={calibration.a.x} cy={calibration.a.y} r="7" fill="#e5484d"/><circle cx={calibration.b.x} cy={calibration.b.y} r="7" fill="#e5484d"/></g>}
+              {project.elements.filter(e=>e.type==='clean' || e.type==='erase').map(el => <Element key={el.id} el={el} project={project} selected={!exporting && selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
+              {project.elements.filter(e=>['wall','line','rect'].includes(e.type)).map(el => <Element key={el.id} el={el} project={project} selected={!exporting && selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
+              {project.elements.filter(e=>['door','window'].includes(e.type)).map(el => <Element key={el.id} el={el} project={project} selected={!exporting && selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
+              {project.elements.filter(e=>e.type==='symbol').map(el => <Element key={el.id} el={el} project={project} selected={!exporting && selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
+              {project.elements.filter(e=>e.type==='text').map(el => <Element key={el.id} el={el} project={project} selected={!exporting && selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
+              {!exporting && measurement && <MeasureOverlay measurement={measurement} project={project}/>}
+              {!exporting && draft && <Draft draft={draft} project={project}/>} 
+              {!exporting && calibration && <g pointerEvents="none"><line x1={calibration.a.x} y1={calibration.a.y} x2={calibration.b.x} y2={calibration.b.y} stroke="#e5484d" strokeWidth="4" strokeDasharray="10 8"/><circle cx={calibration.a.x} cy={calibration.a.y} r="7" fill="#e5484d"/><circle cx={calibration.b.x} cy={calibration.b.y} r="7" fill="#e5484d"/></g>}
             </svg>
           </div>
           <div className="zoomBox">
@@ -841,6 +1069,20 @@ function BlueprintApp() {
           <div className="hint">Layering is automatic: <b>walls → doors/windows → fixtures → text</b>. Doors and windows mask the wall below them. Select anything and use <b>Ctrl/Cmd+C</b>, then <b>Ctrl/Cmd+V</b> to duplicate it.</div>
         </aside>
       </div>
+
+      {importOpen && <div className="modalBackdrop" onPointerDown={(e)=>{if(e.target===e.currentTarget)setImportOpen(false);}}>
+        <div className="importModal" role="dialog" aria-modal="true" aria-label="Import editable blueprint code">
+          <div className="modalHeader"><div><span className="eyebrow">AI → EDITABLE PLAN</span><h2>Import Blueprint Code</h2></div><button className="modalClose" onClick={()=>setImportOpen(false)} aria-label="Close">×</button></div>
+          <p className="modalLead">Paste Blueprint Studio JSON generated from a blueprint image. Walls, doors, windows, labels and supported fixtures become normal editable objects.</p>
+          <div className="importWorkflow"><div><strong>1</strong><span>Give the blueprint image to ChatGPT.</span></div><div><strong>2</strong><span>Use the Blueprint Studio format prompt.</span></div><div><strong>3</strong><span>Paste the JSON below and import.</span></div></div>
+          <button className="copyPromptButton" onClick={copyChatGPTPrompt}>Copy ChatGPT format prompt</button>
+          <textarea className="importTextarea" value={importCode} onChange={e=>{setImportCode(e.target.value);setImportError('');}} placeholder={'Paste JSON here…\n\n{"version":1,"units":"inches","elements":[…]}'}/>
+          <label className="replaceCheck"><input type="checkbox" checked={importReplace} onChange={e=>setImportReplace(e.target.checked)}/><span><b>Replace current editable drawing</b><small>The uploaded background image is kept. Turn this off to add the imported objects to the current drawing.</small></span></label>
+          {importError && <div className="importError">{importError}</div>}
+          <div className="modalActions"><button onClick={()=>setImportOpen(false)}>Cancel</button><button className="primary" disabled={!importCode.trim()} onClick={importEditableCode}>Import editable plan</button></div>
+          <div className="modalFootnote">AI tracing can be approximate. If the source image has no reliable dimensions, use normalized coordinates and then <b>Set blueprint scale</b>.</div>
+        </div>
+      </div>}
     </div>
   );
 }
