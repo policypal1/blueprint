@@ -1,4 +1,4 @@
-# Blueprint Studio V8
+# Blueprint Studio V9
 
 Browser-based blueprint editor for remodeling and floor-plan revisions.
 
@@ -38,3 +38,10 @@ npm run dev
 ```bash
 npm run build
 ```
+
+## V9 additions
+
+- Line tool now magnetically snaps to endpoints and edges of existing lines so segments connect cleanly.
+- Added resizable **Counter** object.
+- Added resizable **Stove** object.
+- Sink remains available.

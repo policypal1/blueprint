@@ -129,12 +129,15 @@ function snapPoint(point, elements, options = {}) {
     lineTolerance = 10,
   } = opts;
   let p = { ...point };
-  const walls = elements.filter(el => el.type === 'wall');
+  // Walls and annotation lines are both magnetic geometry. This lets line
+  // endpoints connect cleanly to other lines instead of stopping a few
+  // pixels short or overlapping by eye.
+  const snapSegments = elements.filter(el => el.type === 'wall' || el.type === 'line');
 
   if (magnet) {
     let best = null;
     let bestD = 20;
-    for (const el of walls) {
+    for (const el of snapSegments) {
       const candidates = [el.a, el.b];
       if (!excludeSegmentWallIds.includes(el.id)) candidates.push(closestPointOnSegment(p, el.a, el.b));
       for (const candidate of candidates) {
@@ -146,8 +149,8 @@ function snapPoint(point, elements, options = {}) {
     if (best) return { ...best, snapped: true };
   }
 
-  if (align && walls.length) {
-    const anchors = walls.flatMap(el => [el.a, el.b]);
+  if (align && snapSegments.length) {
+    const anchors = snapSegments.flatMap(el => [el.a, el.b]);
     let bestX = null, bestY = null, dx = 11, dy = 11;
     for (const a of anchors) {
       const xDelta = Math.abs(p.x - a.x);
@@ -508,6 +511,8 @@ function BlueprintApp() {
     if (tool === 'bed') addElement({ type:'symbol', symbol:'bed', ...common, widthInches:36, heightInches:50 });
     if (tool === 'wh') addElement({ type:'symbol', symbol:'wh', ...common, widthInches:14, heightInches:14 });
     if (tool === 'washerdryer') addElement({ type:'symbol', symbol:'washerdryer', ...common, widthInches:30, heightInches:18 });
+    if (tool === 'counter') addElement({ type:'symbol', symbol:'counter', ...common, widthInches:48, heightInches:24 });
+    if (tool === 'stove') addElement({ type:'symbol', symbol:'stove', ...common, widthInches:30, heightInches:26 });
   };
 
   const handlePointerMove = (e) => {
@@ -762,6 +767,7 @@ function BlueprintApp() {
             {tool === 'wall' && <div className="toolNote"><b>Smart wall snapping</b><span>Walls lock to clean angles and magnetically snap to other wall ends/edges. Hold <b>Shift</b> only when you need a free-angle precision adjustment; release it and the angle lock immediately comes back.</span></div>}
             <ToolButton tool={tool} id="window" setTool={setTool} icon="▥" label="Window" />
             <ToolButton tool={tool} id="line" setTool={setTool} icon="╱" label="Line" />
+            {tool === 'line' && <div className="toolNote"><b>Line snapping</b><span>Start or finish near another line and it will magnetically connect to the endpoint or edge so the lines meet cleanly.</span></div>}
             <ToolButton tool={tool} id="rect" setTool={setTool} icon="▭" label="Rectangle" />
             <ToolButton tool={tool} id="measure" setTool={setTool} icon="↔" label="Measure" />
             {tool === 'measure' && <div className="toolNote"><b>Temporary measurement</b><span>Drag between any two points to read the real distance using the current blueprint scale. Useful for matching existing wall thickness.</span></div>}
@@ -792,6 +798,8 @@ function BlueprintApp() {
             <ToolButton tool={tool} id="bed" setTool={setTool} icon="▤" label="Bed" />
             <ToolButton tool={tool} id="wh" setTool={setTool} icon="WH" label="Water heater" />
             <ToolButton tool={tool} id="washerdryer" setTool={setTool} icon="WD" label="Washer / Dryer (WD)" />
+            <ToolButton tool={tool} id="counter" setTool={setTool} icon="▰" label="Counter" />
+            <ToolButton tool={tool} id="stove" setTool={setTool} icon="⊞" label="Stove" />
           </Section>
         </aside>
 
@@ -935,6 +943,8 @@ function Symbol({el,selected,common,project}) {
   if (el.symbol==='tub') return <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3"><rect x={-w/2} y={-h/2} width={w} height={h} rx={Math.min(18,h*.22)}/><rect x={-w*.42} y={-h*.34} width={w*.84} height={h*.68} rx={Math.min(16,h*.25)} fill="#f6fbff"/><circle cx={w*.31} cy="0" r="4" fill={stroke}/></g>;
   if (el.symbol==='vanity') return <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3"><rect x={-w/2} y={-h/2} width={w} height={h}/><ellipse cx="0" cy="0" rx={w*.22} ry={h*.28}/><circle cx="0" cy={-h*.30} r="4" fill={stroke}/><line x1={-w*.38} y1={h*.28} x2={w*.38} y2={h*.28}/></g>;
   if (el.symbol==='washerdryer') return <g {...common} transform={transform}><rect x={-w/2} y={-h/2} width={w} height={h} fill="#fff" stroke={stroke} strokeWidth="3"/><text textAnchor="middle" dominantBaseline="middle" fontWeight="800" fontSize={Math.max(16,Math.min(w,h)*.42)} fill={stroke}>WD</text></g>;
+  if (el.symbol==='counter') return <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3"><rect x={-w/2} y={-h/2} width={w} height={h}/><line x1={-w/2} y1={-h*.28} x2={w/2} y2={-h*.28} strokeWidth="2"/><line x1={-w/2} y1={h*.28} x2={w/2} y2={h*.28} strokeWidth="2"/></g>;
+  if (el.symbol==='stove') return <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3"><rect x={-w/2} y={-h/2} width={w} height={h}/>{[[-.24,-.22],[.24,-.22],[-.24,.22],[.24,.22]].map(([x,y],i)=><circle key={i} cx={w*x} cy={h*y} r={Math.max(4,Math.min(w,h)*.12)}/>)}</g>;
   if (el.symbol==='cabinet') return <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3"><rect x={-w/2} y={-h/2} width={w} height={h}/><line x1={-w/2} y1={-h/2} x2={w/2} y2={h/2}/><line x1={w/2} y1={-h/2} x2={-w/2} y2={h/2}/></g>;
   if (el.symbol==='fridge') return <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3"><rect x={-w/2} y={-h/2} width={w} height={h} rx="4"/><line x1="0" y1={-h/2} x2="0" y2={h/2}/><line x1={-w*.08} y1={-h*.22} x2={-w*.08} y2={h*.22} strokeWidth="2"/><line x1={w*.08} y1={-h*.22} x2={w*.08} y2={h*.22} strokeWidth="2"/></g>;
   if (el.symbol==='range') return <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3"><rect x={-w/2} y={-h/2} width={w} height={h}/>{[[-.24,-.22],[.24,-.22],[-.24,.22],[.24,.22]].map(([x,y],i)=><circle key={i} cx={w*x} cy={h*y} r={Math.min(w,h)*.12}/>)}</g>;
@@ -969,7 +979,7 @@ function MeasureOverlay({measurement,project}) {
 }
 
 function symbolLabel(symbol) {
-  return ({toilet:'Toilet',sink:'Sink',shower:'Shower',tub:'Bathtub',bed:'Bed',wh:'Water heater',washerdryer:'Washer / Dryer (WD)'})[symbol] || 'Object';
+  return ({toilet:'Toilet',sink:'Sink',shower:'Shower',tub:'Bathtub',bed:'Bed',wh:'Water heater',washerdryer:'Washer / Dryer (WD)',counter:'Counter',stove:'Stove'})[symbol] || 'Object';
 }
 
 function NumberInput({ value, onCommit, min = -Infinity, max = Infinity, step = 'any' }) {
