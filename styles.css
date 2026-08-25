@@ -36,3 +36,14 @@ button:active{transform:translateY(1px)}
 @media(max-width:1180px){.workspace{grid-template-columns:255px minmax(0,1fr) 270px}.leftbar{padding-left:10px;padding-right:10px}.tool{padding:8px 7px}.tool>span:last-child{font-size:12px}}
 @media(max-width:980px){.workspace{grid-template-columns:245px minmax(0,1fr)}.properties{display:none}.brand span:last-child{display:none}.status{display:none}.headerActions button:nth-child(3){display:none}.canvasArea{padding:18px}}
 @media(max-width:760px){body{overflow:auto}.topbar{height:auto;flex-wrap:wrap;padding:10px}.workspace{grid-template-columns:1fr;grid-template-rows:auto 70vh}.leftbar{grid-row:2;padding:10px;display:flex;overflow:auto;border-top:1px solid var(--line)}.section{min-width:250px;margin:0 10px 0 0}.canvasArea{grid-row:1}.headerActions{width:100%;overflow:auto}.canvasChrome{width:1100px}.projectButton{min-width:145px}}
+
+/* V3 interaction polish */
+.topbar .projectMenu button{color:#172033!important;background:transparent!important;border:0!important;box-shadow:none!important;font-weight:700}
+.topbar .projectMenu>button,.topbar .projectRow button{padding:10px!important;border-radius:9px!important}
+.topbar .projectMenu>button:hover,.topbar .projectRow button:hover{background:#f0f4f8!important;color:#0f172a!important}
+.topbar .projectMenu .dangerMini{color:#b4232f!important;background:#fff5f5!important}
+.topbar .projectMenu .dangerMini:hover{background:#ffe7e7!important}
+.toolNote,.brushControl{grid-column:1/-1;border:1px solid #d5e2f7;background:#f5f9ff;border-radius:10px;padding:10px 11px;color:#38516f;font-size:11px;line-height:1.4}
+.toolNote{display:flex;flex-direction:column;gap:3px}.toolNote b{font-size:11px;color:#1746a2}.toolNote span{color:#61708a}
+.brushControl{display:flex;flex-direction:column;gap:7px}.brushControl>span{display:flex;justify-content:space-between;gap:10px;font-weight:750}.brushControl strong{color:#1746a2}.brushControl input{width:100%;accent-color:#2563eb}
+.planCanvas{cursor:crosshair}.planCanvas:has(g[style*="cursor: pointer"]){cursor:default}

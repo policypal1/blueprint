@@ -28,6 +28,19 @@ function inchesLabel(inches) {
   return `${sign}${feet}' ${inchText}\"`;
 }
 
+function parseLengthInput(value) {
+  if (typeof value === 'number') return value;
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return NaN;
+  if (!raw.includes("'") && !raw.includes('ft') && !raw.includes('feet')) return Number(raw.replace(/[^0-9.\-]/g,''));
+  const feetMatch = raw.match(/(-?\d+(?:\.\d+)?)\s*(?:'|ft|feet)/);
+  const inchPart = raw.replace(/-?\d+(?:\.\d+)?\s*(?:'|ft|feet)/,'');
+  const inchesMatch = inchPart.match(/(\d+(?:\.\d+)?)\s*(?:\"|in|inches?)?/);
+  const feet = feetMatch ? Number(feetMatch[1]) : 0;
+  const inches = inchesMatch ? Number(inchesMatch[1]) : 0;
+  return feet * 12 + Math.sign(feet || 1) * inches;
+}
+
 function emptyProject(name = 'Untitled Plan') {
   return {
     id: uid(),
@@ -88,18 +101,46 @@ function fitRasterToWorkspace(source) {
   return canvas.toDataURL('image/webp', 0.96);
 }
 
-function snapPoint(point, elements, grid = true) {
+function closestPointOnSegment(p, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  if (!len2) return { ...a };
+  const t = clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / len2, 0, 1);
+  return { x: a.x + dx * t, y: a.y + dy * t };
+}
+
+function snapPoint(point, elements, options = {}) {
+  const opts = typeof options === 'boolean' ? { grid: options } : options;
+  const { grid = true, align = true, magnet = true } = opts;
   let p = { ...point };
-  let best = null;
-  let bestD = 14;
-  for (const el of elements) {
-    if (el.type !== 'wall' && el.type !== 'dimension') continue;
-    for (const candidate of [el.a, el.b]) {
-      const d = dist(p, candidate);
-      if (d < bestD) { best = candidate; bestD = d; }
+  const walls = elements.filter(el => el.type === 'wall');
+
+  if (magnet) {
+    let best = null;
+    let bestD = 20;
+    for (const el of walls) {
+      for (const candidate of [el.a, el.b, closestPointOnSegment(p, el.a, el.b)]) {
+        const d = dist(p, candidate);
+        if (d < bestD) { best = candidate; bestD = d; }
+      }
     }
+    if (best) return { ...best, snapped: true };
   }
-  if (best) return { ...best, snapped: true };
+
+  if (align && walls.length) {
+    const anchors = walls.flatMap(el => [el.a, el.b]);
+    let bestX = null, bestY = null, dx = 11, dy = 11;
+    for (const a of anchors) {
+      const xDelta = Math.abs(p.x - a.x);
+      const yDelta = Math.abs(p.y - a.y);
+      if (xDelta < dx) { bestX = a.x; dx = xDelta; }
+      if (yDelta < dy) { bestY = a.y; dy = yDelta; }
+    }
+    if (bestX !== null) p.x = bestX;
+    if (bestY !== null) p.y = bestY;
+  }
+
   if (grid) {
     p.x = Math.round(p.x / GRID) * GRID;
     p.y = Math.round(p.y / GRID) * GRID;
@@ -136,6 +177,7 @@ function App() {
   const [status, setStatus] = useState('Ready');
   const [calibration, setCalibration] = useState(null);
   const [projectMenu, setProjectMenu] = useState(false);
+  const [eraseSize, setEraseSize] = useState(28);
 
   const selected = project.elements.find(e => e.id === selectedId) || null;
 
@@ -226,7 +268,14 @@ function App() {
     const onKey = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && !['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)) deleteSelected();
+      const typing = ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !typing) deleteSelected();
+      if (e.key.toLowerCase() === 'r' && !typing && selected && ['door','window','symbol'].includes(selected.type)) {
+        e.preventDefault();
+        pushHistory();
+        updateElement(selected.id, { rotation: ((selected.rotation || 0) + 90) % 360 });
+        setStatus('Rotated 90°');
+      }
       if (e.key === 'Escape') { setDraft(null); setSelectedId(null); setCalibration(null); }
     };
     window.addEventListener('keydown', onKey);
@@ -244,7 +293,7 @@ function App() {
   const handlePointerDown = (e) => {
     if (e.button !== 0) return;
     const raw = clientToWorld(e);
-    const point = snapPoint(raw, project.elements, true);
+    const point = snapPoint(raw, project.elements, { grid: !e.shiftKey, align: true, magnet: true });
 
     if (tool === 'pan') {
       setDrag({ kind: 'pan', start: { x: e.clientX, y: e.clientY }, pan });
@@ -257,7 +306,7 @@ function App() {
       return;
     }
 
-    if (['wall','dimension','line','rect','ellipse'].includes(tool)) {
+    if (['wall','line','rect'].includes(tool)) {
       setDraft({ type: tool, a: point, b: point });
       return;
     }
@@ -271,7 +320,7 @@ function App() {
       pushHistory();
       const path = [{ ...raw }];
       const id = uid();
-      updateProject(p => ({ ...p, elements: [...p.elements, { id, type:'erase', points:path, size:36 }] }));
+      updateProject(p => ({ ...p, elements: [...p.elements, { id, type:'erase', points:path, size:eraseSize }] }));
       setDrag({ kind:'erase', id });
       return;
     }
@@ -283,30 +332,30 @@ function App() {
     }
 
     const common = { x: point.x, y: point.y, rotation: 0 };
-    if (tool.startsWith('door-')) addElement({ type:'door', ...common, widthInches:36, doorStyle:tool.replace('door-','') });
-    if (tool === 'window') addElement({ type:'window', ...common, widthInches:48 });
-    if (tool === 'text') addElement({ type:'text', ...common, text:'Room label', fontSize:24 });
-    if (tool === 'toilet') addElement({ type:'symbol', symbol:'toilet', ...common, widthInches:30, heightInches:30 });
-    if (tool === 'sink') addElement({ type:'symbol', symbol:'sink', ...common, widthInches:36, heightInches:22 });
-    if (tool === 'shower') addElement({ type:'symbol', symbol:'shower', ...common, widthInches:36, heightInches:60 });
-    if (tool === 'tub') addElement({ type:'symbol', symbol:'tub', ...common, widthInches:60, heightInches:30 });
-    if (tool === 'bed') addElement({ type:'symbol', symbol:'bed', ...common, widthInches:60, heightInches:80 });
-    if (tool === 'wh') addElement({ type:'symbol', symbol:'wh', ...common, widthInches:24, heightInches:24 });
-    if (tool === 'vanity') addElement({ type:'symbol', symbol:'vanity', ...common, widthInches:48, heightInches:22 });
-    if (tool === 'washerdryer') addElement({ type:'symbol', symbol:'washerdryer', ...common, widthInches:54, heightInches:30 });
-    if (tool === 'cabinet') addElement({ type:'symbol', symbol:'cabinet', ...common, widthInches:36, heightInches:24 });
-    if (tool === 'fridge') addElement({ type:'symbol', symbol:'fridge', ...common, widthInches:36, heightInches:30 });
-    if (tool === 'range') addElement({ type:'symbol', symbol:'range', ...common, widthInches:30, heightInches:30 });
-    if (tool === 'sofa') addElement({ type:'symbol', symbol:'sofa', ...common, widthInches:84, heightInches:36 });
-    if (tool === 'stairs') addElement({ type:'symbol', symbol:'stairs', ...common, widthInches:36, heightInches:96 });
+    if (tool.startsWith('door-')) addElement({ type:'door', ...common, widthInches:30, doorStyle:tool.replace('door-','') });
+    if (tool === 'window') addElement({ type:'window', ...common, widthInches:30 });
+    if (tool === 'text') addElement({ type:'text', ...common, text:'Room label', fontSize:22 });
+    if (tool === 'toilet') addElement({ type:'symbol', symbol:'toilet', ...common, widthInches:14, heightInches:18 });
+    if (tool === 'sink') addElement({ type:'symbol', symbol:'sink', ...common, widthInches:18, heightInches:12 });
+    if (tool === 'shower') addElement({ type:'symbol', symbol:'shower', ...common, widthInches:24, heightInches:24 });
+    if (tool === 'tub') addElement({ type:'symbol', symbol:'tub', ...common, widthInches:36, heightInches:18 });
+    if (tool === 'bed') addElement({ type:'symbol', symbol:'bed', ...common, widthInches:36, heightInches:50 });
+    if (tool === 'wh') addElement({ type:'symbol', symbol:'wh', ...common, widthInches:14, heightInches:14 });
+    if (tool === 'washerdryer') addElement({ type:'symbol', symbol:'washerdryer', ...common, widthInches:30, heightInches:18 });
   };
 
   const handlePointerMove = (e) => {
     const raw = clientToWorld(e);
-    const angledPoint = snapPoint(angleSnap(draft?.a || raw, raw), project.elements, true);
-    const freePoint = snapPoint(raw, project.elements, true);
-    if (draft && ['wall','dimension','line'].includes(draft.type)) setDraft(d => ({ ...d, b: angledPoint }));
-    if (draft && ['rect','ellipse'].includes(draft.type)) setDraft(d => ({ ...d, b: freePoint }));
+    const precisionWall = draft?.type === 'wall' && e.shiftKey;
+    const wallTarget = precisionWall ? raw : angleSnap(draft?.a || raw, raw);
+    const angledPoint = snapPoint(wallTarget, project.elements, { grid: !precisionWall, align: true, magnet: true });
+    const freePoint = snapPoint(raw, project.elements, { grid: !e.shiftKey, align: true, magnet: true });
+    if (draft && ['wall','line'].includes(draft.type)) setDraft(d => ({ ...d, b: angledPoint }));
+    if (draft?.type === 'rect') setDraft(d => ({ ...d, b: freePoint }));
+    if (draft?.type === 'wall') {
+      const length = dist(draft.a, angledPoint) / project.unitsPerInch;
+      setStatus(precisionWall ? `Precision wall · ${inchesLabel(length)} · Shift held` : 'Wall snapping on · hold Shift for precision');
+    }
     if (draft?.type === 'clean') setDraft(d => ({ ...d, b: raw }));
     if (calibration?.stage === 1) setCalibration(c => ({ ...c, b: raw }));
 
@@ -326,6 +375,24 @@ function App() {
         updateElement(selected.id, { x:base.x+dx, y:base.y+dy });
       }
     }
+    if (drag?.kind === 'resize') {
+      const base = drag.base;
+      const angle = -(base.rotation || 0) * Math.PI / 180;
+      const dx = raw.x - (base.x || 0);
+      const dy = raw.y - (base.y || 0);
+      const localX = dx * Math.cos(angle) - dy * Math.sin(angle);
+      const localY = dx * Math.sin(angle) + dy * Math.cos(angle);
+      if (base.type === 'symbol') {
+        updateElement(base.id, {
+          widthInches: Math.max(4, (Math.abs(localX) * 2) / project.unitsPerInch),
+          heightInches: Math.max(4, (Math.abs(localY) * 2) / project.unitsPerInch),
+        });
+      } else if (base.type === 'window') {
+        updateElement(base.id, { widthInches: Math.max(6, (Math.abs(localX) * 2) / project.unitsPerInch) });
+      } else if (base.type === 'door') {
+        updateElement(base.id, { widthInches: Math.max(6, Math.abs(localX) / project.unitsPerInch) });
+      }
+    }
     if (drag?.kind === 'pan') {
       setPan({ x: drag.pan.x + (e.clientX - drag.start.x), y: drag.pan.y + (e.clientY - drag.start.y) });
     }
@@ -333,17 +400,11 @@ function App() {
 
   const handlePointerUp = () => {
     if (draft?.type === 'wall' && dist(draft.a, draft.b) > 3) addElement({ type:'wall', a:draft.a, b:draft.b, thicknessInches:4.5 });
-    if (draft?.type === 'dimension' && dist(draft.a, draft.b) > 3) addElement({ type:'dimension', a:draft.a, b:draft.b, offset:0 });
     if (draft?.type === 'line' && dist(draft.a, draft.b) > 3) addElement({ type:'line', a:draft.a, b:draft.b, strokeWidth:2 });
     if (draft?.type === 'rect') {
       const x = Math.min(draft.a.x, draft.b.x), y = Math.min(draft.a.y, draft.b.y);
       const width = Math.abs(draft.a.x - draft.b.x), height = Math.abs(draft.a.y - draft.b.y);
       if (width > 3 && height > 3) addElement({ type:'rect', x, y, width, height, strokeWidth:2 });
-    }
-    if (draft?.type === 'ellipse') {
-      const x = (draft.a.x + draft.b.x) / 2, y = (draft.a.y + draft.b.y) / 2;
-      const rx = Math.abs(draft.a.x - draft.b.x) / 2, ry = Math.abs(draft.a.y - draft.b.y) / 2;
-      if (rx > 2 && ry > 2) addElement({ type:'ellipse', x, y, rx, ry, strokeWidth:2 });
     }
     if (draft?.type === 'clean') {
       const x = Math.min(draft.a.x, draft.b.x), y = Math.min(draft.a.y, draft.b.y);
@@ -361,6 +422,15 @@ function App() {
     const p = clientToWorld(e);
     pushHistory();
     setDrag({ kind:'move', start:p, base:JSON.parse(JSON.stringify(el)) });
+  };
+
+  const startResize = (e, el) => {
+    if (tool !== 'select') return;
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedId(el.id);
+    pushHistory();
+    setDrag({ kind:'resize', base:JSON.parse(JSON.stringify(el)) });
   };
 
   async function handleImport(file) {
@@ -487,7 +557,7 @@ function App() {
 
   const applyExactLength = (value) => {
     if (!selected || selected.type !== 'wall') return;
-    const inches = Number(value);
+    const inches = parseLengthInput(value);
     if (!(inches > 0)) return;
     pushHistory();
     const a = selected.a, b = selected.b;
@@ -533,11 +603,10 @@ function App() {
             <ToolButton tool={tool} id="select" setTool={setTool} icon="↖" label="Select" />
             <ToolButton tool={tool} id="pan" setTool={setTool} icon="✋" label="Pan" />
             <ToolButton tool={tool} id="wall" setTool={setTool} icon="━" label="Wall" />
+            {tool === 'wall' && <div className="toolNote"><b>Smart wall snapping</b><span>Wall ends magnetically snap to existing wall ends and edges. Hold <b>Shift</b> while drawing for free precision, then select the wall to type an exact length.</span></div>}
             <ToolButton tool={tool} id="window" setTool={setTool} icon="▥" label="Window" />
             <ToolButton tool={tool} id="line" setTool={setTool} icon="╱" label="Line" />
             <ToolButton tool={tool} id="rect" setTool={setTool} icon="▭" label="Rectangle" />
-            <ToolButton tool={tool} id="ellipse" setTool={setTool} icon="○" label="Ellipse" />
-            <ToolButton tool={tool} id="dimension" setTool={setTool} icon="↔" label="Dimension" />
             <ToolButton tool={tool} id="text" setTool={setTool} icon="T" label="Text" />
           </Section>
           <Section title="DOORS">
@@ -550,8 +619,10 @@ function App() {
           </Section>
           <Section title="CLEAN UP">
             <ToolButton tool={tool} id="erase" setTool={setTool} icon="◌" label="Brush erase" />
+            {tool === 'erase' && <label className="brushControl"><span>Brush size <strong>{eraseSize}px</strong></span><input type="range" min="8" max="120" step="2" value={eraseSize} onChange={e=>setEraseSize(Number(e.target.value))}/></label>}
             <ToolButton tool={tool} id="clean" setTool={setTool} icon="□" label="Clean area" />
-            <ToolButton tool={tool} id="calibrate" setTool={setTool} icon="⌁" label="Calibrate scale" />
+            <ToolButton tool={tool} id="calibrate" setTool={setTool} icon="⌁" label="Set blueprint scale" />
+            {tool === 'calibrate' && <div className="toolNote"><b>What this does</b><span>Click two points on the imported blueprint whose real distance you know. Then enter that distance so wall measurements are accurate.</span></div>}
             {calibration?.stage === 2 && <button className="wide primary" onClick={finishCalibration}>Set real distance</button>}
           </Section>
           <Section title="FIXTURES & OBJECTS">
@@ -559,15 +630,9 @@ function App() {
             <ToolButton tool={tool} id="sink" setTool={setTool} icon="◍" label="Sink" />
             <ToolButton tool={tool} id="shower" setTool={setTool} icon="▣" label="Shower" />
             <ToolButton tool={tool} id="tub" setTool={setTool} icon="▭" label="Bathtub" />
-            <ToolButton tool={tool} id="vanity" setTool={setTool} icon="◇" label="Vanity" />
             <ToolButton tool={tool} id="bed" setTool={setTool} icon="▤" label="Bed" />
             <ToolButton tool={tool} id="wh" setTool={setTool} icon="WH" label="Water heater" />
-            <ToolButton tool={tool} id="washerdryer" setTool={setTool} icon="WD" label="Washer / dryer" />
-            <ToolButton tool={tool} id="cabinet" setTool={setTool} icon="□" label="Cabinet" />
-            <ToolButton tool={tool} id="fridge" setTool={setTool} icon="F" label="Refrigerator" />
-            <ToolButton tool={tool} id="range" setTool={setTool} icon="••" label="Range" />
-            <ToolButton tool={tool} id="sofa" setTool={setTool} icon="▱" label="Sofa" />
-            <ToolButton tool={tool} id="stairs" setTool={setTool} icon="≡" label="Stairs" />
+            <ToolButton tool={tool} id="washerdryer" setTool={setTool} icon="WD" label="Washer / Dryer (WD)" />
           </Section>
         </aside>
 
@@ -581,8 +646,8 @@ function App() {
               <rect width={W} height={H} fill="#fff"/>
               <rect width={W} height={H} fill="url(#grid)"/>
               {project.background && project.showBackground && <image href={project.background} x="0" y="0" width={W} height={H} preserveAspectRatio="xMidYMid meet" opacity={project.backgroundOpacity}/>}              
-              {project.elements.filter(e=>e.type==='clean' || e.type==='erase').map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove}/>) }
-              {project.elements.filter(e=>e.type!=='clean' && e.type!=='erase').map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove}/>) }
+              {project.elements.filter(e=>e.type==='clean' || e.type==='erase').map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
+              {project.elements.filter(e=>e.type!=='clean' && e.type!=='erase').map(el => <Element key={el.id} el={el} project={project} selected={selectedId===el.id} onDown={startMove} onResizeDown={startResize}/>) }
               {draft && <Draft draft={draft} project={project}/>} 
               {calibration && <g pointerEvents="none"><line x1={calibration.a.x} y1={calibration.a.y} x2={calibration.b.x} y2={calibration.b.y} stroke="#e5484d" strokeWidth="4" strokeDasharray="10 8"/><circle cx={calibration.a.x} cy={calibration.a.y} r="7" fill="#e5484d"/><circle cx={calibration.b.x} cy={calibration.b.y} r="7" fill="#e5484d"/></g>}
             </svg>
@@ -601,7 +666,7 @@ function App() {
           <label className="field"><span>Background opacity</span><input type="range" min="0" max="1" step="0.05" value={project.backgroundOpacity} onChange={e=>updateProject(p=>({...p,backgroundOpacity:Number(e.target.value)}))}/></label>
           <label className="check"><input type="checkbox" checked={project.showBackground} onChange={e=>updateProject(p=>({...p,showBackground:e.target.checked}))}/> Show imported blueprint</label>
           <div className="metric"><span>Scale</span><strong>{fmt(project.unitsPerInch)} units/in</strong></div>
-          <div className="hint">Use <b>Calibrate scale</b>, click two known points, then enter their real distance in inches.</div>
+          <div className="hint">Use <b>Set blueprint scale</b>: click two points with a known distance, then enter that distance in inches. This makes wall lengths match the imported plan.</div>
         </aside>
       </div>
     </div>
@@ -611,7 +676,7 @@ function App() {
 function Section({title,children}) { return <div className="section"><div className="sectionTitle">{title}</div><div className="sectionBody">{children}</div></div>; }
 function ToolButton({tool,id,setTool,icon,label}) { return <button className={`tool ${tool===id?'active':''}`} onClick={()=>setTool(id)}><span className="toolIcon">{icon}</span><span>{label}</span></button>; }
 
-function Element({el,project,selected,onDown}) {
+function Element({el,project,selected,onDown,onResizeDown}) {
   const common = { onPointerDown:(e)=>onDown(e,el), style:{cursor:'pointer'} };
   const outline = selected ? '#2563eb' : '#111';
   if (el.type === 'clean') return <rect {...common} x={el.x} y={el.y} width={el.width} height={el.height} fill="#fff" stroke={selected?'#2563eb':'none'} strokeWidth="3"/>;
@@ -629,20 +694,48 @@ function Element({el,project,selected,onDown}) {
     const inches = dist(el.a,el.b)/project.unitsPerInch;
     return <g {...common} stroke={outline} fill="none"><line x1={el.a.x} y1={el.a.y} x2={el.b.x} y2={el.b.y} strokeWidth="2"/><line x1={el.a.x} y1={el.a.y-10} x2={el.a.x} y2={el.a.y+10} strokeWidth="2"/><line x1={el.b.x} y1={el.b.y-10} x2={el.b.x} y2={el.b.y+10} strokeWidth="2"/><text x={(el.a.x+el.b.x)/2} y={(el.a.y+el.b.y)/2-10} textAnchor="middle" fill={outline} stroke="none" fontWeight="700" fontSize="20">{inchesLabel(inches)}</text></g>;
   }
-  if (el.type === 'door') return <DoorSymbol el={el} project={project} outline={outline} common={common}/>;
+  if (el.type === 'door') return <g><DoorSymbol el={el} project={project} outline={outline} common={common}/>{selected && <SelectionHandles el={el} project={project} onResizeDown={onResizeDown}/>}</g>;
   if (el.type === 'window') {
-    const width=(el.widthInches||48)*project.unitsPerInch;
-    return <g {...common} transform={`translate(${el.x} ${el.y}) rotate(${el.rotation||0})`}>
-      <rect x={-width/2} y="-13" width={width} height="26" fill="#fff" stroke={outline} strokeWidth="4"/>
-      <rect x={-width/2+6} y="-7" width={Math.max(2,width-12)} height="14" fill="#eaf6ff" stroke={outline} strokeWidth="2"/>
-      <line x1={-width/2+8} y1="0" x2={width/2-8} y2="0" stroke={outline} strokeWidth="2"/>
-      <line x1={-width/2} y1="-18" x2={-width/2} y2="18" stroke={outline} strokeWidth="3"/>
-      <line x1={width/2} y1="-18" x2={width/2} y2="18" stroke={outline} strokeWidth="3"/>
+    const width=(el.widthInches||36)*project.unitsPerInch;
+    return <g>
+      <g {...common} transform={`translate(${el.x} ${el.y}) rotate(${el.rotation||0})`}>
+        <rect x={-width/2} y="-12" width={width} height="24" fill="#fff" stroke={outline} strokeWidth="4"/>
+        <line x1={-width/2+5} y1="-5" x2={width/2-5} y2="-5" stroke={outline} strokeWidth="2"/>
+        <line x1={-width/2+5} y1="5" x2={width/2-5} y2="5" stroke={outline} strokeWidth="2"/>
+        <line x1={-width/2} y1="-18" x2={-width/2} y2="18" stroke={outline} strokeWidth="3"/>
+        <line x1={width/2} y1="-18" x2={width/2} y2="18" stroke={outline} strokeWidth="3"/>
+      </g>
+      {selected && <SelectionHandles el={el} project={project} onResizeDown={onResizeDown}/>}
     </g>;
   }
   if (el.type === 'text') return <text {...common} x={el.x} y={el.y} transform={`rotate(${el.rotation||0} ${el.x} ${el.y})`} fontSize={el.fontSize||24} fill={outline} fontFamily="Arial, sans-serif">{el.text}</text>;
-  if (el.type === 'symbol') return <Symbol el={el} selected={selected} common={common} project={project}/>;
+  if (el.type === 'symbol') return <g><Symbol el={el} selected={selected} common={common} project={project}/>{selected && <SelectionHandles el={el} project={project} onResizeDown={onResizeDown}/>}</g>;
   return null;
+}
+
+function SelectionHandles({el,project,onResizeDown}) {
+  if (!onResizeDown || !['symbol','door','window'].includes(el.type)) return null;
+  const units = project.unitsPerInch;
+  const rotation = el.rotation || 0;
+  if (el.type === 'symbol') {
+    const w=(el.widthInches||24)*units, h=(el.heightInches||24)*units;
+    return <g transform={`translate(${el.x} ${el.y}) rotate(${rotation})`} pointerEvents="none">
+      <rect x={-w/2-5} y={-h/2-5} width={w+10} height={h+10} fill="none" stroke="#2563eb" strokeWidth="2" strokeDasharray="7 6"/>
+      <rect pointerEvents="all" onPointerDown={e=>onResizeDown(e,el)} x={w/2-8} y={h/2-8} width="16" height="16" rx="3" fill="#2563eb" stroke="#fff" strokeWidth="3" style={{cursor:'nwse-resize'}}/>
+    </g>;
+  }
+  if (el.type === 'window') {
+    const w=(el.widthInches||36)*units;
+    return <g transform={`translate(${el.x} ${el.y}) rotate(${rotation})`} pointerEvents="none">
+      <rect x={-w/2-5} y="-23" width={w+10} height="46" fill="none" stroke="#2563eb" strokeWidth="2" strokeDasharray="7 6"/>
+      <rect pointerEvents="all" onPointerDown={e=>onResizeDown(e,el)} x={w/2-8} y="12" width="16" height="16" rx="3" fill="#2563eb" stroke="#fff" strokeWidth="3" style={{cursor:'ew-resize'}}/>
+    </g>;
+  }
+  const w=(el.widthInches||32)*units;
+  return <g transform={`translate(${el.x} ${el.y}) rotate(${rotation})`} pointerEvents="none">
+    <line x1="0" y1="0" x2={w} y2="0" stroke="#2563eb" strokeWidth="2" strokeDasharray="7 6"/>
+    <rect pointerEvents="all" onPointerDown={e=>onResizeDown(e,el)} x={w-8} y="-8" width="16" height="16" rx="3" fill="#2563eb" stroke="#fff" strokeWidth="3" style={{cursor:'ew-resize'}}/>
+  </g>;
 }
 
 function DoorSymbol({el,project,outline,common}) {
@@ -669,7 +762,7 @@ function Symbol({el,selected,common,project}) {
   if (el.symbol==='wh') return <g {...common} transform={transform}><circle r={Math.min(w,h)/2} fill="#fff" stroke={stroke} strokeWidth="3"/><text textAnchor="middle" dominantBaseline="middle" fontWeight="700" fontSize="24" fill={stroke}>WH</text></g>;
   if (el.symbol==='tub') return <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3"><rect x={-w/2} y={-h/2} width={w} height={h} rx={Math.min(18,h*.22)}/><rect x={-w*.42} y={-h*.34} width={w*.84} height={h*.68} rx={Math.min(16,h*.25)} fill="#f6fbff"/><circle cx={w*.31} cy="0" r="4" fill={stroke}/></g>;
   if (el.symbol==='vanity') return <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3"><rect x={-w/2} y={-h/2} width={w} height={h}/><ellipse cx="0" cy="0" rx={w*.22} ry={h*.28}/><circle cx="0" cy={-h*.30} r="4" fill={stroke}/><line x1={-w*.38} y1={h*.28} x2={w*.38} y2={h*.28}/></g>;
-  if (el.symbol==='washerdryer') return <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3"><rect x={-w/2} y={-h/2} width={w} height={h}/><line x1="0" y1={-h/2} x2="0" y2={h/2}/><circle cx={-w*.25} cy="0" r={Math.min(w*.16,h*.3)} fill="#f3f5f7"/><circle cx={w*.25} cy="0" r={Math.min(w*.16,h*.3)} fill="#f3f5f7"/></g>;
+  if (el.symbol==='washerdryer') return <g {...common} transform={transform}><rect x={-w/2} y={-h/2} width={w} height={h} fill="#fff" stroke={stroke} strokeWidth="3"/><text textAnchor="middle" dominantBaseline="middle" fontWeight="800" fontSize={Math.max(16,Math.min(w,h)*.42)} fill={stroke}>WD</text></g>;
   if (el.symbol==='cabinet') return <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3"><rect x={-w/2} y={-h/2} width={w} height={h}/><line x1={-w/2} y1={-h/2} x2={w/2} y2={h/2}/><line x1={w/2} y1={-h/2} x2={-w/2} y2={h/2}/></g>;
   if (el.symbol==='fridge') return <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3"><rect x={-w/2} y={-h/2} width={w} height={h} rx="4"/><line x1="0" y1={-h/2} x2="0" y2={h/2}/><line x1={-w*.08} y1={-h*.22} x2={-w*.08} y2={h*.22} strokeWidth="2"/><line x1={w*.08} y1={-h*.22} x2={w*.08} y2={h*.22} strokeWidth="2"/></g>;
   if (el.symbol==='range') return <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3"><rect x={-w/2} y={-h/2} width={w} height={h}/>{[[-.24,-.22],[.24,-.22],[-.24,.22],[.24,.22]].map(([x,y],i)=><circle key={i} cx={w*x} cy={h*y} r={Math.min(w,h)*.12}/>)}</g>;
@@ -680,16 +773,14 @@ function Symbol({el,selected,common,project}) {
 
 function Draft({draft,project}) {
   if (draft.type === 'wall') return <line x1={draft.a.x} y1={draft.a.y} x2={draft.b.x} y2={draft.b.y} stroke="#111" strokeOpacity="0.72" strokeWidth={Math.max(3,4.5*project.unitsPerInch)} strokeLinecap="square"/>;
-  if (draft.type === 'dimension') return <line x1={draft.a.x} y1={draft.a.y} x2={draft.b.x} y2={draft.b.y} stroke="#2563eb" strokeWidth="3" strokeDasharray="10 8"/>;
   if (draft.type === 'line') return <line x1={draft.a.x} y1={draft.a.y} x2={draft.b.x} y2={draft.b.y} stroke="#2563eb" strokeWidth="2"/>;
   if (draft.type === 'rect') return <rect x={Math.min(draft.a.x,draft.b.x)} y={Math.min(draft.a.y,draft.b.y)} width={Math.abs(draft.a.x-draft.b.x)} height={Math.abs(draft.a.y-draft.b.y)} fill="none" stroke="#2563eb" strokeWidth="2"/>;
-  if (draft.type === 'ellipse') return <ellipse cx={(draft.a.x+draft.b.x)/2} cy={(draft.a.y+draft.b.y)/2} rx={Math.abs(draft.a.x-draft.b.x)/2} ry={Math.abs(draft.a.y-draft.b.y)/2} fill="none" stroke="#2563eb" strokeWidth="2"/>;
   if (draft.type === 'clean') return <rect x={Math.min(draft.a.x,draft.b.x)} y={Math.min(draft.a.y,draft.b.y)} width={Math.abs(draft.a.x-draft.b.x)} height={Math.abs(draft.a.y-draft.b.y)} fill="#fff" fillOpacity="0.8" stroke="#2563eb" strokeWidth="3" strokeDasharray="10 8"/>;
   return null;
 }
 
 function symbolLabel(symbol) {
-  return ({toilet:'Toilet',sink:'Sink',shower:'Shower',tub:'Bathtub',bed:'Bed',wh:'Water heater',vanity:'Vanity',washerdryer:'Washer / dryer',cabinet:'Cabinet',fridge:'Refrigerator',range:'Range',sofa:'Sofa',stairs:'Stairs'})[symbol] || 'Object';
+  return ({toilet:'Toilet',sink:'Sink',shower:'Shower',tub:'Bathtub',bed:'Bed',wh:'Water heater',washerdryer:'Washer / Dryer (WD)'})[symbol] || 'Object';
 }
 
 function Properties({selected,project,updateElement,deleteSelected,wallLengthInches,applyExactLength}) {
@@ -697,7 +788,7 @@ function Properties({selected,project,updateElement,deleteSelected,wallLengthInc
   return <div className="propStack">
     <div className="badge">{selected.type.toUpperCase()}</div>
     {selected.type === 'wall' && <>
-      <label className="field"><span>Exact length (inches)</span><input key={selected.id+fmt(wallLengthInches)} defaultValue={Math.round(wallLengthInches*100)/100} onBlur={e=>applyExactLength(e.target.value)}/></label>
+      <label className="field"><span>Exact length</span><input key={selected.id+fmt(wallLengthInches)} defaultValue={inchesLabel(wallLengthInches)} placeholder={`8' 10" or 106`} onBlur={e=>applyExactLength(e.target.value)}/></label>
       <label className="field"><span>Wall thickness (inches)</span><input type="number" step="0.5" value={selected.thicknessInches||4.5} onChange={e=>set('thicknessInches',Number(e.target.value))}/></label>
       <div className="metric"><span>Displayed</span><strong>{inchesLabel(wallLengthInches)}</strong></div>
     </>}
@@ -706,6 +797,7 @@ function Properties({selected,project,updateElement,deleteSelected,wallLengthInc
       <label className="field"><span>Width (inches)</span><input type="number" min="6" value={selected.widthInches||(selected.type==='door'?36:48)} onChange={e=>set('widthInches',Math.max(6,Number(e.target.value)||6))}/></label>
       <label className="field"><span>Rotation (degrees)</span><input type="number" value={selected.rotation||0} onChange={e=>set('rotation',Number(e.target.value)||0)}/></label>
       <div className="quickActions"><button onClick={()=>set('rotation',(selected.rotation||0)-90)}>↶ 90°</button><button onClick={()=>set('rotation',(selected.rotation||0)+90)}>↷ 90°</button></div>
+      <div className="hint compactHint">Drag the blue handle to resize. Press <b>R</b> to rotate 90°.</div>
     </>}
     {selected.type === 'text' && <>
       <label className="field"><span>Text</span><input value={selected.text||''} onChange={e=>set('text',e.target.value)}/></label>
@@ -718,9 +810,9 @@ function Properties({selected,project,updateElement,deleteSelected,wallLengthInc
       <label className="field"><span>Rotation (degrees)</span><input type="number" value={selected.rotation||0} onChange={e=>set('rotation',Number(e.target.value)||0)}/></label>
       <div className="quickActions"><button onClick={()=>set('rotation',(selected.rotation||0)-90)}>↶ 90°</button><button onClick={()=>set('rotation',(selected.rotation||0)+90)}>↷ 90°</button></div>
       <div className="quickActions"><button onClick={()=>updateElement(selected.id,{widthInches:Math.max(4,(selected.widthInches||24)*.9),heightInches:Math.max(4,(selected.heightInches||24)*.9)})}>− Smaller</button><button onClick={()=>updateElement(selected.id,{widthInches:(selected.widthInches||24)*1.1,heightInches:(selected.heightInches||24)*1.1})}>＋ Larger</button></div>
-      <div className="hint compactHint">Select any placed fixture to resize it here. Width and height are saved with the object.</div>
+      <div className="hint compactHint">Drag the blue bottom-right handle on the canvas to resize. Press <b>R</b> to rotate 90°.</div>
     </>}
-    {['line','rect','ellipse'].includes(selected.type) && <label className="field"><span>Line weight</span><input type="number" min="1" max="20" value={selected.strokeWidth||2} onChange={e=>set('strokeWidth',Math.max(1,Number(e.target.value)||1))}/></label>}
+    {['line','rect'].includes(selected.type) && <label className="field"><span>Line weight</span><input type="number" min="1" max="20" value={selected.strokeWidth||2} onChange={e=>set('strokeWidth',Math.max(1,Number(e.target.value)||1))}/></label>}
     {selected.type === 'erase' && <label className="field"><span>Eraser size</span><input type="number" value={selected.size||36} onChange={e=>set('size',Number(e.target.value))}/></label>}
     <button className="wide danger" onClick={deleteSelected}>Delete selected</button>
   </div>;

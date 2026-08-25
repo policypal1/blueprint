@@ -1,25 +1,6 @@
-# Blueprint Studio
+# Blueprint Studio V3
 
-Browser-based 2D blueprint editor built with React + Vite.
-
-## Current features
-
-- Upload PNG/JPG/WebP/PDF blueprints
-- Erase or clean areas on imported plans
-- Draw walls without automatic wall-length markings
-- Dimension tool, text, lines, rectangles, and ellipses
-- Six door types: single-left, single-right, double, pocket, sliding, bifold
-- Improved architectural window symbol with rotation
-- Resizable fixtures and objects: toilet, sink, shower, bathtub, vanity, bed, water heater, washer/dryer, cabinet, refrigerator, range, sofa, stairs
-- Exact wall length and wall thickness editing
-- Object rotation controls and 90-degree quick rotation
-- Undo / redo
-- Clear-all with confirmation and undo support
-- Scale calibration
-- Local IndexedDB autosave
-- Multiple local projects
-- JSON backup/restore
-- PNG and 11x17 PDF export
+A browser-based 2D floor-plan editor for creating and modifying residential blueprints.
 
 ## Run locally
 
@@ -28,24 +9,24 @@ npm install
 npm run dev
 ```
 
-## Build
-
-```bash
-npm run build
-```
-
-Vite outputs the production site to `dist/`.
-
 ## Deploy to Vercel
 
-Vercel should auto-detect Vite. Standard settings are:
+This ZIP is intentionally **GitHub-root ready** for the current `policypal1/blueprint` repository. Upload the files directly to the repository root. Vercel should detect Vite automatically and run `npm run build`.
 
-- Framework preset: Vite
-- Build command: `npm run build`
-- Output directory: `dist`
+## V3 controls
 
-No environment variables are required for this local-storage version.
+- **Wall:** normal drawing uses angle/grid snapping plus stronger magnetic snapping to existing wall endpoints and edges.
+- **Shift while drawing a wall:** precision mode. It turns off angle/grid presets while keeping useful wall magnet snapping. The live exact length appears in the top status bar, not on the plan.
+- **Exact wall length:** select a wall and enter either `106` or `8' 10"` in Properties.
+- **Resize:** select a fixture, window, or door and drag its blue resize handle.
+- **Rotate:** select a fixture, window, or door and press **R** to rotate 90 degrees.
+- **Brush erase:** select Brush erase, then change brush size with the slider in the left panel.
+- **Set blueprint scale:** click two known points on an imported plan, then enter their real distance in inches.
+- **Undo / Redo:** Ctrl/Cmd+Z and Ctrl/Cmd+Y.
+- **Delete:** select an object and press Delete/Backspace.
 
-## Important
+## Included fixture set
 
-This is a drafting/editor tool. It does not certify code compliance, engineering adequacy, or permit approval.
+Toilet, sink, shower, bathtub, bed, water heater, and washer/dryer (WD), plus windows and six door styles.
+
+Project data autosaves in IndexedDB in the browser. Use JSON backups for portable copies.
