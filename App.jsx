@@ -101,6 +101,15 @@ function fitRasterToWorkspace(source) {
   return canvas.toDataURL('image/webp', 0.96);
 }
 
+function fitBoxToWorkspace(width, height) {
+  const safeW = Math.max(1, Number(width) || 1);
+  const safeH = Math.max(1, Number(height) || 1);
+  const scale = Math.min(W / safeW, H / safeH);
+  const drawWidth = safeW * scale;
+  const drawHeight = safeH * scale;
+  return { scale, x: (W - drawWidth) / 2, y: (H - drawHeight) / 2, width: drawWidth, height: drawHeight };
+}
+
 function closestPointOnSegment(p, a, b) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -190,7 +199,8 @@ function stripCodeFences(value) {
   return text.replace(/^```(?:json|javascript|js|text)?\s*/i, '').replace(/\s*```$/, '').trim();
 }
 
-function normalizeBlueprintImport(raw, currentUnitsPerInch = 4) {
+function normalizeBlueprintImport(raw, projectState) {
+  const currentUnitsPerInch = typeof projectState === 'number' ? projectState : Number(projectState?.unitsPerInch || 4);
   const data = Array.isArray(raw) ? { version:1, units:'canvas', elements:raw } : raw;
   if (!data || typeof data !== 'object' || !Array.isArray(data.elements)) throw new Error('The code needs an "elements" array.');
 
@@ -243,18 +253,59 @@ function normalizeBlueprintImport(raw, currentUnitsPerInch = 4) {
   }
   if (!neutral.length) throw new Error('No supported editable objects were found in that code.');
 
-  if (mode === 'canvas') return {elements:neutral.map(el=>({id:uid(),...el})),unitsPerInch:currentUnitsPerInch,name:data.name};
+  const sourceImageWidth = number(data.imageWidth ?? data.image_width ?? data.sourceWidth ?? data.source_width ?? data.backgroundWidth ?? data.background_width, 0);
+  const sourceImageHeight = number(data.imageHeight ?? data.image_height ?? data.sourceHeight ?? data.source_height ?? data.backgroundHeight ?? data.background_height, 0);
+  const hasSourceImageSize = sourceImageWidth > 0 && sourceImageHeight > 0;
+  const fit = hasSourceImageSize ? fitBoxToWorkspace(sourceImageWidth, sourceImageHeight) : null;
 
-  if (mode === 'normalized') {
-    const xScale=W/1000,yScale=H/1000;
-    const elements=neutral.map(el=>{
-      const out={id:uid(),...el};
-      if (out.a&&out.b) {out.a={x:out.a.x*xScale,y:out.a.y*yScale};out.b={x:out.b.x*xScale,y:out.b.y*yScale};}
-      else if (Number.isFinite(out.x)&&Number.isFinite(out.y)) {out.x*=xScale;out.y*=yScale;}
-      if (out.type==='rect') {out.width*=xScale;out.height*=yScale;}
+  const mapCanvasLikePoint = (pt) => {
+    if (!pt) return pt;
+    if (fit) return { x: fit.x + pt.x * fit.scale, y: fit.y + pt.y * fit.scale };
+    return { x: pt.x, y: pt.y };
+  };
+  const mapNormalizedPoint = (pt) => {
+    if (!pt) return pt;
+    if (fit) return { x: fit.x + (pt.x / 1000) * sourceImageWidth * fit.scale, y: fit.y + (pt.y / 1000) * sourceImageHeight * fit.scale };
+    return { x: pt.x * (W / 1000), y: pt.y * (H / 1000) };
+  };
+
+  const scaleRef = data.scaleReference || data.scale_reference || data.referenceDimension || data.reference_dimension || null;
+  const scaleRefInches = number(scaleRef?.inches ?? scaleRef?.distanceInches ?? scaleRef?.distance_inches ?? scaleRef?.value, NaN);
+  const scaleRefPoints = scaleRef && Number.isFinite(scaleRefInches) ? (() => {
+    const a = scaleRef.a || { x: scaleRef.x1, y: scaleRef.y1 };
+    const b = scaleRef.b || { x: scaleRef.x2, y: scaleRef.y2 };
+    if (!Number.isFinite(Number(a?.x)) || !Number.isFinite(Number(a?.y)) || !Number.isFinite(Number(b?.x)) || !Number.isFinite(Number(b?.y))) return null;
+    if (mode === 'canvas') return { a: mapCanvasLikePoint({ x:number(a.x), y:number(a.y) }), b: mapCanvasLikePoint({ x:number(b.x), y:number(b.y) }) };
+    if (mode === 'normalized') return { a: mapNormalizedPoint({ x:number(a.x), y:number(a.y) }), b: mapNormalizedPoint({ x:number(b.x), y:number(b.y) }) };
+    return null;
+  })() : null;
+
+  if (mode === 'canvas' || mode === 'normalized') {
+    let elements = neutral.map(el => {
+      const out = { id:uid(), ...el };
+      if (mode === 'canvas') {
+        if (out.a && out.b) { out.a = mapCanvasLikePoint(out.a); out.b = mapCanvasLikePoint(out.b); }
+        else if (Number.isFinite(out.x) && Number.isFinite(out.y)) { const p = mapCanvasLikePoint({x:out.x,y:out.y}); out.x = p.x; out.y = p.y; }
+        if (fit && out.type === 'rect') { out.width *= fit.scale; out.height *= fit.scale; }
+      } else {
+        if (out.a && out.b) { out.a = mapNormalizedPoint(out.a); out.b = mapNormalizedPoint(out.b); }
+        else if (Number.isFinite(out.x) && Number.isFinite(out.y)) { const p = mapNormalizedPoint({x:out.x,y:out.y}); out.x = p.x; out.y = p.y; }
+        if (fit && out.type === 'rect') { out.width = out.width / 1000 * sourceImageWidth * fit.scale; out.height = out.height / 1000 * sourceImageHeight * fit.scale; }
+        else if (out.type === 'rect') { out.width *= (W / 1000); out.height *= (H / 1000); }
+      }
       return out;
     });
-    return {elements,unitsPerInch:currentUnitsPerInch,name:data.name,normalized:true};
+
+    let unitsPerInch = currentUnitsPerInch;
+    if (scaleRefPoints) {
+      const canvasDistance = dist(scaleRefPoints.a, scaleRefPoints.b);
+      const candidate = canvasDistance / scaleRefInches;
+      if (Number.isFinite(candidate)) unitsPerInch = clamp(candidate, 0.35, 8);
+    } else if (fit) {
+      unitsPerInch = clamp(Math.min(currentUnitsPerInch || 4, fit.scale), 0.35, 8);
+    }
+    elements = regularizeImportedElements(elements, unitsPerInch);
+    return { elements, unitsPerInch, name:data.name, normalized:mode === 'normalized', pixelAnchored:Boolean(fit), autoCalibrated:Boolean(scaleRefPoints) };
   }
 
   const feetFactor=mode==='feet'?12:1;
@@ -270,25 +321,32 @@ function normalizeBlueprintImport(raw, currentUnitsPerInch = 4) {
   }
   const minX=Math.min(...points.map(p=>p.x)),maxX=Math.max(...points.map(p=>p.x)),minY=Math.min(...points.map(p=>p.y)),maxY=Math.max(...points.map(p=>p.y));
   const spanX=Math.max(1,maxX-minX),spanY=Math.max(1,maxY-minY);
-  const unitsPerInch=clamp(Math.min(4,(W-140)/spanX,(H-140)/spanY),0.35,8);
+  let unitsPerInch=clamp(Math.min(4,(W-140)/spanX,(H-140)/spanY),0.35,8);
   const offsetX=(W-spanX*unitsPerInch)/2-minX*unitsPerInch,offsetY=(H-spanY*unitsPerInch)/2-minY*unitsPerInch;
   const coord=(v,axis)=>v*feetFactor*unitsPerInch+(axis==='x'?offsetX:offsetY);
-  const elements=neutral.map(el=>{
+  let elements=neutral.map(el=>{
     const out={id:uid(),...el};
     if (out.a&&out.b) {out.a={x:coord(out.a.x,'x'),y:coord(out.a.y,'y')};out.b={x:coord(out.b.x,'x'),y:coord(out.b.y,'y')};}
     else if (Number.isFinite(out.x)&&Number.isFinite(out.y)) {out.x=coord(out.x,'x');out.y=coord(out.y,'y');}
     if (out.type==='rect') {out.width=out.width*feetFactor*unitsPerInch;out.height=out.height*feetFactor*unitsPerInch;}
     return out;
   });
-  return {elements,unitsPerInch,name:data.name};
+  elements = regularizeImportedElements(elements, unitsPerInch);
+  return {elements,unitsPerInch,name:data.name,autoCalibrated:false,pixelAnchored:false};
 }
 
 const CHATGPT_BLUEPRINT_PROMPT = `Analyze the attached floor-plan/blueprint image and return ONLY valid JSON for Blueprint Studio. Do not use markdown fences or explanations.
 
-Use this shape:
-{"version":1,"name":"Project name","units":"inches","elements":[]}
+Preferred shape:
+{"version":2,"name":"Project name","units":"pixels","imageWidth":1320,"imageHeight":930,"scaleReference":{"x1":0,"y1":0,"x2":1000,"y2":0,"inches":409},"elements":[]}
 
-If readable dimensions are present, use units "inches" and use real-world inch coordinates. Put the top-left of the plan near (0,0). If dimensions are not readable, use units "normalized" and map only positional coordinates (x, y, x1, y1, x2, y2) to 0..1000. Keep wall thickness and door/window/fixture width/height as reasonable real-world inches.
+IMPORTANT IMPORT RULES:
+- Prefer units "pixels" whenever possible.
+- Use the FULL IMAGE pixel coordinate system of the attached blueprint, with (0,0) at the image's top-left corner.
+- Include imageWidth and imageHeight when using pixels.
+- If a clear printed dimension is visible, include ONE scaleReference using the clearest long dimension. inches must be the real-world distance in inches.
+- If exact pixel dimensions truly cannot be determined, use units "normalized" with x/y/x1/y1/x2/y2 in the 0..1000 range and include scaleReference if possible.
+- Only use units "inches" if the blueprint gives you enough information to confidently position the plan in real-world inch coordinates.
 
 Supported editable elements:
 - wall: {"type":"wall","x1":0,"y1":0,"x2":120,"y2":0,"thickness":4.5}
@@ -301,7 +359,14 @@ Supported editable elements:
 - text: {"type":"text","x":100,"y":100,"text":"BEDROOM","fontSize":22,"rotation":0}
 - rect: {"type":"rect","x":50,"y":50,"width":100,"height":60,"strokeWidth":2}
 
-Trace all visible walls as separate wall segments. Place doors/windows on the wall centerline with the correct rotation. Include readable room labels and supported fixtures that are visibly present. Do not invent hidden geometry. Output JSON only.`;
+Tracing instructions:
+- Trace the visible wall CENTERLINES directly over the image. Exterior walls first, then interior walls.
+- Break walls into separate wall segments at corners, T-junctions, door openings, and major changes in direction.
+- Keep horizontal walls perfectly horizontal and vertical walls perfectly vertical unless a wall is clearly angled.
+- Place doors and windows on the wall centerline with the correct rotation and approximate opening location.
+- Include readable room labels and supported fixtures that are visibly present.
+- Do not invent hidden geometry.
+- Output JSON only.`;
 
 function nearestWallSnap(point, elements, threshold = 34, excludeIds = []) {
   let best = null;
@@ -414,6 +479,81 @@ function offsetElement(el, amount = 24) {
     clone.x += amount; clone.y += amount;
   }
   return clone;
+}
+
+function regularizeImportedElements(elements, unitsPerInch = 4) {
+  const cloned = elements.map(el => JSON.parse(JSON.stringify(el)));
+  const segments = cloned.filter(el => el.type === 'wall' || el.type === 'line');
+  const AXIS_TOL = 10;
+  const SNAP_TOL = 12;
+
+  const isVertical = (seg) => Math.abs(seg.a.x - seg.b.x) <= AXIS_TOL;
+  const isHorizontal = (seg) => Math.abs(seg.a.y - seg.b.y) <= AXIS_TOL;
+
+  for (const seg of segments) {
+    if (isVertical(seg)) { const x = (seg.a.x + seg.b.x) / 2; seg.a.x = x; seg.b.x = x; }
+    if (isHorizontal(seg)) { const y = (seg.a.y + seg.b.y) / 2; seg.a.y = y; seg.b.y = y; }
+  }
+
+  const verticalXs = [];
+  const horizontalYs = [];
+  for (const seg of segments) {
+    if (isVertical(seg)) verticalXs.push(seg.a.x, seg.b.x);
+    if (isHorizontal(seg)) horizontalYs.push(seg.a.y, seg.b.y);
+  }
+  const snapAxis = (value, list, tol = SNAP_TOL) => {
+    let best = value;
+    let bestDelta = tol + 0.001;
+    for (const candidate of list) {
+      const delta = Math.abs(candidate - value);
+      if (delta < bestDelta) { best = candidate; bestDelta = delta; }
+    }
+    return best;
+  };
+
+  for (const seg of segments) {
+    if (isVertical(seg)) {
+      const x = snapAxis(seg.a.x, verticalXs);
+      seg.a.x = x; seg.b.x = x;
+      seg.a.y = snapAxis(seg.a.y, horizontalYs, 8);
+      seg.b.y = snapAxis(seg.b.y, horizontalYs, 8);
+    } else if (isHorizontal(seg)) {
+      const y = snapAxis(seg.a.y, horizontalYs);
+      seg.a.y = y; seg.b.y = y;
+      seg.a.x = snapAxis(seg.a.x, verticalXs, 8);
+      seg.b.x = snapAxis(seg.b.x, verticalXs, 8);
+    }
+  }
+
+  const allSegments = cloned.filter(el => el.type === 'wall' || el.type === 'line');
+  const attractPoint = (pt, currentSeg) => {
+    let best = { point: pt, distance: SNAP_TOL + 0.001 };
+    for (const other of allSegments) {
+      if (other.id === currentSeg.id) continue;
+      for (const candidate of [other.a, other.b, closestPointOnSegment(pt, other.a, other.b)]) {
+        const d = dist(pt, candidate);
+        if (d < best.distance) best = { point: candidate, distance: d };
+      }
+    }
+    return best.point;
+  };
+
+  for (const seg of allSegments) {
+    const vertical = isVertical(seg);
+    const horizontal = isHorizontal(seg);
+    seg.a = attractPoint(seg.a, seg);
+    seg.b = attractPoint(seg.b, seg);
+    if (vertical) { const x = (seg.a.x + seg.b.x) / 2; seg.a.x = x; seg.b.x = x; }
+    if (horizontal) { const y = (seg.a.y + seg.b.y) / 2; seg.a.y = y; seg.b.y = y; }
+  }
+
+  return cloned.map(el => {
+    if (el.type === 'door' || el.type === 'window') {
+      const snapped = nearestWallSnap({ x: el.x, y: el.y }, cloned, 48);
+      if (snapped) return { ...el, x: snapped.point.x, y: snapped.point.y, rotation: snapped.rotation };
+    }
+    return el;
+  });
 }
 
 function BlueprintApp() {
@@ -817,11 +957,11 @@ function BlueprintApp() {
   const importEditableCode = () => {
     try {
       const parsed=JSON.parse(stripCodeFences(importCode));
-      const normalized=normalizeBlueprintImport(parsed,project.unitsPerInch);
+      const normalized=normalizeBlueprintImport(parsed,project);
       pushHistory();
       updateProject(p=>({...p,name:normalized.name&&String(normalized.name).trim()?String(normalized.name).trim():p.name,unitsPerInch:normalized.unitsPerInch,elements:importReplace?normalized.elements:[...p.elements,...normalized.elements]}));
       setSelectedId(null);setImportOpen(false);setImportError('');setImportCode('');
-      setStatus(normalized.normalized?`Imported ${normalized.elements.length} editable objects · calibrate scale if exact measurements are needed`:`Imported ${normalized.elements.length} editable objects`);
+      setStatus(normalized.autoCalibrated ? `Imported ${normalized.elements.length} editable objects · auto-scaled from blueprint dimensions` : normalized.pixelAnchored ? `Imported ${normalized.elements.length} editable objects · aligned to the uploaded blueprint image` : normalized.normalized ? `Imported ${normalized.elements.length} editable objects · calibrate scale if exact measurements are needed` : `Imported ${normalized.elements.length} editable objects`);
     } catch (err) {
       console.error(err);setImportError(err?.message||'Could not read that Blueprint Studio code.');
     }
