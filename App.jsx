@@ -744,7 +744,7 @@ function BlueprintApp() {
               <button onClick={()=>{setExportMenu(false);exportRaster('png');}}><span className="exportIcon">PNG</span><span><b>PNG image</b><small>High-resolution image</small></span></button>
             </div>}
           </div>
-          <button className="lockButton" onClick={async()=>{try{await fetch('/api/auth',{method:'DELETE'});}finally{window.location.reload();}}}>Lock</button>
+          <button className="lockButton" onClick={()=>{sessionStorage.removeItem('blueprint-studio-unlocked');window.location.reload();}}>Lock</button>
         </div>
       </header>
 
@@ -1033,62 +1033,35 @@ function Properties({selected,project,updateElement,deleteSelected,wallLengthInc
 
 
 function App() {
-  const [authState, setAuthState] = useState('checking');
+  const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem('blueprint-studio-unlocked') === 'yes');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
-    fetch('/api/auth', { method:'GET', credentials:'same-origin' })
-      .then(async r => {
-        if (!alive) return;
-        if (r.ok) setAuthState('authenticated');
-        else setAuthState('locked');
-      })
-      .catch(() => { if (alive) setAuthState('locked'); });
-    return () => { alive = false; };
-  }, []);
-
-  const unlock = async (e) => {
+  const unlock = (e) => {
     e.preventDefault();
-    if (!password.trim() || submitting) return;
-    setSubmitting(true);
-    setError('');
-    try {
-      const r = await fetch('/api/auth', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        credentials:'same-origin',
-        body:JSON.stringify({password}),
-      });
-      if (r.ok) {
-        setPassword('');
-        setAuthState('authenticated');
-      } else {
-        const data = await r.json().catch(()=>({}));
-        setError(data.error || 'Incorrect password');
-      }
-    } catch {
-      setError('Password service is unavailable. Make sure APP_PASSWORD is configured in Vercel.');
-    } finally {
-      setSubmitting(false);
+    if (password === '1234') {
+      sessionStorage.setItem('blueprint-studio-unlocked', 'yes');
+      setPassword('');
+      setError('');
+      setUnlocked(true);
+      return;
     }
+    setError('Incorrect password');
   };
 
-  if (authState === 'checking') return <div className="authShell"><div className="authLoader"><span className="brandMark">B</span><span>Blueprint Studio</span></div></div>;
-  if (authState !== 'authenticated') return <div className="authShell">
+  if (!unlocked) return <div className="authShell">
     <div className="authCard">
       <div className="authBrand"><span className="brandMark">B</span><div><strong>Blueprint Studio</strong><small>Private workspace</small></div></div>
       <div className="authHeading"><h1>Enter your password</h1><p>This workspace is protected. Enter the project password to continue.</p></div>
       <form onSubmit={unlock} className="authForm">
-        <label><span>Password</span><input autoFocus type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" /></label>
+        <label><span>Password</span><input autoFocus type="password" inputMode="numeric" autoComplete="current-password" value={password} onChange={e=>{setPassword(e.target.value);setError('');}} placeholder="••••" /></label>
         {error && <div className="authError">{error}</div>}
-        <button className="primary authSubmit" disabled={submitting || !password.trim()}>{submitting ? 'Checking…' : 'Open Blueprint Studio'}</button>
+        <button className="primary authSubmit" disabled={!password}>Open Blueprint Studio</button>
       </form>
       <div className="authFoot">Authorized access only</div>
     </div>
   </div>;
+
   return <BlueprintApp />;
 }
 
