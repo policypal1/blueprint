@@ -48,3 +48,17 @@ Project data autosaves in IndexedDB in the browser. Use JSON backups for portabl
 
 ## V6 wall editing
 Walls are edited numerically in the properties panel (exact length and thickness). Canvas drag-resize handles remain disabled for walls; fixture, door, and window resize handles remain enabled.
+
+
+## Password protection (V7)
+
+The deployed app now opens on a password screen. In Vercel:
+
+1. Open the project.
+2. Go to **Settings → Environment Variables**.
+3. Add `APP_PASSWORD` and set it to the password you want the client to use.
+4. Redeploy the project.
+
+The real password stays in Vercel and is not bundled into the frontend. A successful login creates an HttpOnly session cookie for 30 days. Use the **Lock** button in the top bar to end the session immediately.
+
+For the password-protected API to work during local development, run the project through Vercel's local runtime (`vercel dev`) with `APP_PASSWORD` configured. Normal `npm run dev` only runs Vite and does not run the `/api/auth` serverless function.

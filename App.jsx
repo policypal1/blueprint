@@ -41,7 +41,7 @@ function parseLengthInput(value) {
   return feet * 12 + Math.sign(feet || 1) * inches;
 }
 
-function emptyProject(name = 'Untitled Plan') {
+function emptyProject(name = 'New Project') {
   return {
     id: uid(),
     name,
@@ -290,10 +290,9 @@ function offsetElement(el, amount = 24) {
   return clone;
 }
 
-function App() {
+function BlueprintApp() {
   const svgRef = useRef(null);
   const fileRef = useRef(null);
-  const backupRef = useRef(null);
   const clipboardRef = useRef(null);
   const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(() => emptyProject('Johnson Remodel'));
@@ -309,6 +308,7 @@ function App() {
   const [status, setStatus] = useState('Ready');
   const [calibration, setCalibration] = useState(null);
   const [projectMenu, setProjectMenu] = useState(false);
+  const [exportMenu, setExportMenu] = useState(false);
   const [eraseSize, setEraseSize] = useState(28);
   const [measurement, setMeasurement] = useState(null);
 
@@ -338,7 +338,7 @@ function App() {
         setStatus('Saved locally');
       } catch (err) {
         console.error(err);
-        setStatus('Save failed — export a JSON backup');
+        setStatus('Local save failed');
       }
     }, 500);
     return () => clearTimeout(timer);
@@ -681,84 +681,21 @@ function App() {
     }
   }
 
-  const useDemo = async () => {
-    const blob = await fetch('/sample-blueprint.jpeg').then(r => r.blob());
-    const objectUrl = URL.createObjectURL(blob);
-    const img = new Image();
-    await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=objectUrl;});
-    const dataUrl = fitRasterToWorkspace(img);
-    URL.revokeObjectURL(objectUrl);
-    pushHistory();
-    updateProject(p => ({ ...p, background:dataUrl }));
-  };
-
-  const finishCalibration = () => {
-    if (!calibration || calibration.stage !== 2) return;
-    const raw = prompt('Enter the real distance in inches between the two points. Example: 120 for 10 feet.');
-    const inches = Number(raw);
-    const units = dist(calibration.a, calibration.b);
-    if (!(inches > 0) || !(units > 0)) return;
-    pushHistory();
-    updateProject(p => ({ ...p, unitsPerInch: units / inches }));
-    setCalibration(null);
-    setTool('select');
-    setStatus(`Calibrated: ${fmt(units / inches)} canvas units per inch`);
-  };
-
-  const exportRaster = async (kind = 'png') => {
-    const svg = svgRef.current;
-    const clone = svg.cloneNode(true);
-    clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
-    const serialized = new XMLSerializer().serializeToString(clone);
-    const blob = new Blob([serialized], { type:'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    await new Promise((resolve, reject) => { img.onload=resolve; img.onerror=reject; img.src=url; });
-    const canvas = document.createElement('canvas');
-    canvas.width = 2200; canvas.height = Math.round(2200 * H / W);
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.drawImage(img,0,0,canvas.width,canvas.height);
-    URL.revokeObjectURL(url);
-    const png = canvas.toDataURL('image/png', 1);
-    if (kind === 'pdf') {
-      const pdf = new jsPDF({ orientation:'landscape', unit:'in', format:[17,11] });
-      const margin = 0.25;
-      pdf.addImage(png,'PNG',margin,margin,16.5,10.5);
-      pdf.save(`${project.name.replace(/[^a-z0-9]+/gi,'-').toLowerCase() || 'blueprint'}.pdf`);
-    } else {
-      const a = document.createElement('a');
-      a.href = png;
-      a.download = `${project.name.replace(/[^a-z0-9]+/gi,'-').toLowerCase() || 'blueprint'}.png`;
-      a.click();
-    }
-  };
-
-  const exportJson = () => {
-    const blob = new Blob([JSON.stringify(project, null, 2)], {type:'application/json'});
-    const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`${project.name}.blueprint.json`; a.click();
-    setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  };
-
-  const importJson = async (file) => {
-    if (!file) return;
-    try {
-      const parsed = JSON.parse(await file.text());
-      if (!parsed || !Array.isArray(parsed.elements) || typeof parsed.name !== 'string') throw new Error('Invalid project file');
-      const restored = { ...parsed, id: uid(), name: `${parsed.name} (restored)`, updatedAt: Date.now() };
-      setProject(restored); setSelectedId(null); setHistory([]); setFuture([]);
-      setStatus('Backup restored');
-    } catch (err) {
-      console.error(err);
-      alert('That does not look like a Blueprint Studio project backup.');
-    }
-  };
-
   const createProject = () => {
-    const name = prompt('Project name?', 'New Project');
-    if (!name) return;
-    const p = emptyProject(name);
+    const suggested = `Project ${Math.max(1, projects.length + 1)}`;
+    const name = prompt('Name this project', suggested);
+    if (name === null) return;
+    const cleanName = name.trim() || suggested;
+    const p = emptyProject(cleanName);
     setProject(p); setSelectedId(null); setHistory([]); setFuture([]); setProjectMenu(false);
+  };
+
+  const renameProject = (target = project) => {
+    const nextName = prompt('Rename project', target.name);
+    if (nextName === null || !nextName.trim()) return;
+    const cleanName = nextName.trim();
+    if (target.id === project.id) updateProject(p => ({ ...p, name: cleanName }));
+    setProjects(list => list.map(p => p.id === target.id ? { ...p, name: cleanName, updatedAt: Date.now() } : p));
   };
 
   const chooseProject = (p) => { setProject(p); setSelectedId(null); setHistory([]); setFuture([]); setProjectMenu(false); };
@@ -767,7 +704,7 @@ function App() {
     if (!confirm('Delete this project from this browser?')) return;
     const next = projects.filter(p => p.id !== id);
     setProjects(next); saveProjects(next).catch(console.error);
-    if (project.id === id) setProject(next[0] || emptyProject());
+    if (project.id === id) setProject(next[0] || emptyProject('Project 1'));
   };
 
   const applyExactLength = (value) => {
@@ -791,15 +728,23 @@ function App() {
           <button className="projectButton" onClick={()=>setProjectMenu(v=>!v)}>{project.name} <span>▾</span></button>
           {projectMenu && <div className="projectMenu">
             <button onClick={createProject}>＋ New project</button>
-            {projects.map(p => <div className="projectRow" key={p.id}><button onClick={()=>chooseProject(p)}>{p.name}</button><button className="dangerMini" onClick={()=>deleteProject(p.id)}>×</button></div>)}
+            <button onClick={()=>renameProject(project)}>✎ Rename current project</button>
+            <div className="projectMenuDivider" />
+            {projects.map(p => <div className="projectRow" key={p.id}><button onClick={()=>chooseProject(p)}>{p.name}</button><button className="editMini" title="Rename project" onClick={()=>renameProject(p)}>✎</button><button className="dangerMini" title="Delete project" onClick={()=>deleteProject(p.id)}>×</button></div>)}
           </div>}
         </div>
         <div className="status">{status}</div>
         <div className="headerActions">
           <button onClick={undo} disabled={!history.length}>↶ Undo</button>
           <button onClick={redo} disabled={!future.length}>↷ Redo</button>
-          <button onClick={()=>exportRaster('png')}>PNG</button>
-          <button className="primary" onClick={()=>exportRaster('pdf')}>Export PDF</button>
+          <div className="exportWrap">
+            <button className="primary exportButton" onClick={()=>setExportMenu(v=>!v)}>Export <span>▾</span></button>
+            {exportMenu && <div className="exportMenu">
+              <button onClick={()=>{setExportMenu(false);exportRaster('pdf');}}><span className="exportIcon">PDF</span><span><b>PDF</b><small>11 × 17 plan sheet</small></span></button>
+              <button onClick={()=>{setExportMenu(false);exportRaster('png');}}><span className="exportIcon">PNG</span><span><b>PNG image</b><small>High-resolution image</small></span></button>
+            </div>}
+          </div>
+          <button className="lockButton" onClick={async()=>{try{await fetch('/api/auth',{method:'DELETE'});}finally{window.location.reload();}}}>Lock</button>
         </div>
       </header>
 
@@ -808,10 +753,6 @@ function App() {
           <Section title="FILE">
             <button className="wide primarySoft" onClick={()=>fileRef.current?.click()}>＋ Upload blueprint</button>
             <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,application/pdf" hidden onChange={e=>handleImport(e.target.files?.[0])}/>
-            <button className="wide ghost" onClick={useDemo}>Load sample plan</button>
-            <button className="wide ghost" onClick={exportJson}>Backup project JSON</button>
-            <button className="wide ghost" onClick={()=>backupRef.current?.click()}>Restore JSON backup</button>
-            <input ref={backupRef} type="file" accept="application/json,.json" hidden onChange={e=>importJson(e.target.files?.[0])}/>
             <button className="wide danger clearAllButton" onClick={clearAll}>Clear all</button>
           </Section>
           <Section title="DRAW & ANNOTATE">
@@ -1088,6 +1029,67 @@ function Properties({selected,project,updateElement,deleteSelected,wallLengthInc
     {selected.type === 'erase' && <label className="field"><span>Eraser size</span><NumberInput value={selected.size||36} min={1} onCommit={v=>set('size',v)}/></label>}
     <button className="wide danger" onClick={deleteSelected}>Delete selected</button>
   </div>;
+}
+
+
+function App() {
+  const [authState, setAuthState] = useState('checking');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/auth', { method:'GET', credentials:'same-origin' })
+      .then(async r => {
+        if (!alive) return;
+        if (r.ok) setAuthState('authenticated');
+        else setAuthState('locked');
+      })
+      .catch(() => { if (alive) setAuthState('locked'); });
+    return () => { alive = false; };
+  }, []);
+
+  const unlock = async (e) => {
+    e.preventDefault();
+    if (!password.trim() || submitting) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const r = await fetch('/api/auth', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'same-origin',
+        body:JSON.stringify({password}),
+      });
+      if (r.ok) {
+        setPassword('');
+        setAuthState('authenticated');
+      } else {
+        const data = await r.json().catch(()=>({}));
+        setError(data.error || 'Incorrect password');
+      }
+    } catch {
+      setError('Password service is unavailable. Make sure APP_PASSWORD is configured in Vercel.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (authState === 'checking') return <div className="authShell"><div className="authLoader"><span className="brandMark">B</span><span>Blueprint Studio</span></div></div>;
+  if (authState !== 'authenticated') return <div className="authShell">
+    <div className="authCard">
+      <div className="authBrand"><span className="brandMark">B</span><div><strong>Blueprint Studio</strong><small>Private workspace</small></div></div>
+      <div className="authHeading"><h1>Enter your password</h1><p>This workspace is protected. Enter the project password to continue.</p></div>
+      <form onSubmit={unlock} className="authForm">
+        <label><span>Password</span><input autoFocus type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" /></label>
+        {error && <div className="authError">{error}</div>}
+        <button className="primary authSubmit" disabled={submitting || !password.trim()}>{submitting ? 'Checking…' : 'Open Blueprint Studio'}</button>
+      </form>
+      <div className="authFoot">Authorized access only</div>
+    </div>
+  </div>;
+  return <BlueprintApp />;
 }
 
 export default App;
