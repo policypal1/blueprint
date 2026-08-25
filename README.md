@@ -1,26 +1,25 @@
 # Blueprint Studio
 
-A browser-based 2D blueprint/floor-plan editor MVP built for repeatedly editing residential plans.
+Browser-based 2D blueprint editor built with React + Vite.
 
-## What works
+## Current features
 
-- Import JPG / PNG / WEBP blueprints
-- Import the first page of a PDF blueprint
-- Draw measured walls with snapping and 15-degree angle constraints
-- Select and drag objects
-- Add doors, windows, dimensions, text, toilets, sinks, showers, beds, and water-heater symbols
-- Brush-erase imported blueprint content non-destructively
-- Rectangle "Clean Area" masking
-- Blueprint opacity toggle
-- Calibrate an imported drawing by clicking two known points and entering the real distance in inches
-- Edit an exact wall length numerically
+- Upload PNG/JPG/WebP/PDF blueprints
+- Erase or clean areas on imported plans
+- Draw walls without automatic wall-length markings
+- Dimension tool, text, lines, rectangles, and ellipses
+- Six door types: single-left, single-right, double, pocket, sliding, bifold
+- Improved architectural window symbol with rotation
+- Resizable fixtures and objects: toilet, sink, shower, bathtub, vanity, bed, water heater, washer/dryer, cabinet, refrigerator, range, sofa, stairs
+- Exact wall length and wall thickness editing
+- Object rotation controls and 90-degree quick rotation
 - Undo / redo
-- Autosave projects to IndexedDB (handles imported blueprint images much better than localStorage)
+- Clear-all with confirmation and undo support
+- Scale calibration
+- Local IndexedDB autosave
 - Multiple local projects
-- Export PNG
-- Export 11x17 landscape PDF (fit-to-page raster export)
-- JSON backup export and restore
-- Sample blueprint included
+- JSON backup/restore
+- PNG and 11x17 PDF export
 
 ## Run locally
 
@@ -29,18 +28,24 @@ npm install
 npm run dev
 ```
 
-Open the local Vite URL.
-
-## Build / deploy
+## Build
 
 ```bash
 npm run build
 ```
 
-Deploy the generated project to Vercel. Vercel detects Vite automatically in most cases; if asked, use `npm run build` and output directory `dist`.
+Vite outputs the production site to `dist/`.
 
-## Important production note
+## Deploy to Vercel
 
-This is a working drafting MVP, not a structural engineering or code-compliance system. Before using it as the only tool for permit submissions, test the exact workflow Zach uses, verify required sheet sizes/scales, and add any jurisdiction-specific notes, title blocks, elevations, structural sheets, or other permit-set requirements.
+Vercel should auto-detect Vite. Standard settings are:
 
-The PDF exporter currently fits the drawing to an 11x17 page. Geometry and displayed dimensions remain based on the calibrated drawing, but the exporter does not yet guarantee a specific architectural print scale such as 1/4\" = 1'-0\". That should be the next production feature if exact printed scale is required.
+- Framework preset: Vite
+- Build command: `npm run build`
+- Output directory: `dist`
+
+No environment variables are required for this local-storage version.
+
+## Important
+
+This is a drafting/editor tool. It does not certify code compliance, engineering adequacy, or permit approval.
