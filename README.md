@@ -38,3 +38,9 @@ This ZIP is **GitHub-root ready** for the current `policypal1/blueprint` reposit
 Toilet, sink, shower, bathtub, bed, water heater, and washer/dryer (WD), plus windows and six door styles.
 
 Project data autosaves in IndexedDB in the browser. Use JSON backups for portable copies.
+
+## V5 updates
+- Removed wall resize/thickness handles to keep wall selection simple.
+- Restored strong wall angle locking. Hold Shift only for free-angle precision; release Shift to immediately restore the lock.
+- Doors now snap to nearby walls on placement and while being moved, automatically matching the wall angle.
+- Numeric size/rotation fields now allow natural typing and accept values like `1` without immediately forcing a preset minimum.

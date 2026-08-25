@@ -177,6 +177,19 @@ function angleSnap(a, b, stepDeg = 15) {
   return { x: a.x + Math.cos(snapped) * len, y: a.y + Math.sin(snapped) * len };
 }
 
+function nearestWallSnap(point, elements, threshold = 34, excludeIds = []) {
+  let best = null;
+  for (const wall of elements) {
+    if (wall.type !== 'wall' || excludeIds.includes(wall.id)) continue;
+    const projected = closestPointOnSegment(point, wall.a, wall.b);
+    const distance = dist(point, projected);
+    if (distance > threshold || (best && distance >= best.distance)) continue;
+    const rotation = Math.atan2(wall.b.y - wall.a.y, wall.b.x - wall.a.x) * 180 / Math.PI;
+    best = { point: projected, rotation, wall, distance };
+  }
+  return best;
+}
+
 function rectsIntersect(a, b) {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
@@ -478,7 +491,14 @@ function App() {
     }
 
     const common = { x: point.x, y: point.y, rotation: 0 };
-    if (tool.startsWith('door-')) addElement({ type:'door', ...common, widthInches:30, doorStyle:tool.replace('door-','') });
+    if (tool.startsWith('door-')) {
+      const wallSnap = nearestWallSnap(raw, project.elements, 38);
+      const doorPlacement = wallSnap
+        ? { x: wallSnap.point.x, y: wallSnap.point.y, rotation: wallSnap.rotation, attachedWallId: wallSnap.wall.id }
+        : common;
+      addElement({ type:'door', ...doorPlacement, widthInches:30, doorStyle:tool.replace('door-','') });
+      setStatus(wallSnap ? 'Door snapped to wall' : 'Door placed');
+    }
     if (tool === 'window') addElement({ type:'window', ...common, widthInches:30, heightInches:4.5 });
     if (tool === 'text') addElement({ type:'text', ...common, text:'Room label', fontSize:22 });
     if (tool === 'toilet') addElement({ type:'symbol', symbol:'toilet', ...common, widthInches:14, heightInches:18 });
@@ -493,7 +513,7 @@ function App() {
   const handlePointerMove = (e) => {
     const raw = clientToWorld(e);
     const precisionWall = draft?.type === 'wall' && e.shiftKey;
-    const wallTarget = precisionWall ? raw : angleSnap(draft?.a || raw, raw);
+    const wallTarget = precisionWall ? raw : angleSnap(draft?.a || raw, raw, 15);
     const angledPoint = draft?.type === 'wall'
       ? snapPoint(wallTarget, project.elements, {
           grid:false,
@@ -501,7 +521,7 @@ function App() {
           magnet:true,
           excludeSegmentWallIds:draft.startWallIds || [],
           lineFrom: precisionWall ? null : {a:draft.a,b:wallTarget},
-          lineTolerance:10,
+          lineTolerance:3,
         })
       : snapPoint(wallTarget, project.elements, { grid: !e.shiftKey, align: true, magnet: true });
     const freePoint = snapPoint(raw, project.elements, { grid: !e.shiftKey, align: true, magnet: true });
@@ -510,7 +530,7 @@ function App() {
     if (draft?.type === 'rect') setDraft(d => ({ ...d, b: freePoint }));
     if (draft?.type === 'wall') {
       const length = dist(draft.a, angledPoint) / project.unitsPerInch;
-      setStatus(precisionWall ? `Precision wall · ${inchesLabel(length)} · Shift held` : 'Wall snapping on · hold Shift for precision');
+      setStatus(precisionWall ? `Free precision · ${inchesLabel(length)} · release Shift to restore angle lock` : `Angle lock ON · ${inchesLabel(length)} · hold Shift for free precision`);
     }
     if (draft?.type === 'clean') setDraft(d => ({ ...d, b: raw }));
     if (calibration?.stage === 1) setCalibration(c => ({ ...c, b: raw }));
@@ -527,23 +547,19 @@ function App() {
         updateElement(selected.id, { x:base.x+dx, y:base.y+dy });
       } else if (selected.type === 'erase') {
         updateElement(selected.id, { points:base.points.map(p => ({x:p.x+dx,y:p.y+dy})) });
+      } else if (selected.type === 'door') {
+        const target = { x:base.x+dx, y:base.y+dy };
+        const wallSnap = nearestWallSnap(target, project.elements, 30);
+        updateElement(selected.id, wallSnap
+          ? { x:wallSnap.point.x, y:wallSnap.point.y, rotation:wallSnap.rotation, attachedWallId:wallSnap.wall.id }
+          : { x:target.x, y:target.y, rotation:base.rotation || 0, attachedWallId:null });
       } else {
         updateElement(selected.id, { x:base.x+dx, y:base.y+dy });
       }
     }
     if (drag?.kind === 'resize') {
       const base = drag.base;
-      if (base.type === 'wall') {
-        if (drag.handle === 'wall-a' || drag.handle === 'wall-b') {
-          const other = drag.handle === 'wall-a' ? base.b : base.a;
-          const snapped = snapPoint(raw, project.elements.filter(el=>el.id!==base.id), {grid:false,align:true,magnet:true});
-          updateElement(base.id, drag.handle === 'wall-a' ? {a:snapped,b:other} : {a:other,b:snapped});
-        } else if (drag.handle === 'wall-thickness') {
-          const lineDistance = pointLineDistance(raw, base.a, base.b);
-          const thickness = Math.max(0.5, (Math.max(2,lineDistance-18) * 2) / project.unitsPerInch);
-          updateElement(base.id, {thicknessInches:Math.round(thickness*2)/2});
-        }
-      } else {
+      if (base.type !== 'wall') {
         const angle = -(base.rotation || 0) * Math.PI / 180;
         const dx = raw.x - (base.x || 0);
         const dy = raw.y - (base.y || 0);
@@ -551,16 +567,16 @@ function App() {
         const localY = dx * Math.sin(angle) + dy * Math.cos(angle);
         if (base.type === 'symbol') {
           updateElement(base.id, {
-            widthInches: Math.max(4, (Math.abs(localX) * 2) / project.unitsPerInch),
-            heightInches: Math.max(4, (Math.abs(localY) * 2) / project.unitsPerInch),
+            widthInches: Math.max(1, (Math.abs(localX) * 2) / project.unitsPerInch),
+            heightInches: Math.max(1, (Math.abs(localY) * 2) / project.unitsPerInch),
           });
         } else if (base.type === 'window') {
           updateElement(base.id, {
-            widthInches: Math.max(6, (Math.abs(localX) * 2) / project.unitsPerInch),
-            heightInches: Math.max(1, (Math.abs(localY) * 2) / project.unitsPerInch),
+            widthInches: Math.max(1, (Math.abs(localX) * 2) / project.unitsPerInch),
+            heightInches: Math.max(0.25, (Math.abs(localY) * 2) / project.unitsPerInch),
           });
         } else if (base.type === 'door') {
-          updateElement(base.id, { widthInches: Math.max(6, Math.abs(localX) / project.unitsPerInch) });
+          updateElement(base.id, { widthInches: Math.max(1, Math.abs(localX) / project.unitsPerInch) });
         }
       }
     }
@@ -802,7 +818,7 @@ function App() {
             <ToolButton tool={tool} id="select" setTool={setTool} icon="↖" label="Select" />
             <ToolButton tool={tool} id="pan" setTool={setTool} icon="✋" label="Pan" />
             <ToolButton tool={tool} id="wall" setTool={setTool} icon="━" label="Wall" />
-            {tool === 'wall' && <div className="toolNote"><b>Smart wall snapping</b><span>Walls lock to clean angles and magnetically snap to other wall ends/edges. Starting on top of another wall no longer pulls the new wall off-axis. Hold <b>Shift</b> for free precision, then select the wall for exact length/thickness.</span></div>}
+            {tool === 'wall' && <div className="toolNote"><b>Smart wall snapping</b><span>Walls lock to clean angles and magnetically snap to other wall ends/edges. Hold <b>Shift</b> only when you need a free-angle precision adjustment; release it and the angle lock immediately comes back.</span></div>}
             <ToolButton tool={tool} id="window" setTool={setTool} icon="▥" label="Window" />
             <ToolButton tool={tool} id="line" setTool={setTool} icon="╱" label="Line" />
             <ToolButton tool={tool} id="rect" setTool={setTool} icon="▭" label="Rectangle" />
@@ -896,7 +912,6 @@ function Element({el,project,selected,onDown,onResizeDown}) {
     return <g>
       {selected && <line x1={el.a.x} y1={el.a.y} x2={el.b.x} y2={el.b.y} stroke="#2563eb" strokeOpacity=".28" strokeWidth={width+10} strokeLinecap="square" pointerEvents="none"/>}
       <line {...common} x1={el.a.x} y1={el.a.y} x2={el.b.x} y2={el.b.y} stroke="#000" strokeWidth={width} strokeLinecap="square"/>
-      {selected && <SelectionHandles el={el} project={project} onResizeDown={onResizeDown}/>}
     </g>;
   }
   if (el.type === 'line') return <line {...common} x1={el.a.x} y1={el.a.y} x2={el.b.x} y2={el.b.y} stroke={outline} strokeWidth={el.strokeWidth||2} strokeLinecap="round"/>;
@@ -928,22 +943,9 @@ function Element({el,project,selected,onDown,onResizeDown}) {
 }
 
 function SelectionHandles({el,project,onResizeDown}) {
-  if (!onResizeDown || !['symbol','door','window','wall'].includes(el.type)) return null;
+  if (!onResizeDown || !['symbol','door','window'].includes(el.type)) return null;
   const units = project.unitsPerInch;
   const rotation = el.rotation || 0;
-  if (el.type === 'wall') {
-    const dx=el.b.x-el.a.x,dy=el.b.y-el.a.y,len=Math.hypot(dx,dy)||1;
-    const nx=-dy/len,ny=dx/len;
-    const mx=(el.a.x+el.b.x)/2,my=(el.a.y+el.b.y)/2;
-    const offset=((el.thicknessInches||4.5)*units)/2+18;
-    const hx=mx+nx*offset,hy=my+ny*offset;
-    return <g pointerEvents="none">
-      <line x1={mx} y1={my} x2={hx} y2={hy} stroke="#2563eb" strokeWidth="2" strokeDasharray="5 5"/>
-      <circle pointerEvents="all" onPointerDown={e=>onResizeDown(e,el,'wall-a')} cx={el.a.x} cy={el.a.y} r="9" fill="#2563eb" stroke="#fff" strokeWidth="3" style={{cursor:'move'}}/>
-      <circle pointerEvents="all" onPointerDown={e=>onResizeDown(e,el,'wall-b')} cx={el.b.x} cy={el.b.y} r="9" fill="#2563eb" stroke="#fff" strokeWidth="3" style={{cursor:'move'}}/>
-      <circle pointerEvents="all" onPointerDown={e=>onResizeDown(e,el,'wall-thickness')} cx={hx} cy={hy} r="9" fill="#fff" stroke="#2563eb" strokeWidth="4" style={{cursor:'ns-resize'}}/>
-    </g>;
-  }
   if (el.type === 'symbol') {
     const w=(el.widthInches||24)*units, h=(el.heightInches||24)*units;
     return <g transform={`translate(${el.x} ${el.y}) rotate(${rotation})`} pointerEvents="none">
@@ -1029,39 +1031,60 @@ function symbolLabel(symbol) {
   return ({toilet:'Toilet',sink:'Sink',shower:'Shower',tub:'Bathtub',bed:'Bed',wh:'Water heater',washerdryer:'Washer / Dryer (WD)'})[symbol] || 'Object';
 }
 
+function NumberInput({ value, onCommit, min = -Infinity, max = Infinity, step = 'any' }) {
+  const [text, setText] = useState(String(value ?? ''));
+  useEffect(() => { setText(String(value ?? '')); }, [value]);
+  const commit = () => {
+    const parsed = Number(text);
+    if (!Number.isFinite(parsed)) { setText(String(value ?? '')); return; }
+    const next = clamp(parsed, min, max);
+    onCommit(next);
+    setText(String(next));
+  };
+  return <input
+    type="number"
+    step={step}
+    min={Number.isFinite(min) ? min : undefined}
+    max={Number.isFinite(max) ? max : undefined}
+    value={text}
+    onChange={e=>setText(e.target.value)}
+    onBlur={commit}
+    onKeyDown={e=>{ if (e.key === 'Enter') { e.currentTarget.blur(); } }}
+  />;
+}
+
 function Properties({selected,project,updateElement,deleteSelected,wallLengthInches,applyExactLength}) {
   const set = (key,val)=>updateElement(selected.id,{[key]:val});
   return <div className="propStack">
     <div className="badge">{selected.type.toUpperCase()}</div>
     {selected.type === 'wall' && <>
-      <label className="field"><span>Exact length</span><input key={selected.id+fmt(wallLengthInches)} defaultValue={inchesLabel(wallLengthInches)} placeholder={`8' 10" or 106`} onBlur={e=>applyExactLength(e.target.value)}/></label>
-      <label className="field"><span>Wall thickness (inches)</span><input type="number" step="0.5" value={selected.thicknessInches||4.5} onChange={e=>set('thicknessInches',Number(e.target.value))}/></label>
-      <div className="metric"><span>Displayed</span><strong>{inchesLabel(wallLengthInches)}</strong></div>
-      <div className="hint compactHint">Drag either blue endpoint to resize/re-angle the wall. Drag the white side handle to change wall thickness. The wall itself always stays jet black.</div>
+      <div className="metric"><span>Wall length</span><strong>{inchesLabel(wallLengthInches)}</strong></div>
+      <div className="metric"><span>Thickness</span><strong>{selected.thicknessInches||4.5}&quot;</strong></div>
+      <div className="hint compactHint">Wall resize handles are disabled to keep selection clean. Move the wall if needed, or delete and redraw it with angle lock / Shift precision.</div>
     </>}
     {['door','window'].includes(selected.type) && <>
       {selected.type==='door' && <label className="field"><span>Door type</span><select value={selected.doorStyle||'single-left'} onChange={e=>set('doorStyle',e.target.value)}><option value="single-left">Single left</option><option value="single-right">Single right</option><option value="double">Double</option><option value="pocket">Pocket</option><option value="sliding">Sliding</option><option value="bifold">Bifold</option></select></label>}
-      <label className="field"><span>Width (inches)</span><input type="number" min="6" value={selected.widthInches||(selected.type==='door'?36:48)} onChange={e=>set('widthInches',Math.max(6,Number(e.target.value)||6))}/></label>
-      {selected.type==='window' && <label className="field"><span>Height / wall depth (inches)</span><input type="number" min="1" step="0.5" value={selected.heightInches||4.5} onChange={e=>set('heightInches',Math.max(1,Number(e.target.value)||1))}/></label>}
-      <label className="field"><span>Rotation (degrees)</span><input type="number" value={selected.rotation||0} onChange={e=>set('rotation',Number(e.target.value)||0)}/></label>
+      <label className="field"><span>Width (inches)</span><NumberInput value={selected.widthInches||(selected.type==='door'?36:48)} min={1} onCommit={v=>set('widthInches',v)}/></label>
+      {selected.type==='window' && <label className="field"><span>Height / wall depth (inches)</span><NumberInput value={selected.heightInches||4.5} min={0.25} step="0.25" onCommit={v=>set('heightInches',v)}/></label>}
+      <label className="field"><span>Rotation (degrees)</span><NumberInput value={selected.rotation||0} onCommit={v=>set('rotation',v)}/></label>
       <div className="quickActions"><button onClick={()=>set('rotation',(selected.rotation||0)-90)}>↶ 90°</button><button onClick={()=>set('rotation',(selected.rotation||0)+90)}>↷ 90°</button></div>
       <div className="hint compactHint">Drag the blue handle to resize. Windows resize in both width and height/depth. Press <b>R</b> to rotate 90°.</div>
     </>}
     {selected.type === 'text' && <>
       <label className="field"><span>Text</span><input value={selected.text||''} onChange={e=>set('text',e.target.value)}/></label>
-      <label className="field"><span>Font size</span><input type="number" value={selected.fontSize||24} onChange={e=>set('fontSize',Number(e.target.value))}/></label>
-      <label className="field"><span>Rotation</span><input type="number" value={selected.rotation||0} onChange={e=>set('rotation',Number(e.target.value))}/></label>
+      <label className="field"><span>Font size</span><NumberInput value={selected.fontSize||24} min={1} onCommit={v=>set('fontSize',v)}/></label>
+      <label className="field"><span>Rotation</span><NumberInput value={selected.rotation||0} onCommit={v=>set('rotation',v)}/></label>
     </>}
     {selected.type === 'symbol' && <>
       <div className="objectName">{symbolLabel(selected.symbol)}</div>
-      <div className="sizeGrid"><label className="field"><span>Width (in)</span><input type="number" min="4" value={selected.widthInches||24} onChange={e=>set('widthInches',Math.max(4,Number(e.target.value)||4))}/></label><label className="field"><span>Height (in)</span><input type="number" min="4" value={selected.heightInches||24} onChange={e=>set('heightInches',Math.max(4,Number(e.target.value)||4))}/></label></div>
-      <label className="field"><span>Rotation (degrees)</span><input type="number" value={selected.rotation||0} onChange={e=>set('rotation',Number(e.target.value)||0)}/></label>
+      <div className="sizeGrid"><label className="field"><span>Width (in)</span><NumberInput value={selected.widthInches||24} min={1} onCommit={v=>set('widthInches',v)}/></label><label className="field"><span>Height (in)</span><NumberInput value={selected.heightInches||24} min={1} onCommit={v=>set('heightInches',v)}/></label></div>
+      <label className="field"><span>Rotation (degrees)</span><NumberInput value={selected.rotation||0} onCommit={v=>set('rotation',v)}/></label>
       <div className="quickActions"><button onClick={()=>set('rotation',(selected.rotation||0)-90)}>↶ 90°</button><button onClick={()=>set('rotation',(selected.rotation||0)+90)}>↷ 90°</button></div>
-      <div className="quickActions"><button onClick={()=>updateElement(selected.id,{widthInches:Math.max(4,(selected.widthInches||24)*.9),heightInches:Math.max(4,(selected.heightInches||24)*.9)})}>− Smaller</button><button onClick={()=>updateElement(selected.id,{widthInches:(selected.widthInches||24)*1.1,heightInches:(selected.heightInches||24)*1.1})}>＋ Larger</button></div>
+      <div className="quickActions"><button onClick={()=>updateElement(selected.id,{widthInches:Math.max(1,(selected.widthInches||24)*.9),heightInches:Math.max(1,(selected.heightInches||24)*.9)})}>− Smaller</button><button onClick={()=>updateElement(selected.id,{widthInches:(selected.widthInches||24)*1.1,heightInches:(selected.heightInches||24)*1.1})}>＋ Larger</button></div>
       <div className="hint compactHint">Drag the blue bottom-right handle on the canvas to resize. Press <b>R</b> to rotate 90°.</div>
     </>}
-    {['line','rect'].includes(selected.type) && <label className="field"><span>Line weight</span><input type="number" min="1" max="20" value={selected.strokeWidth||2} onChange={e=>set('strokeWidth',Math.max(1,Number(e.target.value)||1))}/></label>}
-    {selected.type === 'erase' && <label className="field"><span>Eraser size</span><input type="number" value={selected.size||36} onChange={e=>set('size',Number(e.target.value))}/></label>}
+    {['line','rect'].includes(selected.type) && <label className="field"><span>Line weight</span><NumberInput value={selected.strokeWidth||2} min={1} max={20} onCommit={v=>set('strokeWidth',v)}/></label>}
+    {selected.type === 'erase' && <label className="field"><span>Eraser size</span><NumberInput value={selected.size||36} min={1} onCommit={v=>set('size',v)}/></label>}
     <button className="wide danger" onClick={deleteSelected}>Delete selected</button>
   </div>;
 }
