@@ -715,7 +715,10 @@ function BlueprintApp() {
   const handlePointerDown = (e) => {
     if (e.button !== 0) return;
     const raw = clientToWorld(e);
-    const point = snapPoint(raw, project.elements, { grid: !e.shiftKey, align: true, magnet: true });
+    const linePrecision = tool === 'line' && e.shiftKey;
+    const point = linePrecision
+      ? raw
+      : snapPoint(raw, project.elements, { grid: !e.shiftKey, align: true, magnet: true });
 
     if (tool === 'pan') {
       setDrag({ kind: 'pan', start: { x: e.clientX, y: e.clientY }, pan });
@@ -786,17 +789,23 @@ function BlueprintApp() {
   const handlePointerMove = (e) => {
     const raw = clientToWorld(e);
     const precisionWall = draft?.type === 'wall' && e.shiftKey;
-    const wallTarget = precisionWall ? raw : angleSnap(draft?.a || raw, raw, 15);
+    const precisionLine = draft?.type === 'line' && e.shiftKey;
+    const precisionDrawing = precisionWall || precisionLine;
+    const drawingTarget = precisionDrawing ? raw : angleSnap(draft?.a || raw, raw, 15);
     const angledPoint = draft?.type === 'wall'
-      ? snapPoint(wallTarget, project.elements, {
+      ? snapPoint(drawingTarget, project.elements, {
           grid:false,
           align:false,
           magnet:true,
           excludeSegmentWallIds:draft.startWallIds || [],
-          lineFrom: precisionWall ? null : {a:draft.a,b:wallTarget},
+          lineFrom: precisionWall ? null : {a:draft.a,b:drawingTarget},
           lineTolerance:3,
         })
-      : snapPoint(wallTarget, project.elements, { grid: !e.shiftKey, align: true, magnet: true });
+      : draft?.type === 'line'
+        ? (precisionLine
+            ? raw
+            : snapPoint(drawingTarget, project.elements, { grid:false, align:false, magnet:true, lineFrom:{a:draft.a,b:drawingTarget}, lineTolerance:3 }))
+        : snapPoint(drawingTarget, project.elements, { grid: !e.shiftKey, align: true, magnet: true });
     const freePoint = snapPoint(raw, project.elements, { grid: !e.shiftKey, align: true, magnet: true });
     if (draft && ['wall','line'].includes(draft.type)) setDraft(d => ({ ...d, b: angledPoint }));
     if (draft?.type === 'measure') setDraft(d => ({ ...d, b: raw }));
@@ -804,6 +813,10 @@ function BlueprintApp() {
     if (draft?.type === 'wall') {
       const length = dist(draft.a, angledPoint) / project.unitsPerInch;
       setStatus(precisionWall ? `Free precision · ${inchesLabel(length)} · release Shift to restore angle lock` : `Angle lock ON · ${inchesLabel(length)} · hold Shift for free precision`);
+    }
+    if (draft?.type === 'line') {
+      const length = dist(draft.a, angledPoint) / project.unitsPerInch;
+      setStatus(precisionLine ? `Free line · ${inchesLabel(length)} · snapping bypassed while Shift is held` : `Line snap ON · ${inchesLabel(length)} · hold Shift to bypass snapping`);
     }
     if (draft?.type === 'clean') setDraft(d => ({ ...d, b: raw }));
     if (calibration?.stage === 1) setCalibration(c => ({ ...c, b: raw }));
@@ -953,6 +966,18 @@ function BlueprintApp() {
       alert('Could not import that file. Try a PNG, JPG, or a normal PDF.');
     }
   }
+
+  const openLockedImport = () => {
+    const code = window.prompt('Enter import code');
+    if (code === null) return;
+    if (String(code).trim() !== '2009') {
+      setStatus('Incorrect import code');
+      window.alert('Incorrect import code.');
+      return;
+    }
+    setImportOpen(true);
+    setImportError('');
+  };
 
   const importEditableCode = () => {
     try {
@@ -1109,7 +1134,7 @@ function BlueprintApp() {
         <div className="headerActions">
           <button onClick={undo} disabled={!history.length}>↶ Undo</button>
           <button onClick={redo} disabled={!future.length}>↷ Redo</button>
-          <button className="importButton" onClick={()=>{setImportOpen(true);setImportError('');}}>Import</button>
+          <button className="importButton" onClick={openLockedImport}>Import</button>
           <div className="exportWrap">
             <button className="primary exportButton" disabled={exporting} onClick={()=>setExportMenu(v=>!v)}>{exporting ? 'Exporting…' : 'Export'} {!exporting && <span>▾</span>}</button>
             {exportMenu && <div className="exportMenu">
@@ -1135,7 +1160,7 @@ function BlueprintApp() {
             {tool === 'wall' && <div className="toolNote"><b>Smart wall snapping</b><span>Walls lock to clean angles and magnetically snap to other wall ends/edges. Hold <b>Shift</b> only when you need a free-angle precision adjustment; release it and the angle lock immediately comes back.</span></div>}
             <ToolButton tool={tool} id="window" setTool={setTool} icon="▥" label="Window" />
             <ToolButton tool={tool} id="line" setTool={setTool} icon="╱" label="Line" />
-            {tool === 'line' && <div className="toolNote"><b>Line snapping</b><span>Start or finish near another line and it will magnetically connect to the endpoint or edge so the lines meet cleanly.</span></div>}
+            {tool === 'line' && <div className="toolNote"><b>Line snapping</b><span>Lines lock to clean angles and snap to nearby line/wall endpoints and edges. Hold <b>Shift</b> to draw freely and completely bypass snapping; release Shift to turn snapping back on.</span></div>}
             <ToolButton tool={tool} id="rect" setTool={setTool} icon="▭" label="Rectangle" />
             <ToolButton tool={tool} id="measure" setTool={setTool} icon="↔" label="Measure" />
             {tool === 'measure' && <div className="toolNote"><b>Temporary measurement</b><span>Drag between any two points to read the real distance using the current blueprint scale. Useful for matching existing wall thickness.</span></div>}
