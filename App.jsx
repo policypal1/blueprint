@@ -1115,6 +1115,45 @@ function BlueprintApp() {
     updateElement(selected.id,{ b:{x:a.x+Math.cos(angle)*units,y:a.y+Math.sin(angle)*units} });
   };
 
+  const finishCalibration = () => {
+    if (!calibration || calibration.stage !== 2) return;
+
+    const canvasDistance = dist(calibration.a, calibration.b);
+    if (!Number.isFinite(canvasDistance) || canvasDistance <= 0) {
+      alert('Choose two different points on the blueprint.');
+      setCalibration(null);
+      setStatus('Blueprint scale not changed');
+      return;
+    }
+
+    const currentDistance = canvasDistance / project.unitsPerInch;
+    const value = prompt(
+      'Enter the real distance between those two points. You can use inches or feet/inches.',
+      inchesLabel(currentDistance)
+    );
+    if (value === null) return;
+
+    const inches = parseLengthInput(value);
+    if (!Number.isFinite(inches) || inches <= 0) {
+      alert('Enter a valid distance, for example 120 or 10\' 0".');
+      setStatus('Blueprint scale not changed');
+      return;
+    }
+
+    const nextUnitsPerInch = canvasDistance / inches;
+    if (!Number.isFinite(nextUnitsPerInch) || nextUnitsPerInch <= 0) {
+      alert('Could not calculate a valid blueprint scale from those points.');
+      setStatus('Blueprint scale not changed');
+      return;
+    }
+
+    pushHistory();
+    updateProject(p => ({ ...p, unitsPerInch: nextUnitsPerInch }));
+    setCalibration(null);
+    setTool('select');
+    setStatus(`Blueprint scale set · ${fmt(nextUnitsPerInch)} units/in`);
+  };
+
   const wallLengthInches = selected?.type === 'wall' ? dist(selected.a,selected.b) / project.unitsPerInch : null;
 
   return (
