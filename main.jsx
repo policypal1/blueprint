@@ -1,12 +1,12 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import EditorApp from './App.jsx';
-import ProductApp from './ProductApp.jsx';
+import App from './App.jsx';
 import './styles.css';
-import './launch.css';
+import './editor-polish.css';
+import './editor-polish.js';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <ProductApp EditorComponent={EditorApp} />
+    <App />
   </React.StrictMode>,
 );

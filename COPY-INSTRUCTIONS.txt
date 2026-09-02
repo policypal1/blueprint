@@ -1,29 +1,30 @@
-BLUEPRINT STUDIO V2 — COPY INSTRUCTIONS
+BLUEPRINT STUDIO — EDITOR-ONLY REVERT
 
-1. Open your existing Blueprint Studio project folder.
-2. Copy every file from this ZIP into the ROOT of that project.
-3. Replace the existing files when prompted.
-4. Keep your current App.jsx, styles.css, package.json, sample-blueprint.jpeg, favicon.svg, and vite.config.js.
-5. Run:
+This removes the product website shell and loads the original Blueprint Studio editor directly again.
 
-   npm install
-   npm run dev
+COPY THESE 4 FILES INTO THE ROOT OF YOUR EXISTING BLUEPRINT REPO:
+- main.jsx                         (replace existing)
+- index.html                       (replace existing)
+- editor-polish.css                (new)
+- editor-polish.js                 (new)
 
-FILES IN THIS ZIP
+KEEP YOUR EXISTING:
+- App.jsx
+- styles.css
+- package.json
+- favicon.svg
+- sample-blueprint.jpeg
+- vite.config.js
+- any other original editor files
+
+You can optionally delete these old launch/product files because they are no longer imported or used:
 - ProductApp.jsx
-- productServices.js
-- product.config.js
 - launch.css
-- main.jsx
-- index.html
+- product.config.js
+- productServices.js
 - README-LAUNCH.md
-- COPY-INSTRUCTIONS.txt
 
-IMPORTANT
-- Standard price is $49/month.
-- Launch price is $48/month.
-- There is NO free trial.
-- Users create an account and go directly into the free workspace.
-- Developer override code is 1234.
-- Remove developer mode before production.
-- Do not use the placeholder card form for real payments until Stripe or another payment processor is connected.
+IMPORTANT:
+Do NOT delete App.jsx or styles.css. This revert intentionally uses your original editor code and only keeps the improved SVG tool icons + editor typography polish.
+
+Nothing in this package pushes to GitHub.

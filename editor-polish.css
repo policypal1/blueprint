@@ -1,0 +1,66 @@
+/* Editor-only visual polish. No marketing site, routing, accounts, or paywall. */
+:root {
+  --editor-font: Aptos, "Segoe UI Variable", "Segoe UI", Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+html, body, #root, .app {
+  font-family: var(--editor-font);
+}
+
+.app,
+.topbar,
+.sidebar,
+.properties,
+button,
+input,
+select,
+textarea {
+  font-family: var(--editor-font) !important;
+}
+
+.brandMark {
+  border-radius: 7px !important;
+}
+
+.tool {
+  position: relative;
+  border-radius: 9px !important;
+}
+
+.toolIcon {
+  display: grid !important;
+  place-items: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  flex: 0 0 28px !important;
+  border-radius: 7px !important;
+  background: #f0f3f6 !important;
+  color: #44546a !important;
+}
+
+.toolIcon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  pointer-events: none;
+}
+
+.tool.active .toolIcon {
+  background: #e0e9ff !important;
+  color: #2457e6 !important;
+}
+
+.tool > span:last-child {
+  font-weight: 680 !important;
+}
+
+.sectionTitle {
+  letter-spacing: .12em !important;
+}
+
+.headerActions button,
+.projectButton,
+.wide,
+.quickActions button {
+  font-weight: 700;
+}
