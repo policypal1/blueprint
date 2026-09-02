@@ -1,12 +1,29 @@
-BLUEPRINT STUDIO LAUNCH FRONTEND
+BLUEPRINT STUDIO V2 — COPY INSTRUCTIONS
 
-1. Open your existing blueprint project folder.
-2. Copy every file from this ZIP into the ROOT of that folder.
-3. Replace files when Windows asks. This ZIP intentionally replaces main.jsx and index.html.
-4. Keep your existing App.jsx, styles.css, sample-blueprint.jpeg, favicon.svg, package.json, and vite.config.js.
-5. Run: npm install
-6. Run: npm run dev
+1. Open your existing Blueprint Studio project folder.
+2. Copy every file from this ZIP into the ROOT of that project.
+3. Replace the existing files when prompted.
+4. Keep your current App.jsx, styles.css, package.json, sample-blueprint.jpeg, favicon.svg, and vite.config.js.
+5. Run:
 
-TESTING BYPASS CODE: 1234
+   npm install
+   npm run dev
 
-The visible Import button is hidden by launch.css. The old editor password gate is automatically satisfied only after the product account/paywall gate grants access.
+FILES IN THIS ZIP
+- ProductApp.jsx
+- productServices.js
+- product.config.js
+- launch.css
+- main.jsx
+- index.html
+- README-LAUNCH.md
+- COPY-INSTRUCTIONS.txt
+
+IMPORTANT
+- Standard price is $49/month.
+- Launch price is $48/month.
+- There is NO free trial.
+- Users create an account and go directly into the free workspace.
+- Developer override code is 1234.
+- Remove developer mode before production.
+- Do not use the placeholder card form for real payments until Stripe or another payment processor is connected.

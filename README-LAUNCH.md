@@ -1,78 +1,87 @@
-# Blueprint Studio launch frontend
+# Blueprint Studio launch frontend — V2
 
-This ZIP is an **overlay for the existing `policypal1/blueprint` repo**. Copy these files into the repo root and keep the existing `App.jsx`, `styles.css`, `favicon.svg`, `sample-blueprint.jpeg`, `package.json`, and `vite.config.js` unless a file in this ZIP has the same name.
+This package is the public/product layer for the existing Blueprint Studio editor. It does not push anything to GitHub and it does not replace the drawing engine in `App.jsx`.
 
 ## What changed
 
-- Added a full product/marketing site with hero, product preview, how-it-works, pricing, FAQ, CTA, and responsive navigation.
-- Added frontend signup/login with name, email, and password.
-- Added a real frontend paywall state that blocks the editor until an active trial/subscription exists.
-- Added monthly and annual pricing.
-- Added a payment-method form and account/billing screen.
-- Added an obvious temporary testing bypass. The code is `1234`.
-- Removed the old Import feature from the visible editor UI.
-- Removed the old Lock control from the visible editor UI.
-- Replaced the old editor tool glyphs with cleaner inline SVG-style icons at runtime.
-- Changed the product/editor type stack away from the generic AI-style font look.
-- Added an account menu inside the editor.
+- Rebuilt the public landing page around the actual customer journey: old plan → cleanup → revision → usable updated plan.
+- Added true separate routes/tabs for **Home**, **How it works**, **Pricing**, and **FAQ**.
+- Rebuilt login/signup as a centered, focused authentication screen.
+- Removed the forced trial/checkout step after signup. A new account now goes directly into the free editor.
+- Added a permanent **Free workspace** instead of a time-limited free trial.
+- Added a **Pro** upgrade at a $49/month regular price with a $48/month launch price.
+- Added free-tool gating inside the existing editor without rebuilding the editor engine.
+- Added an upgrade modal when a free user clicks a Pro-only tool.
+- Added developer mode / override code `1234` for testing.
+- Fixed marketing-page scrolling by explicitly separating marketing mode from the editor's fixed full-screen mode.
+- Preserved the cleaner editor icon treatment and removed the visible old Import/Lock controls.
+
+## Free workspace access
+
+After creating an account, users can enter Blueprint Studio immediately and use:
+
+- Upload blueprint
+- Select / Pan
+- Wall
+- Window
+- All door types
+- Brush erase
+- Clean area
+- Set blueprint scale
+- Clear all / basic file preparation controls
+
+The rest of the drawing/annotation tools and Export are visibly marked **PRO** and open the upgrade prompt when clicked.
 
 ## Pricing
 
-Pricing lives in `product.config.js`:
+Pricing is centralized in `product.config.js`:
 
-- Monthly: `$99/month`
-- Annual: `$948/year` (`$79/month` effective)
-- Trial: `7 days`
+- Regular monthly price: `$49`
+- Launch price: `$48/month`
+- No free trial
+- Free account remains usable without a card
 
-Change those values in one place and the site/checkout/order summary update automatically.
+## Developer mode
 
-## Important: frontend vs production backend
+Temporary test override code:
 
-The account and billing flow is intentionally implemented as a **frontend-complete demo contract** so the product can be designed and tested before the backend is connected.
+`1234`
 
-Current behavior:
+Developer mode is available on the login/signup screen and from the editor account menu. It grants Pro access in the frontend state.
 
-- Account records and session state use `localStorage`.
-- Passwords are SHA-256 hashed in the browser before local storage. This is still **not production authentication** because the client controls the code and storage.
-- Payment form data is **not sent to a processor**.
-- The demo only stores card brand, last four digits, cardholder name, and expiry for display. Full card numbers and CVC are not persisted.
-- Editor projects continue to use the editor's existing IndexedDB/local browser storage.
+**Remove or disable this before a real production launch.** A client-side bypass is intentionally not secure.
 
-Before accepting real customers:
+## Backend handoff
 
-1. Replace `productServices.js` auth functions with Supabase/Auth0/Clerk/Firebase or your own API.
-2. Replace `activateSubscription()` with Stripe Checkout or Stripe Elements + server-side subscription creation.
-3. Verify subscription status server-side before giving access to `#app`.
-4. Move project storage to your database/cloud object storage if cross-device sync is required.
-5. Remove `testBypassCode: '1234'` from `product.config.js` or disable the testing bypass UI.
-6. Add production Terms, Privacy Policy, support email, and Stripe customer portal/cancellation handling.
+`productServices.js` currently simulates:
 
-## Backend integration points
+- account creation
+- login/session state
+- account editing
+- free vs Pro access
+- subscription state
+- payment-method display metadata
 
-You only need to swap implementations in `productServices.js`. `ProductApp.jsx` already expects these operations:
+The state is stored in the browser so the complete frontend flow works before the backend exists.
 
-- `createAccount({ name, email, password })`
-- `login({ email, password })`
-- `logout()`
-- `getCurrentAccount()`
-- `updateAccount(...)`
-- `activateSubscription(...)`
-- `getSubscription(accountId)`
-- `removeSubscription(accountId)`
-- `updatePaymentMethod({ accountId, cardNumber, expiry, cardholder })`
+For production, replace the functions in `productServices.js` with your real services, for example:
 
-Keep the return shapes and the UI should not need a redesign.
+- Supabase/Auth0/Clerk/custom auth for accounts
+- Stripe Checkout or Stripe Elements for billing
+- Database-backed subscription entitlement
+- Cloud project storage instead of browser-only IndexedDB
 
-## Run locally
+Do **not** collect real card numbers with this frontend demo. The current form is only a frontend placeholder and intentionally saves only display-safe metadata such as brand and last four digits.
 
-```bash
-npm install
-npm run dev
-```
+## Existing editor
 
-Production check:
+This package expects the existing repository to already contain:
 
-```bash
-npm run build
-npm run preview
-```
+- `App.jsx`
+- `styles.css`
+- `sample-blueprint.jpeg`
+- `favicon.svg`
+- `package.json`
+- `vite.config.js`
+
+Copy the files in this ZIP over the root of the current project, then run the normal Vite build.

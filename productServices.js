@@ -107,7 +107,7 @@ function detectBrand(cardNumber) {
   return 'Card';
 }
 
-export function activateSubscription({ accountId, billingCycle, cardNumber, expiry, cardholder, testBypass = false }) {
+export function activateSubscription({ accountId, cardNumber = '', expiry = '', cardholder = '', testBypass = false } = {}) {
   if (!accountId) throw new Error('Account required.');
   const subscriptions = read(KEYS.subscriptions, {});
   const cleanCard = String(cardNumber || '').replace(/\D/g, '');
@@ -118,29 +118,31 @@ export function activateSubscription({ accountId, billingCycle, cardNumber, expi
     if (String(cardholder || '').trim().length < 2) throw new Error('Enter the name on the card.');
   }
 
-  const now = new Date();
-  const trialEnds = new Date(now.getTime() + PRODUCT_CONFIG.trialDays * 86400000);
   const record = {
-    status: testBypass ? 'test_access' : 'trialing',
-    billingCycle: billingCycle === 'annual' ? 'annual' : 'monthly',
-    startedAt: now.toISOString(),
-    trialEndsAt: trialEnds.toISOString(),
+    status: testBypass ? 'developer_access' : 'active',
+    startedAt: new Date().toISOString(),
     testBypass,
-    paymentMethod: testBypass ? { brand: 'Testing bypass', last4: '1234', expiry: '—' } : {
-      brand: detectBrand(cleanCard),
-      last4: cleanCard.slice(-4),
-      expiry: String(expiry).trim(),
-      cardholder: String(cardholder).trim(),
-    },
+    priceMonthly: PRODUCT_CONFIG.pricing.launchMonthly,
+    paymentMethod: testBypass
+      ? { brand: 'Developer mode', last4: '1234', expiry: '—' }
+      : {
+          brand: detectBrand(cleanCard),
+          last4: cleanCard.slice(-4),
+          expiry: String(expiry).trim(),
+          cardholder: String(cardholder).trim(),
+        },
   };
 
-  // The frontend demo intentionally stores only display-safe card metadata.
-  // Replace this service with Stripe Checkout/Elements before collecting real payments.
+  // Frontend-only placeholder. Store only display-safe card metadata.
+  // Replace this with Stripe Checkout/Elements before accepting real payments.
   subscriptions[accountId] = record;
   write(KEYS.subscriptions, subscriptions);
   return record;
 }
 
+export function unlockDeveloperMode(accountId) {
+  return activateSubscription({ accountId, testBypass: true });
+}
 
 export function updatePaymentMethod({ accountId, cardNumber, expiry, cardholder }) {
   if (!accountId) throw new Error('Account required.');
@@ -154,11 +156,13 @@ export function updatePaymentMethod({ accountId, cardNumber, expiry, cardholder 
   if (!current) throw new Error('No active subscription found.');
   const next = {
     ...current,
+    testBypass: false,
+    status: 'active',
     paymentMethod: {
       brand: detectBrand(cleanCard),
       last4: cleanCard.slice(-4),
-      expiry: String(expiry).trim(),
-      cardholder: String(cardholder).trim(),
+      expiry: String(expiry || '').trim(),
+      cardholder: String(cardholder || '').trim(),
     },
     updatedAt: new Date().toISOString(),
   };
@@ -178,21 +182,21 @@ export function removeSubscription(accountId) {
   write(KEYS.subscriptions, subscriptions);
 }
 
-export function createTestAccount() {
+export function createDeveloperAccount() {
   const accounts = read(KEYS.accounts, []);
-  let account = accounts.find(item => item.email === 'test@blueprintstudio.local');
+  let account = accounts.find(item => item.email === 'developer@blueprintstudio.local');
   if (!account) {
     account = {
       id: uid(),
-      name: 'Blueprint Tester',
-      email: 'test@blueprintstudio.local',
-      passwordHash: 'testing-only',
+      name: 'Blueprint Developer',
+      email: 'developer@blueprintstudio.local',
+      passwordHash: 'developer-only',
       createdAt: new Date().toISOString(),
     };
     accounts.push(account);
     write(KEYS.accounts, accounts);
   }
-  write(KEYS.session, { accountId: account.id, createdAt: new Date().toISOString(), test: true });
-  activateSubscription({ accountId: account.id, billingCycle: 'monthly', testBypass: true });
+  write(KEYS.session, { accountId: account.id, createdAt: new Date().toISOString(), developer: true });
+  unlockDeveloperMode(account.id);
   return sanitizeAccount(account);
 }

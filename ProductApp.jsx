@@ -1,19 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { PLAN_FEATURES, PRODUCT_CONFIG } from './product.config.js';
+import { FAQS, FREE_TOOLS, PRODUCT_CONFIG, PRO_FEATURES } from './product.config.js';
 import {
   activateSubscription,
   createAccount,
-  createTestAccount,
+  createDeveloperAccount,
   getCurrentAccount,
   getSubscription,
   login,
   logout,
   removeSubscription,
+  unlockDeveloperMode,
   updateAccount,
   updatePaymentMethod,
 } from './productServices.js';
 
-const ROUTES = new Set(['home', 'login', 'signup', 'pricing', 'checkout', 'app', 'account']);
+const ROUTES = new Set(['home', 'how', 'pricing', 'faq', 'login', 'signup', 'upgrade', 'checkout', 'app', 'account']);
 
 function routeFromHash() {
   const value = window.location.hash.replace(/^#\/?/, '').split('?')[0] || 'home';
@@ -35,7 +36,7 @@ function useRoute() {
   return route;
 }
 
-function Icon({ name, size = 20, strokeWidth = 1.9 }) {
+function Icon({ name, size = 20, strokeWidth = 1.8 }) {
   const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true };
   const paths = {
     arrow: <><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></>,
@@ -47,163 +48,180 @@ function Icon({ name, size = 20, strokeWidth = 1.9 }) {
     user: <><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></>,
     card: <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M7 15h3"/></>,
     lock: <><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
+    unlock: <><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M9 10V7a4 4 0 0 1 7-2.6"/></>,
     logout: <><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 19V5a2 2 0 0 0-2-2h-6"/></>,
     menu: <><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></>,
     close: <><path d="m6 6 12 12"/><path d="M18 6 6 18"/></>,
     spark: <><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4L12 3Z"/><path d="m18 14 .8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14Z"/></>,
     blueprint: <><path d="M5 3h14v18H5z"/><path d="M9 3v5h6V3"/><path d="M8 13h8"/><path d="M8 17h5"/></>,
     chevron: <path d="m8 10 4 4 4-4"/>,
+    clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
+    layers: <><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 16 9 5 9-5"/></>,
+    briefcase: <><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5h8v2"/><path d="M3 12h18"/></>,
+    house: <><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></>,
+    notes: <><path d="M5 3h14v18H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></>,
   };
   return <svg {...props}>{paths[name] || paths.blueprint}</svg>;
 }
 
 function Brand({ light = false, onClick }) {
-  return <button className={`launchBrand ${light ? 'launchBrandLight' : ''}`} onClick={onClick} aria-label="Blueprint Studio home">
-    <span className="launchBrandMark"><Icon name="blueprint" size={18}/></span>
+  return <button className={`brandButton ${light ? 'brandButtonLight' : ''}`} onClick={onClick} aria-label="Blueprint Studio home">
+    <span className="brandSymbol"><Icon name="blueprint" size={18}/></span>
     <span>{PRODUCT_CONFIG.name}</span>
   </button>;
 }
 
-function MarketingHeader({ account, route }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const nav = (target) => { setMobileOpen(false); if (target.startsWith('section:')) { go('home'); setTimeout(() => document.getElementById(target.slice(8))?.scrollIntoView({ behavior: 'smooth' }), 60); } else go(target); };
-  return <header className="launchNav">
-    <div className="launchNavInner">
-      <Brand onClick={() => nav('home')} />
-      <nav className={`launchNavLinks ${mobileOpen ? 'isOpen' : ''}`}>
-        <button onClick={() => nav('section:how')}>How it works</button>
-        <button onClick={() => nav('pricing')} className={route === 'pricing' ? 'active' : ''}>Pricing</button>
-        <button onClick={() => nav('section:faq')}>FAQ</button>
+function SiteHeader({ account, route }) {
+  const [open, setOpen] = useState(false);
+  const tabs = [['home', 'Home'], ['how', 'How it works'], ['pricing', 'Pricing'], ['faq', 'FAQ']];
+  const nav = (target) => { setOpen(false); go(target); };
+  return <header className="siteHeader">
+    <div className="siteHeaderInner">
+      <Brand onClick={() => nav('home')}/>
+      <nav className={`siteTabs ${open ? 'open' : ''}`}>
+        {tabs.map(([key, label]) => <button key={key} className={route === key ? 'active' : ''} onClick={() => nav(key)}>{label}</button>)}
       </nav>
-      <div className="launchNavActions">
+      <div className="siteActions">
         {account ? <>
-          <button className="launchTextButton" onClick={() => go('account')}>Account</button>
-          <button className="launchPrimaryButton launchSmall" onClick={() => go(getSubscription(account.id) ? 'app' : 'checkout')}>Open Studio <Icon name="arrow" size={16}/></button>
+          <button className="quietButton" onClick={() => go('account')}>Account</button>
+          <button className="primaryButton small" onClick={() => go('app')}>Open Studio <Icon name="arrow" size={16}/></button>
         </> : <>
-          <button className="launchTextButton" onClick={() => go('login')}>Log in</button>
-          <button className="launchPrimaryButton launchSmall" onClick={() => go('signup')}>Start free trial <Icon name="arrow" size={16}/></button>
+          <button className="quietButton" onClick={() => go('login')}>Log in</button>
+          <button className="primaryButton small" onClick={() => go('signup')}>Create free account</button>
         </>}
       </div>
-      <button className="launchMobileMenu" onClick={() => setMobileOpen(v => !v)} aria-label="Toggle navigation"><Icon name={mobileOpen ? 'close' : 'menu'}/></button>
+      <button className="mobileMenuButton" onClick={() => setOpen(v => !v)} aria-label="Toggle menu"><Icon name={open ? 'close' : 'menu'}/></button>
     </div>
   </header>;
 }
 
-function Hero({ account }) {
-  return <section className="launchHero">
-    <div className="launchHeroCopy">
-      <div className="launchEyebrow"><span><Icon name="spark" size={14}/></span> Built for remodelers and contractors</div>
-      <h1>Blueprint edits without the CAD overhead.</h1>
-      <p>Upload an existing floor plan, make clean revisions with real measurements, and export a client-ready plan in minutes.</p>
-      <div className="launchHeroActions">
-        <button className="launchPrimaryButton" onClick={() => go(account ? (getSubscription(account.id) ? 'app' : 'checkout') : 'signup')}>Start {PRODUCT_CONFIG.trialDays}-day free trial <Icon name="arrow"/></button>
-        <button className="launchSecondaryButton" onClick={() => document.getElementById('how')?.scrollIntoView({ behavior: 'smooth' })}>See how it works</button>
-      </div>
-      <div className="launchTrustRow"><span><Icon name="check" size={15}/> No CAD experience needed</span><span><Icon name="check" size={15}/> Export PDF & PNG</span><span><Icon name="check" size={15}/> Cancel anytime</span></div>
-    </div>
-    <ProductPreview />
-  </section>;
-}
-
 function ProductPreview() {
-  return <div className="launchPreviewWrap" aria-label="Blueprint Studio product preview">
-    <div className="launchPreviewChrome">
-      <div className="launchPreviewTop"><div className="launchPreviewBrand"><span>B</span> Blueprint Studio</div><div className="launchPreviewProject">Bathroom Remodel <span>⌄</span></div><div className="launchPreviewActions"><span>Undo</span><b>Export</b></div></div>
-      <div className="launchPreviewBody">
-        <div className="launchPreviewSidebar">
-          <small>FILE</small><div className="launchPreviewUpload">+ Upload blueprint</div>
-          <small>DRAW & ANNOTATE</small>
-          <div className="launchPreviewTools"><span>↖ Select</span><span>━ Wall</span><span>▥ Window</span><span>╱ Line</span><span>↔ Measure</span><span>T Text</span></div>
-        </div>
-        <div className="launchPreviewCanvas"><img src="/sample-blueprint.jpeg" alt="Sample floor plan"/><div className="launchPreviewEdit one"></div><div className="launchPreviewEdit two"></div><div className="launchMeasureTag">8' 6&quot;</div></div>
-      </div>
+  return <div className="productPreview">
+    <div className="previewTopbar"><div><span className="previewLogo">B</span><b>Blueprint Studio</b></div><span>Kitchen Remodel</span><button>Export</button></div>
+    <div className="previewBody">
+      <aside><small>GET READY</small><button>Upload blueprint</button><small>DRAW</small><div className="miniTools"><span>Wall</span><span>Window</span><span>Door</span><span>Measure</span><span>Text</span><span>Fixture</span></div></aside>
+      <div className="previewCanvas"><img src="/sample-blueprint.jpeg" alt="Blueprint being revised in Blueprint Studio"/><div className="editLine vertical"></div><div className="editLine horizontal"></div><div className="dimensionTag">9' 4&quot;</div></div>
     </div>
-    <div className="launchPreviewBadge"><Icon name="ruler" size={18}/><div><strong>Real measurements</strong><small>Calibrate once, edit to scale.</small></div></div>
+    <div className="previewCallout"><Icon name="ruler" size={18}/><div><b>Calibrate once</b><span>Keep edits tied to real measurements.</span></div></div>
   </div>;
 }
 
-function FeatureStrip() {
-  const items = [
-    { icon: 'upload', title: 'Bring your existing plan', text: 'Upload PNG, JPG, WebP, or the first page of a PDF.' },
-    { icon: 'ruler', title: 'Calibrate exact scale', text: 'Set a known distance once and keep measurements consistent.' },
-    { icon: 'edit', title: 'Make the revision', text: 'Add walls, doors, windows, fixtures, labels, and cleanups.' },
-    { icon: 'export', title: 'Send a clean deliverable', text: 'Export a high-resolution PNG or 11 × 17 PDF.' },
+function Hero({ account }) {
+  return <section className="heroSection">
+    <div className="heroCopy">
+      <div className="eyebrow">Blueprint revisions for real jobs</div>
+      <h1>Take the plan you already have. Make it match the job.</h1>
+      <p>Blueprint Studio gives remodelers and contractors a focused way to clean up old floor plans, draw the changes, and create a clear updated plan without opening a full CAD program.</p>
+      <div className="heroButtons"><button className="primaryButton" onClick={() => go(account ? 'app' : 'signup')}>Use the free workspace <Icon name="arrow"/></button><button className="secondaryButton" onClick={() => go('how')}>See the workflow</button></div>
+      <div className="heroMeta"><span><Icon name="check" size={15}/> No card to start</span><span><Icon name="check" size={15}/> Free starter tools</span><span><Icon name="check" size={15}/> Pro when you need it</span></div>
+    </div>
+    <ProductPreview/>
+  </section>;
+}
+
+function ProblemJourney() {
+  return <section className="journeySection">
+    <div className="sectionIntro narrow"><span className="kicker">WHY PEOPLE USE IT</span><h2>Most remodels do not need a brand-new drawing. They need the old one fixed.</h2><p>A homeowner sends a scan. An estimator marks it up. The field condition changes. A wall moves. The problem is not “how do I become a CAD operator?” The problem is getting from outdated plan to usable plan quickly.</p></div>
+    <div className="journeyFlow">
+      <article><span className="stepNumber">01</span><div className="journeyIcon"><Icon name="notes"/></div><h3>You start with something messy</h3><p>A screenshot, PDF, old plan, or client sketch that is close to reality but not quite right.</p></article>
+      <div className="journeyArrow"><Icon name="arrow"/></div>
+      <article><span className="stepNumber">02</span><div className="journeyIcon"><Icon name="edit"/></div><h3>You make only the changes that matter</h3><p>Clean the old marks, set scale, redraw a wall, move an opening, add what the job actually needs.</p></article>
+      <div className="journeyArrow"><Icon name="arrow"/></div>
+      <article><span className="stepNumber">03</span><div className="journeyIcon"><Icon name="export"/></div><h3>You leave with something clear</h3><p>A revised plan that is easier to estimate from, explain to a client, or hand to the next person on the job.</p></article>
+    </div>
+  </section>;
+}
+
+function BeforeAfter() {
+  return <section className="splitSection">
+    <div className="splitCopy"><span className="kicker">THE DIFFERENCE</span><h2>Built around revision work, not drafting everything from zero.</h2><p>Traditional design tools are powerful because they handle enormous workflows. That is exactly why they can feel excessive when all you need is a clean revision.</p><ul><li><Icon name="check" size={16}/> Keep the original plan visible while you edit.</li><li><Icon name="check" size={16}/> Work directly on the drawing instead of managing layers and commands.</li><li><Icon name="check" size={16}/> Use real measurements when precision matters.</li><li><Icon name="check" size={16}/> Keep the interface focused on contractor use cases.</li></ul><button className="textLink" onClick={() => go('how')}>Walk through the full workflow <Icon name="arrow" size={16}/></button></div>
+    <div className="comparisonPanel"><div><span>Without Blueprint Studio</span><b>Screenshot → markup → explanation → another markup → confusion</b></div><div className="comparisonDivider"></div><div className="better"><span>With Blueprint Studio</span><b>Upload → clean → revise → export</b></div></div>
+  </section>;
+}
+
+function UseCases() {
+  const cases = [
+    ['briefcase', 'Estimate revisions', 'Turn the plan used during the walkthrough into a cleaner scope reference before pricing the job.'],
+    ['house', 'Remodel layout changes', 'Show the wall, door, window, fixture, or room change without rebuilding the entire project in CAD.'],
+    ['user', 'Client communication', 'Give the homeowner one updated visual instead of asking them to interpret notes across screenshots.'],
+    ['layers', 'Field handoff', 'Keep a clear revised plan available for the people actually doing the work.'],
   ];
-  return <section className="launchFeatureStrip">{items.map(item => <article key={item.title}><span><Icon name={item.icon}/></span><div><h3>{item.title}</h3><p>{item.text}</p></div></article>)}</section>;
+  return <section className="useCasesSection"><div className="sectionIntro"><span className="kicker">WHERE IT FITS</span><h2>A lightweight revision layer between the existing plan and the work.</h2></div><div className="useCaseGrid">{cases.map(([icon,title,text]) => <article key={title}><Icon name={icon}/><h3>{title}</h3><p>{text}</p></article>)}</div></section>;
 }
 
-function HowItWorks() {
-  const steps = [
-    ['01', 'Upload the blueprint', 'Start from the plan your client, estimator, or field team already has.'],
-    ['02', 'Set the scale', 'Click two known points and enter the real distance so every edit stays meaningful.'],
-    ['03', 'Edit what changed', 'Draw walls, openings, fixtures, dimensions, and annotations directly over the plan.'],
-    ['04', 'Export and send', 'Create a clean PNG or 11 × 17 PDF for estimates, approvals, and project handoff.'],
-  ];
-  return <section className="launchSection" id="how"><div className="launchSectionHead"><span className="launchKicker">HOW IT WORKS</span><h2>From old plan to updated plan in four steps.</h2><p>No layers panel. No command line. No CAD training curve.</p></div><div className="launchSteps">{steps.map(([n, title, text]) => <article key={n}><span>{n}</span><h3>{title}</h3><p>{text}</p></article>)}</div></section>;
+function FreeVsProPreview({ account }) {
+  return <section className="accessSection">
+    <div className="sectionIntro"><span className="kicker">START FREE</span><h2>Get into the software first. Upgrade when the starter tools stop being enough.</h2><p>No fake “7-day trial” countdown. A free account opens the workspace immediately.</p></div>
+    <div className="accessGrid">
+      <article className="freeCard"><div className="planLabel">FREE WORKSPACE</div><h3>$0</h3><p>Enough to test the real editing experience on your own blueprint.</p><ul>{FREE_TOOLS.map(x => <li key={x}><Icon name="check" size={15}/>{x}</li>)}</ul><button className="secondaryButton full" onClick={() => go(account ? 'app' : 'signup')}>{account ? 'Open free workspace' : 'Create free account'}</button></article>
+      <article className="proCard"><div className="planTop"><span className="planLabel">PRO</span><span className="launchBadge">Launch price</span></div><div className="priceLine"><s>${PRODUCT_CONFIG.pricing.regularMonthly}</s><strong>${PRODUCT_CONFIG.pricing.launchMonthly}</strong><span>/mo</span></div><p>Unlock the complete revision toolkit and exports.</p><ul>{PRO_FEATURES.map(x => <li key={x}><Icon name="check" size={15}/>{x}</li>)}</ul><button className="primaryButton full" onClick={() => go(account ? 'upgrade' : 'signup')}>Unlock Pro <Icon name="arrow" size={17}/></button></article>
+    </div>
+  </section>;
 }
 
-function PricingCard({ compact = false, onStart }) {
-  const monthly = PRODUCT_CONFIG.pricing.monthly;
-  const annualMonthly = Math.round(PRODUCT_CONFIG.pricing.annual / 12);
-  return <article className={`launchPricingCard ${compact ? 'compact' : ''}`}>
-    <div className="launchPlanHead"><div><span className="launchKicker">BLUEPRINT STUDIO PRO</span><h3>Everything you need to revise plans faster.</h3></div><span className="launchPopular">Most popular</span></div>
-    <div className="launchPrice"><strong>${monthly}</strong><span>/ month</span></div>
-    <p className="launchAnnualHint">or ${PRODUCT_CONFIG.pricing.annual}/year <b>(${annualMonthly}/mo)</b></p>
-    <ul>{PLAN_FEATURES.map(feature => <li key={feature}><span><Icon name="check" size={16}/></span>{feature}</li>)}</ul>
-    <button className="launchPrimaryButton launchFull" onClick={onStart}>Start {PRODUCT_CONFIG.trialDays}-day free trial <Icon name="arrow" size={18}/></button>
-    <small className="launchFinePrint">Cancel anytime. Billing begins after the trial.</small>
-  </article>;
-}
-
-function PricingSection({ account }) {
-  return <section className="launchSection launchPricingSection" id="pricing"><div className="launchSectionHead"><span className="launchKicker">SIMPLE PRICING</span><h2>One plan. The full editor.</h2><p>Built for contractors who need revised plans without adding another complicated design tool.</p></div><PricingCard onStart={() => go(account ? (getSubscription(account.id) ? 'app' : 'checkout') : 'signup')} /></section>;
-}
-
-const FAQS = [
-  ['What files can I upload?', 'Blueprint Studio accepts PNG, JPG, WebP, and PDF files. PDF import uses the first page as the editable background.'],
-  ['Do I need CAD experience?', 'No. The editor is designed around direct manipulation: upload, calibrate, draw, place objects, and export.'],
-  ['Can I work with real measurements?', 'Yes. Use Set blueprint scale, click two points with a known real-world distance, and enter that distance. Wall measurements will then use that calibration.'],
-  ['What can I add to a plan?', 'Walls, lines, rectangles, text, doors, windows, measurements, bathrooms fixtures, appliances, counters, beds, and other common plan objects.'],
-  ['Where are my projects saved?', 'In this frontend build, projects are saved locally in the browser on the current device. When you connect the backend, project sync can be moved to your database without changing the editor workflow.'],
-  ['Can I cancel anytime?', 'Yes. The pricing UI is built around a cancel-anytime subscription. Your production billing rules will be controlled by the payment backend you connect.'],
-];
-
-function FAQ() {
-  return <section className="launchSection launchFaq" id="faq"><div className="launchSectionHead"><span className="launchKicker">FAQ</span><h2>Questions before you start.</h2></div><div className="launchFaqList">{FAQS.map(([q, a]) => <details key={q}><summary>{q}<span><Icon name="chevron" size={18}/></span></summary><p>{a}</p></details>)}</div></section>;
-}
-
-function CTA({ account }) {
-  return <section className="launchCta"><div><span className="launchKicker">READY TO EDIT FASTER?</span><h2>Turn the plan you already have into the plan the job actually needs.</h2></div><button className="launchPrimaryButton launchOnDark" onClick={() => go(account ? (getSubscription(account.id) ? 'app' : 'checkout') : 'signup')}>Start free trial <Icon name="arrow"/></button></section>;
+function FinalCTA({ account }) {
+  return <section className="finalCta"><div><span className="kicker light">OPEN THE SOFTWARE</span><h2>Use your own blueprint before deciding whether Pro is worth it.</h2><p>Create an account, open the free workspace, and see whether it fits the way you actually work.</p></div><button className="primaryButton inverted" onClick={() => go(account ? 'app' : 'signup')}>{account ? 'Open Blueprint Studio' : 'Create free account'} <Icon name="arrow"/></button></section>;
 }
 
 function Footer() {
-  return <footer className="launchFooter"><Brand onClick={() => go('home')}/><p>Blueprint editing for remodeling and construction teams.</p><div><button onClick={() => go('pricing')}>Pricing</button><button onClick={() => { go('home'); setTimeout(() => document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth' }), 60); }}>Support</button></div><small>© {new Date().getFullYear()} Blueprint Studio</small></footer>;
+  return <footer className="siteFooter"><div><Brand onClick={() => go('home')}/><p>Focused blueprint revision software for remodeling and construction work.</p></div><div className="footerLinks"><button onClick={() => go('how')}>How it works</button><button onClick={() => go('pricing')}>Pricing</button><button onClick={() => go('faq')}>FAQ</button><button onClick={() => go('login')}>Log in</button></div><small>© {new Date().getFullYear()} Blueprint Studio</small></footer>;
+}
+
+function PageShell({ account, route, children }) {
+  return <div className="marketingSite"><SiteHeader account={account} route={route}/><main>{children}</main><Footer/></div>;
 }
 
 function HomePage({ account, route }) {
-  return <div className="launchSite"><MarketingHeader account={account} route={route}/><main><Hero account={account}/><FeatureStrip/><HowItWorks/><PricingSection account={account}/><FAQ/><CTA account={account}/></main><Footer/></div>;
+  return <PageShell account={account} route={route}><Hero account={account}/><ProblemJourney/><BeforeAfter/><UseCases/><FreeVsProPreview account={account}/><FinalCTA account={account}/></PageShell>;
+}
+
+function HowPage({ account, route }) {
+  const steps = [
+    ['01', 'Upload what you already have', 'Drop in the PNG, JPG, WebP, or PDF you received from the homeowner, estimator, architect, or previous contractor.', 'upload'],
+    ['02', 'Clean the old drawing', 'Use brush erase or clean area to remove marks, walls, notes, or background clutter that no longer represent the job.', 'edit'],
+    ['03', 'Set the real scale', 'Choose two known points, enter the real distance, and make the blueprint useful for measurement-aware revisions.', 'ruler'],
+    ['04', 'Draw the revision', 'Use walls, windows, doors, annotations, measurements, fixtures, and objects to represent what is changing.', 'blueprint'],
+    ['05', 'Review the plan in context', 'Move, resize, rotate, and adjust objects while the original plan stays visible underneath your work.', 'layers'],
+    ['06', 'Export the updated version', 'Pro users can produce a high-resolution PNG or 11 × 17 PDF for the client, estimate, or project team.', 'export'],
+  ];
+  return <PageShell account={account} route={route}><section className="pageHero"><span className="kicker">HOW IT WORKS</span><h1>A revision workflow that follows the way the job actually happens.</h1><p>You are not starting from a blank canvas. Blueprint Studio assumes you already have a plan and need to turn it into a more useful version.</p></section><section className="workflowList">{steps.map(([n,title,text,icon]) => <article key={n}><span className="workflowNumber">{n}</span><div className="workflowIcon"><Icon name={icon}/></div><div><h2>{title}</h2><p>{text}</p></div></article>)}</section><section className="howNote"><div><span className="kicker">FREE WORKSPACE</span><h2>You can test the core revision loop without paying.</h2><p>Free accounts can upload a blueprint, clean it up, set scale, and use walls, windows, and doors. Pro is for the full toolkit and exports.</p></div><button className="primaryButton" onClick={() => go(account ? 'app' : 'signup')}>Open the workspace <Icon name="arrow"/></button></section></PageShell>;
 }
 
 function PricingPage({ account, route }) {
-  return <div className="launchSite"><MarketingHeader account={account} route={route}/><main className="launchStandalone"><PricingSection account={account}/><FAQ/></main><Footer/></div>;
+  return <PageShell account={account} route={route}><section className="pageHero compact"><span className="kicker">PRICING</span><h1>Use the starter tools for free. Pay when you need the complete editor.</h1><p>Simple monthly pricing. No trial timer and no card required to test the core workflow.</p></section><section className="pricingPageGrid"><article className="pricingPageCard free"><span className="planLabel">FREE</span><div className="pricingAmount"><strong>$0</strong><span>/month</span></div><p>For trying Blueprint Studio on real plans and handling basic revisions.</p><ul>{FREE_TOOLS.map(x => <li key={x}><Icon name="check" size={15}/>{x}</li>)}</ul><button className="secondaryButton full" onClick={() => go(account ? 'app' : 'signup')}>Use Blueprint Studio free</button></article><article className="pricingPageCard pro"><div className="planTop"><span className="planLabel">PRO</span><span className="launchBadge">Special launch price</span></div><div className="pricingAmount special"><s>${PRODUCT_CONFIG.pricing.regularMonthly}</s><strong>${PRODUCT_CONFIG.pricing.launchMonthly}</strong><span>/month</span></div><p>For contractors who need the full revision set and client-ready exports.</p><ul>{PRO_FEATURES.map(x => <li key={x}><Icon name="check" size={15}/>{x}</li>)}</ul><button className="primaryButton full" onClick={() => go(account ? 'upgrade' : 'signup')}>Get Pro for ${PRODUCT_CONFIG.pricing.launchMonthly}/mo <Icon name="arrow" size={17}/></button><small>Month to month. Cancel anytime once production billing is connected.</small></article></section></PageShell>;
 }
 
-function AuthLayout({ mode, onComplete, onBypass }) {
-  const isSignup = mode === 'signup';
+function FAQPage({ account, route }) {
+  return <PageShell account={account} route={route}><section className="pageHero compact"><span className="kicker">FAQ</span><h1>Questions about access, editing, and billing.</h1><p>The frontend is structured so the public product experience is ready now while authentication, cloud storage, and billing can be swapped to your production backend later.</p></section><section className="faqPageList">{FAQS.map(([q,a]) => <details key={q}><summary>{q}<Icon name="chevron" size={18}/></summary><p>{a}</p></details>)}</section></PageShell>;
+}
+
+function DeveloperPanel({ onUnlock, compact = false }) {
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const submit = (e) => {
+    e.preventDefault();
+    if (code.trim() !== PRODUCT_CONFIG.testBypassCode) { setError('Incorrect developer code.'); return; }
+    setError('');
+    onUnlock();
+  };
+  return <div className={`developerPanel ${compact ? 'compact' : ''}`}><button className="developerToggle" onClick={() => setOpen(v => !v)}><span><Icon name="unlock" size={15}/> Developer mode</span><span>{open ? '−' : '+'}</span></button>{open && <form onSubmit={submit}><p>Testing only. Enter the temporary override code to unlock Pro.</p><div className="developerInput"><input value={code} onChange={e => setCode(e.target.value)} inputMode="numeric" placeholder="Developer code"/><button>Unlock</button></div>{error && <span className="inlineError">{error}</span>}</form>}</div>;
+}
+
+function AuthPage({ mode, onComplete, onDeveloper }) {
+  const signup = mode === 'signup';
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [bypassOpen, setBypassOpen] = useState(false);
-  const [bypass, setBypass] = useState('');
 
   const submit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const account = isSignup ? await createAccount({ name, email, password }) : await login({ email, password });
+      const account = signup ? await createAccount({ name, email, password }) : await login({ email, password });
       onComplete(account);
     } catch (err) {
       setError(err?.message || 'Something went wrong.');
@@ -212,47 +230,15 @@ function AuthLayout({ mode, onComplete, onBypass }) {
     }
   };
 
-  const submitBypass = (e) => {
-    e.preventDefault();
-    if (bypass.trim() !== PRODUCT_CONFIG.testBypassCode) { setError('Incorrect testing bypass code.'); return; }
-    setError('');
-    onBypass(createTestAccount());
-  };
-
-  return <div className="launchAuthPage">
-    <div className="launchAuthBrand"><Brand light onClick={() => go('home')}/><button onClick={() => go('home')}>Back to site</button></div>
-    <div className="launchAuthGrid">
-      <section className="launchAuthPitch"><div className="launchEyebrow dark"><span><Icon name="spark" size={14}/></span> Blueprint Studio</div><h1>{isSignup ? 'Start editing plans faster.' : 'Welcome back.'}</h1><p>{isSignup ? `Create your account, start a ${PRODUCT_CONFIG.trialDays}-day trial, and open the full editor.` : 'Sign in to get back to your projects and billing.'}</p><div className="launchAuthBullets">{PLAN_FEATURES.slice(0, 4).map(item => <span key={item}><Icon name="check" size={16}/>{item}</span>)}</div></section>
-      <section className="launchAuthCard">
-        <div className="launchAuthCardHead"><span className="launchKicker">{isSignup ? 'CREATE ACCOUNT' : 'SIGN IN'}</span><h2>{isSignup ? 'Create your Blueprint Studio account' : 'Sign in to Blueprint Studio'}</h2></div>
-        <form onSubmit={submit} className="launchForm">
-          {isSignup && <label><span>Full name</span><input value={name} onChange={e => setName(e.target.value)} autoComplete="name" placeholder="Your name"/></label>}
-          <label><span>Email address</span><input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" placeholder="you@company.com"/></label>
-          <label><span>Password</span><input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete={isSignup ? 'new-password' : 'current-password'} placeholder={isSignup ? '8+ characters' : 'Your password'}/></label>
-          {error && <div className="launchFormError">{error}</div>}
-          <button className="launchPrimaryButton launchFull" disabled={loading}>{loading ? 'Working…' : isSignup ? 'Create account' : 'Log in'} {!loading && <Icon name="arrow" size={17}/>}</button>
-        </form>
-        <p className="launchAuthSwitch">{isSignup ? 'Already have an account?' : 'New to Blueprint Studio?'} <button onClick={() => go(isSignup ? 'login' : 'signup')}>{isSignup ? 'Log in' : 'Create account'}</button></p>
-        <div className="launchTestPanel">
-          <button className="launchTestToggle" onClick={() => setBypassOpen(v => !v)}><span>Testing bypass</span><span>{bypassOpen ? '−' : '+'}</span></button>
-          {bypassOpen && <form onSubmit={submitBypass}><p>Temporary testing access. Remove this before production.</p><div><input value={bypass} onChange={e => setBypass(e.target.value)} inputMode="numeric" placeholder="Bypass code"/><button>Unlock test account</button></div></form>}
-        </div>
-      </section>
-    </div>
-  </div>;
+  return <div className="authPage"><header className="authTop"><Brand light onClick={() => go('home')}/><button onClick={() => go('home')}>Back to site</button></header><main className="authCenter"><section className="authCard"><div className="authHeading"><span className="kicker">{signup ? 'CREATE ACCOUNT' : 'LOG IN'}</span><h1>{signup ? 'Open your free workspace.' : 'Welcome back.'}</h1><p>{signup ? 'No card. No trial timer. Create an account and go straight into Blueprint Studio.' : 'Sign in to continue to your Blueprint Studio workspace.'}</p></div><form className="formStack" onSubmit={submit}>{signup && <label><span>Full name</span><input value={name} onChange={e => setName(e.target.value)} autoComplete="name" placeholder="Your name"/></label>}<label><span>Email address</span><input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" placeholder="you@company.com"/></label><label><span>Password</span><input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete={signup ? 'new-password' : 'current-password'} placeholder={signup ? '8+ characters' : 'Your password'}/></label>{error && <div className="formError">{error}</div>}<button className="primaryButton full" disabled={loading}>{loading ? 'Working…' : signup ? 'Create account' : 'Log in'} {!loading && <Icon name="arrow" size={17}/>}</button></form><p className="authSwitch">{signup ? 'Already have an account?' : 'Need an account?'} <button onClick={() => go(signup ? 'login' : 'signup')}>{signup ? 'Log in' : 'Create one free'}</button></p><DeveloperPanel onUnlock={onDeveloper}/></section></main></div>;
 }
 
-function CheckoutPage({ account, onActivated, onBypass }) {
-  const [billingCycle, setBillingCycle] = useState('monthly');
+function UpgradePage({ account, onActivated, onDeveloper }) {
   const [cardholder, setCardholder] = useState(account?.name || '');
   const [cardNumber, setCardNumber] = useState('');
   const [expiry, setExpiry] = useState('');
   const [cvc, setCvc] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [bypass, setBypass] = useState('');
-  const annualSavings = PRODUCT_CONFIG.pricing.monthly * 12 - PRODUCT_CONFIG.pricing.annual;
-  const price = billingCycle === 'annual' ? PRODUCT_CONFIG.pricing.annual : PRODUCT_CONFIG.pricing.monthly;
 
   useEffect(() => { if (!account) go('signup'); }, [account]);
   if (!account) return null;
@@ -261,96 +247,50 @@ function CheckoutPage({ account, onActivated, onBypass }) {
     e.preventDefault();
     setError('');
     if (!/^\d{3,4}$/.test(cvc.replace(/\D/g, ''))) { setError('Enter a valid CVC.'); return; }
-    setLoading(true);
     try {
-      const subscription = activateSubscription({ accountId: account.id, billingCycle, cardNumber, expiry, cardholder });
-      setCardNumber(''); setCvc('');
-      onActivated(subscription);
-    } catch (err) {
-      setError(err?.message || 'Could not start the trial.');
-    } finally {
-      setLoading(false);
-    }
+      const sub = activateSubscription({ accountId: account.id, cardNumber, expiry, cardholder });
+      onActivated(sub);
+    } catch (err) { setError(err?.message || 'Could not activate Pro.'); }
   };
 
-  const useBypass = () => {
-    if (bypass.trim() !== PRODUCT_CONFIG.testBypassCode) { setError('Incorrect testing bypass code.'); return; }
-    const subscription = activateSubscription({ accountId: account.id, billingCycle: 'monthly', testBypass: true });
-    onBypass(subscription);
-  };
-
-  return <div className="launchCheckoutPage">
-    <header className="launchCheckoutHeader"><Brand light onClick={() => go('home')}/><button onClick={() => go('account')}><Icon name="user" size={17}/> {account.name}</button></header>
-    <main className="launchCheckoutGrid">
-      <section className="launchCheckoutFormWrap">
-        <div className="launchCheckoutIntro"><span className="launchKicker">START YOUR TRIAL</span><h1>Unlock the full Blueprint Studio editor.</h1><p>Your {PRODUCT_CONFIG.trialDays}-day trial starts today. This frontend is ready for Stripe Elements or Checkout when you connect the payment backend.</p></div>
-        <div className="launchBillingToggle"><button className={billingCycle === 'monthly' ? 'active' : ''} onClick={() => setBillingCycle('monthly')}><span>Monthly</span><b>${PRODUCT_CONFIG.pricing.monthly}/mo</b></button><button className={billingCycle === 'annual' ? 'active' : ''} onClick={() => setBillingCycle('annual')}><span>Annual <em>Save ${annualSavings}</em></span><b>${PRODUCT_CONFIG.pricing.annual}/yr</b></button></div>
-        <form className="launchForm launchPaymentForm" onSubmit={submit}>
-          <div className="launchPaymentHeading"><Icon name="card"/><div><strong>Payment method</strong><span>No charge until the trial ends.</span></div></div>
-          <label><span>Name on card</span><input value={cardholder} onChange={e => setCardholder(e.target.value)} autoComplete="cc-name"/></label>
-          <label><span>Card number</span><div className="launchInputWithIcon"><Icon name="card" size={18}/><input value={cardNumber} onChange={e => setCardNumber(e.target.value.replace(/[^\d ]/g, '').slice(0, 23))} inputMode="numeric" autoComplete="cc-number" placeholder="4242 4242 4242 4242"/></div></label>
-          <div className="launchFormRow"><label><span>Expiration</span><input value={expiry} onChange={e => setExpiry(e.target.value.slice(0, 5))} inputMode="numeric" autoComplete="cc-exp" placeholder="MM/YY"/></label><label><span>CVC</span><input type="password" value={cvc} onChange={e => setCvc(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" autoComplete="cc-csc" placeholder="123"/></label></div>
-          {error && <div className="launchFormError">{error}</div>}
-          <button className="launchPrimaryButton launchFull" disabled={loading}>{loading ? 'Starting trial…' : `Start ${PRODUCT_CONFIG.trialDays}-day free trial`} {!loading && <Icon name="arrow" size={18}/>}</button>
-          <small className="launchSecureNote"><Icon name="lock" size={14}/> Demo frontend stores only card brand/last four/expiry. Do not collect real cards until Stripe is connected.</small>
-        </form>
-        <div className="launchBypassCard"><div><span className="launchKicker">TESTING</span><strong>Skip payment while you wire the backend</strong><p>Enter the temporary bypass code to unlock the editor immediately.</p></div><div className="launchBypassInline"><input value={bypass} onChange={e => setBypass(e.target.value)} inputMode="numeric" placeholder="Bypass code"/><button onClick={useBypass}>Unlock</button></div></div>
-      </section>
-      <aside className="launchOrderSummary"><span className="launchKicker">ORDER SUMMARY</span><h2>Blueprint Studio Pro</h2><div className="launchSummaryPrice"><strong>${price}</strong><span>{billingCycle === 'annual' ? '/ year' : '/ month'}</span></div><p>{PRODUCT_CONFIG.trialDays} days free, then billed {billingCycle === 'annual' ? 'annually' : 'monthly'}.</p><ul>{PLAN_FEATURES.map(feature => <li key={feature}><Icon name="check" size={15}/>{feature}</li>)}</ul><div className="launchDueToday"><span>Due today</span><strong>$0</strong></div></aside>
-    </main>
-  </div>;
+  return <div className="upgradePage"><header className="darkHeader"><Brand light onClick={() => go('home')}/><div><button onClick={() => go('app')}>Back to Studio</button><button onClick={() => go('account')}>{account.name}</button></div></header><main className="upgradeGrid"><section className="upgradeMain"><span className="kicker lightBlue">BLUEPRINT STUDIO PRO</span><h1>Unlock the rest of the editor.</h1><p>The free workspace stays available. Pro adds the full drawing, annotation, fixture, and export toolkit.</p><div className="upgradePrice"><s>${PRODUCT_CONFIG.pricing.regularMonthly}</s><strong>${PRODUCT_CONFIG.pricing.launchMonthly}</strong><span>/month launch price</span></div><form className="paymentBox" onSubmit={submit}><div className="paymentHeading"><Icon name="card"/><div><b>Payment method</b><span>Frontend placeholder for your future Stripe connection.</span></div></div><label><span>Name on card</span><input value={cardholder} onChange={e => setCardholder(e.target.value)} autoComplete="cc-name"/></label><label><span>Card number</span><input value={cardNumber} onChange={e => setCardNumber(e.target.value.replace(/[^\d ]/g, '').slice(0, 23))} inputMode="numeric" placeholder="4242 4242 4242 4242"/></label><div className="formRow"><label><span>Expiration</span><input value={expiry} onChange={e => setExpiry(e.target.value.slice(0,5))} placeholder="MM/YY"/></label><label><span>CVC</span><input type="password" value={cvc} onChange={e => setCvc(e.target.value.replace(/\D/g, '').slice(0,4))} placeholder="123"/></label></div>{error && <div className="formError">{error}</div>}<button className="primaryButton full">Activate Pro for ${PRODUCT_CONFIG.pricing.launchMonthly}/mo <Icon name="arrow" size={17}/></button><small><Icon name="lock" size={13}/> Demo UI stores only safe card display metadata. Connect Stripe before collecting real payment data.</small></form><DeveloperPanel compact onUnlock={onDeveloper}/></section><aside className="upgradeSummary"><span className="planLabel">WHAT UNLOCKS</span><ul>{PRO_FEATURES.map(x => <li key={x}><Icon name="check" size={15}/>{x}</li>)}</ul><div className="summaryNote"><b>Your free access does not disappear.</b><p>If Pro is canceled, the account simply returns to the starter tool set.</p></div></aside></main></div>;
 }
 
-function AccountPage({ account, subscription, onAccountChange, onSignOut, onSubscriptionChange }) {
+function AccountPage({ account, subscription, onAccountChange, onSubscriptionChange, onSignOut }) {
   const [name, setName] = useState(account?.name || '');
   const [email, setEmail] = useState(account?.email || '');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [paymentCardholder, setPaymentCardholder] = useState(account?.name || '');
-  const [paymentNumber, setPaymentNumber] = useState('');
-  const [paymentExpiry, setPaymentExpiry] = useState('');
-  const [paymentCvc, setPaymentCvc] = useState('');
-  const [paymentError, setPaymentError] = useState('');
+  const [cardholder, setCardholder] = useState(account?.name || '');
+  const [cardNumber, setCardNumber] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [cvc, setCvc] = useState('');
   const [billingMessage, setBillingMessage] = useState('');
 
   useEffect(() => { if (!account) go('login'); }, [account]);
   if (!account) return null;
 
-  const save = async (e) => {
-    e.preventDefault(); setError(''); setMessage('');
-    try {
-      const next = await updateAccount({ name, email, password });
-      setPassword(''); onAccountChange(next); setMessage('Account updated.');
-    } catch (err) { setError(err?.message || 'Could not update account.'); }
+  const saveProfile = async (e) => {
+    e.preventDefault(); setMessage(''); setError('');
+    try { const next = await updateAccount({ name, email, password }); onAccountChange(next); setPassword(''); setMessage('Account updated.'); }
+    catch (err) { setError(err?.message || 'Could not update account.'); }
   };
 
   const savePayment = (e) => {
-    e.preventDefault();
-    setPaymentError(''); setBillingMessage('');
-    if (!/^\d{3,4}$/.test(paymentCvc.replace(/\D/g, ''))) { setPaymentError('Enter a valid CVC.'); return; }
-    try {
-      const next = updatePaymentMethod({ accountId: account.id, cardNumber: paymentNumber, expiry: paymentExpiry, cardholder: paymentCardholder });
-      setPaymentNumber(''); setPaymentCvc(''); setPaymentOpen(false); onSubscriptionChange(next); setBillingMessage('Payment method updated.');
-    } catch (err) { setPaymentError(err?.message || 'Could not update payment method.'); }
+    e.preventDefault(); setBillingMessage('');
+    if (!/^\d{3,4}$/.test(cvc.replace(/\D/g, ''))) { setBillingMessage('Enter a valid CVC.'); return; }
+    try { const next = updatePaymentMethod({ accountId: account.id, cardNumber, expiry, cardholder }); onSubscriptionChange(next); setPaymentOpen(false); setCardNumber(''); setCvc(''); setBillingMessage('Payment method updated.'); }
+    catch (err) { setBillingMessage(err?.message || 'Could not update payment method.'); }
   };
 
   const cancel = () => {
-    if (!subscription) return;
-    if (!window.confirm('Cancel this local test subscription?')) return;
-    removeSubscription(account.id); onSubscriptionChange(null); setBillingMessage('Subscription canceled in this frontend build.');
+    if (!subscription || !window.confirm('Return this account to the free workspace?')) return;
+    removeSubscription(account.id); onSubscriptionChange(null); setBillingMessage('Pro access removed. Free workspace is still active.');
   };
 
-  return <div className="launchAccountPage">
-    <header className="launchAccountHeader"><Brand light onClick={() => go('home')}/><div><button onClick={() => go(subscription ? 'app' : 'checkout')}>Open Studio</button><button onClick={onSignOut}><Icon name="logout" size={17}/> Sign out</button></div></header>
-    <main className="launchAccountMain"><div className="launchAccountIntro"><span className="launchKicker">ACCOUNT</span><h1>Manage your Blueprint Studio account.</h1><p>Profile, plan, and payment details in one place.</p></div>
-      <div className="launchAccountGrid">
-        <section className="launchSettingsCard"><div className="launchSettingsHead"><span><Icon name="user"/></span><div><h2>Profile</h2><p>Update your account information.</p></div></div><form className="launchForm" onSubmit={save}><label><span>Full name</span><input value={name} onChange={e => setName(e.target.value)}/></label><label><span>Email address</span><input type="email" value={email} onChange={e => setEmail(e.target.value)}/></label><label><span>New password <em>optional</em></span><input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Leave blank to keep current password"/></label>{error && <div className="launchFormError">{error}</div>}{message && <div className="launchFormSuccess">{message}</div>}<button className="launchPrimaryButton">Save changes</button></form></section>
-        <section className="launchSettingsCard"><div className="launchSettingsHead"><span><Icon name="card"/></span><div><h2>Plan & billing</h2><p>Your current access and payment method.</p></div></div>{subscription ? <div className="launchBillingDetails"><div className="launchPlanStatus"><div><span>Blueprint Studio Pro</span><strong>{subscription.status === 'test_access' ? 'Testing access' : 'Trial active'}</strong></div><b>${subscription.billingCycle === 'annual' ? PRODUCT_CONFIG.pricing.annual : PRODUCT_CONFIG.pricing.monthly}<small>/{subscription.billingCycle === 'annual' ? 'yr' : 'mo'}</small></b></div><div className="launchPaymentMethod"><span><Icon name="card"/></span><div><strong>{subscription.paymentMethod?.brand} •••• {subscription.paymentMethod?.last4}</strong><small>{subscription.paymentMethod?.expiry && subscription.paymentMethod.expiry !== '—' ? `Expires ${subscription.paymentMethod.expiry}` : 'Testing bypass'}</small></div></div>{subscription.trialEndsAt && !subscription.testBypass && <p className="launchTrialDate">Trial ends {new Date(subscription.trialEndsAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}.</p>}<div className="launchBillingActions"><button className="launchBillingButton" onClick={() => setPaymentOpen(v => !v)}>{paymentOpen ? 'Close payment editor' : 'Update payment method'}</button><button className="launchDangerLink" onClick={cancel}>Cancel subscription</button></div>{billingMessage && <div className="launchFormSuccess launchBillingMessage">{billingMessage}</div>}{paymentOpen && <form className="launchForm launchInlinePaymentEditor" onSubmit={savePayment}><label><span>Name on card</span><input value={paymentCardholder} onChange={e => setPaymentCardholder(e.target.value)}/></label><label><span>Card number</span><input value={paymentNumber} onChange={e => setPaymentNumber(e.target.value.replace(/[^\d ]/g, '').slice(0, 23))} inputMode="numeric" placeholder="4242 4242 4242 4242"/></label><div className="launchFormRow"><label><span>Expiration</span><input value={paymentExpiry} onChange={e => setPaymentExpiry(e.target.value.slice(0, 5))} placeholder="MM/YY"/></label><label><span>CVC</span><input type="password" value={paymentCvc} onChange={e => setPaymentCvc(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="123"/></label></div>{paymentError && <div className="launchFormError">{paymentError}</div>}<button className="launchPrimaryButton">Save payment method</button></form>}</div> : <div className="launchNoPlan"><h3>No active plan</h3><p>Start your free trial to unlock the editor.</p><button className="launchPrimaryButton" onClick={() => go('checkout')}>Start free trial</button></div>}</section>
-      </div>
-    </main>
-  </div>;
+  return <div className="accountPage"><header className="darkHeader"><Brand light onClick={() => go('home')}/><div><button onClick={() => go('app')}>Open Studio</button><button onClick={onSignOut}><Icon name="logout" size={16}/> Sign out</button></div></header><main className="accountMain"><div className="accountIntro"><span className="kicker lightBlue">ACCOUNT</span><h1>Profile and access.</h1><p>Your account always has the free workspace. Pro controls the additional tools.</p></div><div className="accountGrid"><section className="settingsCard"><div className="settingsHead"><Icon name="user"/><div><h2>Profile</h2><p>Frontend account details.</p></div></div><form className="formStack" onSubmit={saveProfile}><label><span>Full name</span><input value={name} onChange={e => setName(e.target.value)}/></label><label><span>Email address</span><input type="email" value={email} onChange={e => setEmail(e.target.value)}/></label><label><span>New password <em>optional</em></span><input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Leave blank to keep current password"/></label>{error && <div className="formError">{error}</div>}{message && <div className="formSuccess">{message}</div>}<button className="primaryButton">Save changes</button></form></section><section className="settingsCard"><div className="settingsHead"><Icon name="card"/><div><h2>Plan & billing</h2><p>{subscription ? 'Pro is active on this account.' : 'This account is using the free workspace.'}</p></div></div>{subscription ? <div className="billingStack"><div className="planStatus"><div><span>Blueprint Studio Pro</span><b>{subscription.status === 'developer_access' ? 'Developer access' : 'Active'}</b></div><strong>${PRODUCT_CONFIG.pricing.launchMonthly}<small>/mo</small></strong></div><div className="paymentMethod"><Icon name="card"/><div><b>{subscription.paymentMethod?.brand} •••• {subscription.paymentMethod?.last4}</b><span>{subscription.paymentMethod?.expiry === '—' ? 'Developer override' : `Expires ${subscription.paymentMethod?.expiry}`}</span></div></div><div className="billingButtons"><button onClick={() => setPaymentOpen(v => !v)}>{paymentOpen ? 'Close payment editor' : 'Update payment method'}</button><button className="dangerText" onClick={cancel}>Cancel Pro</button></div>{paymentOpen && <form className="formStack inlinePayment" onSubmit={savePayment}><label><span>Name on card</span><input value={cardholder} onChange={e => setCardholder(e.target.value)}/></label><label><span>Card number</span><input value={cardNumber} onChange={e => setCardNumber(e.target.value.replace(/[^\d ]/g, '').slice(0,23))} placeholder="4242 4242 4242 4242"/></label><div className="formRow"><label><span>Expiration</span><input value={expiry} onChange={e => setExpiry(e.target.value.slice(0,5))} placeholder="MM/YY"/></label><label><span>CVC</span><input type="password" value={cvc} onChange={e => setCvc(e.target.value.replace(/\D/g,'').slice(0,4))} placeholder="123"/></label></div><button className="primaryButton">Save payment method</button></form>}{billingMessage && <div className={billingMessage.startsWith('Enter') || billingMessage.startsWith('Could') ? 'formError' : 'formSuccess'}>{billingMessage}</div>}</div> : <div className="freeStatus"><div className="freeStatusIcon"><Icon name="unlock"/></div><h3>Free workspace active</h3><p>You can use blueprint upload, scale, cleanup tools, walls, windows, and doors.</p><button className="primaryButton" onClick={() => go('upgrade')}>Unlock Pro for ${PRODUCT_CONFIG.pricing.launchMonthly}/mo</button></div>}</section></div></main></div>;
 }
 
 function editorSvg(path) {
@@ -377,79 +317,132 @@ const editorIconMap = {
   object: editorSvg('<rect x="5" y="5" width="14" height="14" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/>'),
 };
 
+function normalizeLabel(value) { return String(value || '').trim().toLowerCase().replace(/\s+/g, ' '); }
 function iconKeyForLabel(label) {
-  const value = label.trim().toLowerCase();
-  if (value.startsWith('select')) return 'select';
-  if (value.startsWith('pan')) return 'pan';
-  if (value.startsWith('wall')) return 'wall';
-  if (value.startsWith('window')) return 'window';
-  if (value.startsWith('line')) return 'line';
-  if (value.startsWith('rectangle')) return 'rectangle';
-  if (value.startsWith('measure')) return 'measure';
-  if (value === 'text') return 'text';
-  if (value.includes('door') || ['single left','single right','double','pocket','sliding','bifold'].some(x => value.startsWith(x))) return 'door';
-  if (value.includes('erase')) return 'erase';
-  if (value.includes('clean area')) return 'clean';
-  if (value.includes('blueprint scale')) return 'scale';
-  if (value.startsWith('toilet')) return 'toilet';
-  if (value.startsWith('sink')) return 'sink';
-  if (value.startsWith('shower')) return 'shower';
-  if (value.startsWith('bathtub')) return 'tub';
-  return 'object';
+  const v = normalizeLabel(label);
+  if (v.startsWith('select')) return 'select'; if (v.startsWith('pan')) return 'pan'; if (v.startsWith('wall')) return 'wall'; if (v.startsWith('window')) return 'window'; if (v.startsWith('line')) return 'line'; if (v.startsWith('rectangle')) return 'rectangle'; if (v.startsWith('measure')) return 'measure'; if (v === 'text') return 'text';
+  if (['single left','single right','double','pocket','sliding','bifold'].some(x => v.startsWith(x)) || v.includes('door')) return 'door';
+  if (v.includes('brush erase')) return 'erase'; if (v.includes('clean area')) return 'clean'; if (v.includes('blueprint scale')) return 'scale'; if (v.startsWith('toilet')) return 'toilet'; if (v.startsWith('sink')) return 'sink'; if (v.startsWith('shower')) return 'shower'; if (v.startsWith('bathtub')) return 'tub'; return 'object';
 }
 
-function useEditorPolish(active) {
+function isFreeToolLabel(label) {
+  const v = normalizeLabel(label);
+  return v.startsWith('select') || v.startsWith('pan') || v.startsWith('wall') || v.startsWith('window') || ['single left','single right','double','pocket','sliding','bifold'].some(x => v.startsWith(x)) || v.includes('brush erase') || v.includes('clean area') || v.includes('blueprint scale');
+}
+
+function useEditorIntegration(active, isPro, onUpgrade) {
   useEffect(() => {
     if (!active) return undefined;
     const apply = () => {
       document.querySelectorAll('.tool').forEach(button => {
         const icon = button.querySelector('.toolIcon');
-        const label = button.querySelector('span:last-child')?.textContent || button.textContent || '';
-        if (!icon || icon.dataset.launchPolished === label) return;
-        icon.innerHTML = editorIconMap[iconKeyForLabel(label)] || editorIconMap.object;
-        icon.dataset.launchPolished = label;
+        let label = button.dataset.productLabel || '';
+        if (!label) {
+          const labelNode = Array.from(button.children).find(node => node.tagName === 'SPAN' && !node.classList.contains('toolIcon') && !node.classList.contains('productLockBadge'));
+          label = labelNode?.textContent || button.textContent || '';
+          button.dataset.productLabel = label;
+        }
+        if (icon && icon.dataset.productIcon !== label) {
+          icon.innerHTML = editorIconMap[iconKeyForLabel(label)] || editorIconMap.object;
+          icon.dataset.productIcon = label;
+        }
+        const locked = !isPro && !isFreeToolLabel(label);
+        button.classList.toggle('productLockedTool', locked);
+        if (locked) {
+          button.dataset.proLocked = 'true';
+          button.setAttribute('aria-disabled', 'true');
+          if (!button.querySelector('.productLockBadge')) {
+            const badge = document.createElement('span'); badge.className = 'productLockBadge'; badge.textContent = 'PRO'; button.appendChild(badge);
+          }
+        } else {
+          delete button.dataset.proLocked; button.removeAttribute('aria-disabled'); button.querySelector('.productLockBadge')?.remove();
+        }
       });
+      const exportButton = document.querySelector('.exportButton');
+      if (exportButton) {
+        exportButton.classList.toggle('productLockedExport', !isPro);
+        if (!isPro) { exportButton.dataset.proLocked = 'true'; exportButton.setAttribute('aria-disabled', 'true'); }
+        else { delete exportButton.dataset.proLocked; exportButton.removeAttribute('aria-disabled'); }
+      }
+    };
+    const intercept = (e) => {
+      const target = e.target.closest?.('[data-pro-locked="true"]');
+      if (!target) return;
+      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.(); onUpgrade();
     };
     apply();
     const observer = new MutationObserver(apply);
     observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [active]);
+    document.addEventListener('click', intercept, true);
+    return () => { observer.disconnect(); document.removeEventListener('click', intercept, true); };
+  }, [active, isPro, onUpgrade]);
 }
 
-function EditorShell({ EditorComponent, account, onSignOut }) {
+function UpgradeModal({ onClose, onUpgrade }) {
+  return <div className="upgradeModalBackdrop" onMouseDown={onClose}><div className="upgradeModal" onMouseDown={e => e.stopPropagation()}><button className="modalClose" onClick={onClose}><Icon name="close"/></button><div className="modalLock"><Icon name="lock"/></div><span className="kicker">PRO TOOL</span><h2>This tool is part of Blueprint Studio Pro.</h2><p>Your free workspace includes upload, scale, cleanup tools, walls, windows, and doors. Upgrade to unlock the rest of the editor and exports.</p><div className="modalPrice"><s>${PRODUCT_CONFIG.pricing.regularMonthly}</s><strong>${PRODUCT_CONFIG.pricing.launchMonthly}</strong><span>/month</span></div><button className="primaryButton full" onClick={onUpgrade}>Unlock Pro <Icon name="arrow" size={17}/></button><button className="modalSecondary" onClick={onClose}>Keep using free tools</button></div></div>;
+}
+
+function EditorShell({ EditorComponent, account, subscription, onSignOut, onDeveloperUnlocked }) {
   const [menu, setMenu] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [developerOpen, setDeveloperOpen] = useState(false);
+  const [developerCode, setDeveloperCode] = useState('');
+  const [developerError, setDeveloperError] = useState('');
+  const isPro = Boolean(subscription);
+
   sessionStorage.setItem('blueprint-studio-unlocked', 'yes');
-  useEditorPolish(true);
-  return <div className="launchEditorShell"><EditorComponent/><div className="launchEditorAccount"><button className="launchEditorAccountButton" onClick={() => setMenu(v => !v)}><span>{account.name.slice(0, 1).toUpperCase()}</span><div><strong>{account.name}</strong><small>Pro</small></div><Icon name="chevron" size={16}/></button>{menu && <div className="launchEditorAccountMenu"><button onClick={() => go('account')}><Icon name="user" size={17}/> Account & billing</button><button onClick={() => go('home')}><Icon name="blueprint" size={17}/> Product site</button><div></div><button onClick={onSignOut}><Icon name="logout" size={17}/> Sign out</button></div>}</div></div>;
+  useEditorIntegration(true, isPro, () => setUpgradeOpen(true));
+
+  const developerUnlock = () => {
+    if (developerCode.trim() !== PRODUCT_CONFIG.testBypassCode) { setDeveloperError('Incorrect code.'); return; }
+    const sub = unlockDeveloperMode(account.id); setDeveloperError(''); setDeveloperOpen(false); setMenu(false); onDeveloperUnlocked(sub);
+  };
+
+  return <div className={`editorProductShell ${isPro ? 'isPro' : 'isFree'}`}><EditorComponent/><div className="accessBadge"><Icon name={isPro ? 'unlock' : 'lock'} size={14}/><span>{isPro ? (subscription?.status === 'developer_access' ? 'Developer Pro' : 'Pro') : 'Free workspace'}</span>{!isPro && <button onClick={() => go('upgrade')}>Upgrade</button>}</div><div className="editorAccount"><button className="editorAccountButton" onClick={() => setMenu(v => !v)}><span>{account.name.slice(0,1).toUpperCase()}</span><div><b>{account.name}</b><small>{isPro ? 'Pro access' : 'Free access'}</small></div><Icon name="chevron" size={15}/></button>{menu && <div className="editorAccountMenu"><button onClick={() => go('account')}><Icon name="user" size={16}/> Account</button><button onClick={() => go('home')}><Icon name="blueprint" size={16}/> Product site</button>{!isPro && <button onClick={() => go('upgrade')}><Icon name="unlock" size={16}/> Upgrade to Pro</button>}<button onClick={() => setDeveloperOpen(v => !v)}><Icon name="unlock" size={16}/> Developer unlock</button>{developerOpen && <div className="editorDeveloper"><input value={developerCode} onChange={e => setDeveloperCode(e.target.value)} inputMode="numeric" placeholder="Code"/><button onClick={developerUnlock}>Unlock</button>{developerError && <span>{developerError}</span>}</div>}<div className="menuDivider"></div><button onClick={onSignOut}><Icon name="logout" size={16}/> Sign out</button></div>}</div>{upgradeOpen && <UpgradeModal onClose={() => setUpgradeOpen(false)} onUpgrade={() => go('upgrade')}/>}</div>;
 }
 
 export default function ProductApp({ EditorComponent }) {
   const route = useRoute();
   const [account, setAccount] = useState(() => getCurrentAccount());
   const [subscription, setSubscription] = useState(() => account ? getSubscription(account.id) : null);
+  const effectiveRoute = route === 'checkout' ? 'upgrade' : route;
 
   useEffect(() => {
     const current = getCurrentAccount();
     setAccount(current);
     setSubscription(current ? getSubscription(current.id) : null);
-  }, [route]);
+  }, [effectiveRoute]);
+
+  useEffect(() => {
+    const marketing = effectiveRoute !== 'app';
+    document.documentElement.classList.toggle('productMarketingMode', marketing);
+    document.body.classList.toggle('productMarketingMode', marketing);
+    document.documentElement.classList.toggle('productEditorMode', !marketing);
+    document.body.classList.toggle('productEditorMode', !marketing);
+    return () => {
+      document.documentElement.classList.remove('productMarketingMode', 'productEditorMode');
+      document.body.classList.remove('productMarketingMode', 'productEditorMode');
+    };
+  }, [effectiveRoute]);
 
   const signOut = () => { logout(); setAccount(null); setSubscription(null); go('home'); };
-  const enterAfterAuth = (next) => { setAccount(next); const sub = getSubscription(next.id); setSubscription(sub); go(sub ? 'app' : 'checkout'); };
-  const enterAfterSignup = (next) => { setAccount(next); setSubscription(null); go('checkout'); };
-  const enterTest = (next) => { setAccount(next); setSubscription(getSubscription(next.id)); go('app'); };
+  const afterAuth = (next) => { setAccount(next); setSubscription(getSubscription(next.id)); go('app'); };
+  const developerLogin = () => { const next = createDeveloperAccount(); setAccount(next); setSubscription(getSubscription(next.id)); go('app'); };
+  const developerForAccount = () => {
+    if (!account) return developerLogin();
+    const sub = unlockDeveloperMode(account.id); setSubscription(sub); go('app');
+  };
 
-  if (route === 'app') {
-    if (!account) { queueMicrotask(() => go('login')); return null; }
-    if (!subscription) { queueMicrotask(() => go('checkout')); return null; }
-    return <EditorShell EditorComponent={EditorComponent} account={account} onSignOut={signOut}/>;
+  if (effectiveRoute === 'app') {
+    if (!account) { queueMicrotask(() => go('signup')); return null; }
+    return <EditorShell EditorComponent={EditorComponent} account={account} subscription={subscription} onSignOut={signOut} onDeveloperUnlocked={setSubscription}/>;
   }
-
-  if (route === 'login') return <AuthLayout mode="login" onComplete={enterAfterAuth} onBypass={enterTest}/>;
-  if (route === 'signup') return <AuthLayout mode="signup" onComplete={enterAfterSignup} onBypass={enterTest}/>;
-  if (route === 'checkout') return <CheckoutPage account={account} onActivated={(sub) => { setSubscription(sub); go('app'); }} onBypass={(sub) => { setSubscription(sub); go('app'); }}/>;
-  if (route === 'account') return <AccountPage account={account} subscription={subscription} onAccountChange={setAccount} onSignOut={signOut} onSubscriptionChange={setSubscription}/>;
-  if (route === 'pricing') return <PricingPage account={account} route={route}/>;
-  return <HomePage account={account} route={route}/>;
+  if (effectiveRoute === 'login') return <AuthPage mode="login" onComplete={afterAuth} onDeveloper={developerLogin}/>;
+  if (effectiveRoute === 'signup') return <AuthPage mode="signup" onComplete={afterAuth} onDeveloper={developerLogin}/>;
+  if (effectiveRoute === 'upgrade') return <UpgradePage account={account} onActivated={(sub) => { setSubscription(sub); go('app'); }} onDeveloper={() => { developerForAccount(); }}/>;
+  if (effectiveRoute === 'account') return <AccountPage account={account} subscription={subscription} onAccountChange={setAccount} onSubscriptionChange={setSubscription} onSignOut={signOut}/>;
+  if (effectiveRoute === 'how') return <HowPage account={account} route={effectiveRoute}/>;
+  if (effectiveRoute === 'pricing') return <PricingPage account={account} route={effectiveRoute}/>;
+  if (effectiveRoute === 'faq') return <FAQPage account={account} route={effectiveRoute}/>;
+  return <HomePage account={account} route="home"/>;
 }
