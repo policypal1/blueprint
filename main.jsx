@@ -1,10 +1,12 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App.jsx';
+import EditorApp from './App.jsx';
+import ProductApp from './ProductApp.jsx';
 import './styles.css';
+import './launch.css';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <ProductApp EditorComponent={EditorApp} />
   </React.StrictMode>,
 );

@@ -1,0 +1,12 @@
+BLUEPRINT STUDIO LAUNCH FRONTEND
+
+1. Open your existing blueprint project folder.
+2. Copy every file from this ZIP into the ROOT of that folder.
+3. Replace files when Windows asks. This ZIP intentionally replaces main.jsx and index.html.
+4. Keep your existing App.jsx, styles.css, sample-blueprint.jpeg, favicon.svg, package.json, and vite.config.js.
+5. Run: npm install
+6. Run: npm run dev
+
+TESTING BYPASS CODE: 1234
+
+The visible Import button is hidden by launch.css. The old editor password gate is automatically satisfied only after the product account/paywall gate grants access.
