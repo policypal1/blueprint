@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Brand, Icon } from './ui.jsx';
+import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
 import PlanIllustration from './PlanIllustration.jsx';
+import { SAMPLE_NAME } from './sample-project.js';
 export const PRICING = { project: 15, monthly: 29 };
-const EditorLink = ({ children = 'Access blueprint editor', className = '' }) => (
-  <a href="#/editor" className={`button primary ${className}`}>
+const EditorLink = ({ children, href = '#/editor', className = '', primary = true }) => (
+  <a href={href} className={`button ${primary ? 'primary' : ''} ${className}`}>
     {children}
     <Icon name="arrow" size={17} />
   </a>
@@ -26,18 +27,10 @@ export default function Marketing({ page }) {
         Skip to content
       </a>
       <header className="siteHeader">
-        <a href="#/" aria-label="Blueprint Studio home">
+        <a href="#/" aria-label={`${PRODUCT_NAME} home`}>
           <Brand />
         </a>
-        <nav aria-label="Main navigation">
-          <a href="#/" aria-current={!pricing ? 'page' : undefined}>
-            Overview
-          </a>
-          <a href="#/pricing" aria-current={pricing ? 'page' : undefined}>
-            Pricing
-          </a>
-        </nav>
-        <EditorLink className="navCta">Open editor</EditorLink>
+        <EditorLink className="navCta" primary={false}>Open editor</EditorLink>
       </header>
       <main id="main-content" tabIndex="-1">
         {pricing ? (
@@ -155,8 +148,8 @@ export default function Marketing({ page }) {
                 <details>
                   <summary>Can I work from a phone?</summary>
                   <p>
-                    The website works on small screens, but drawing is best on a laptop or larger
-                    tablet. Open Tools or Properties to access the side panels on a smaller screen.
+                    Yes. On a phone, tap Edit to draw a wall or place a door or fixture. Open View
+                    to pan and zoom. Desktop puts the full tool panel next to the drawing.
                   </p>
                 </details>
                 <details>
@@ -173,58 +166,24 @@ export default function Marketing({ page }) {
           <>
             <section className="hero">
               <div className="heroCopy">
-                <span className="eyebrow">
-                  <span className="statusDot" /> BUILT FOR THE NEXT REVISION
-                </span>
-                <h1>
-                  Update the plan.
-                  <br />
-                  <span>Get on with the job.</span>
-                </h1>
-                <p>
-                  Make clear changes to an existing floor plan. Clean up old details, draw the new
-                  layout, and export a copy to share.
-                </p>
+                <h1>Update floor plans from the job site.</h1>
+                <p>Add walls, doors, and fixtures to a plan you already have. Send the revision as a PDF.</p>
                 <div className="heroActions">
-                  <EditorLink />
-                  <a className="quietLink" href="#/pricing">
-                    See pricing <Icon name="arrow" size={16} />
-                  </a>
+                  <EditorLink href="#/editor/sample">Try a sample plan</EditorLink>
                 </div>
-                <p className="heroNote">Free during beta. No account or card needed.</p>
-                <div className="formatRow">
-                  <span>PDF</span>
-                  <span>PNG</span>
-                  <span>JPG</span>
-                  <span>WEBP</span>
-                  <small>Start with a file you already have.</small>
-                </div>
+                <p className="heroNote">Free during beta</p>
               </div>
               <div className="heroVisual">
                 <div className="previewHeader">
                   <span>
-                    <Icon name="folder" size={15} /> Primary suite revision
+                    <Icon name="folder" size={15} /> {SAMPLE_NAME}
                   </span>
-                  <span className="previewSheet">SHEET 01</span>
-                </div>
-                <div className="previewTools">
-                  <span>
-                    <Icon name="select" size={15} /> Select
-                  </span>
-                  <span>
-                    <Icon name="wall" size={15} /> Wall
-                  </span>
-                  <span className="chosen">
-                    <Icon name="shower" size={15} /> Fixtures
-                  </span>
-                  <span>
-                    <Icon name="measure" size={15} /> Measure
-                  </span>
+                  <span className="previewSheet">{revised ? 'Revised plan' : 'Original plan'}</span>
                 </div>
                 <PlanIllustration revised={revised} />
                 <div className="previewFooter">
-                  <span>Explore a sample revision</span>
-                  <div className="segmented" aria-label="Plan comparison">
+                  <span>Bathroom layout</span>
+                  <div className="segmented" role="group" aria-label="Plan comparison">
                     <button aria-pressed={!revised} onClick={() => setRevised(false)}>
                       Before
                     </button>
@@ -233,49 +192,17 @@ export default function Marketing({ page }) {
                     </button>
                   </div>
                 </div>
-                <div className="visualCaption">
-                  <span className="smallRule" /> The plan you have, with the changes you need.
-                </div>
               </div>
             </section>
-            <div className="audienceStrip">
-              <span>MADE FOR EVERYDAY PLAN CHANGES</span>
-              <span>Remodelers</span>
-              <span>Small contractors</span>
-              <span>Renovation teams</span>
-            </div>
-            <section className="workflowSection">
-              <div className="sectionHeading">
-                <span className="eyebrow">A SHORT PATH FROM PLAN TO REVISION</span>
-                <h2>Open it. Change it. Share it.</h2>
-                <p>A focused set of tools for the work in front of you.</p>
-              </div>
+            <section className="workflowSection" aria-label="How PlanPatch works">
               <div className="workflowGrid">
                 {[
-                  [
-                    '01',
-                    'upload',
-                    'Bring your existing plan',
-                    'Upload a PDF or image. Choose the right page, then set scale from a measurement you know.',
-                  ],
-                  [
-                    '02',
-                    'wall',
-                    'Make the changes clear',
-                    'Erase old details. Draw walls, position doors, and add fixtures and dimensions.',
-                  ],
-                  [
-                    '03',
-                    'download',
-                    'Send a clean revision',
-                    'Download a PDF or PNG for discussion. Keep a project backup so you can come back to it.',
-                  ],
-                ].map(([number, icon, title, text]) => (
-                  <article key={number}>
-                    <div className="stepTop">
-                      <span>{number}</span>
-                      <Icon name={icon} size={24} />
-                    </div>
+                  ['upload', 'Upload a plan', 'Start from a PDF or an image.'],
+                  ['wall', 'Make your changes', 'Draw walls, place doors, and drop in fixtures.'],
+                  ['download', 'Download a PDF', 'Send a copy of the revised plan.'],
+                ].map(([icon, title, text]) => (
+                  <article key={icon}>
+                    <Icon name={icon} size={24} />
                     <h3>{title}</h3>
                     <p>{text}</p>
                   </article>
@@ -284,23 +211,20 @@ export default function Marketing({ page }) {
             </section>
             <section className="closingCta">
               <div>
-                <span className="eyebrow">LESS SETUP. MORE PROGRESS.</span>
-                <h2>Have a plan that needs a change?</h2>
-                <p>Bring it in and try a revision. Your original file stays untouched.</p>
+                <h2>Ready to revise your own plan?</h2>
               </div>
-              <EditorLink>Open the free editor</EditorLink>
+              <EditorLink>Open editor</EditorLink>
             </section>
           </>
         )}
       </main>
       <footer className="siteFooter">
-        <a href="#/" aria-label="Blueprint Studio home">
+        <a href="#/" aria-label={`${PRODUCT_NAME} home`}>
           <Brand />
         </a>
-        <span>A simpler space for plan revisions.</span>
         <a href="#/pricing">Pricing</a>
         <a href="#/editor">Editor</a>
-        <small>© {new Date().getFullYear()} Blueprint Studio</small>
+        <small>© {new Date().getFullYear()} {PRODUCT_NAME}</small>
       </footer>
     </div>
   );

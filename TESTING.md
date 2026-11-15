@@ -2,13 +2,12 @@
 
 ## Handoff results
 
-Verified on October 14, 2026 (UTC), with Node 24.19.0:
+Verified on November 15, 2026, with Node 24.22.1:
 
-- `npm test`: 8 tests passed, 0 failed.
+- `npm test`: 10 tests passed, 0 failed.
 - `npm run build`: passed with Vite 7.3.7.
-- `npm audit`: 0 known advisories reported for the installed dependency tree.
+- Chromium: verified touch placement at 390px, controls at 320px, the desktop drag gesture at 1440px, reopening to Recent plans, and importing a second PDF page and exporting a PDF.
 - Build warning: the editor chunk is approximately 800 KB minified, plus a PDF worker loaded when needed. The marketing page loads separately. Splitting PDF dependencies further is a future performance improvement; the warning does not prevent the build.
-- Full browser, visual, touch, and print checks: outstanding, as described below.
 
 ## Automated checks
 
@@ -18,7 +17,7 @@ Tests cover measurement parsing, pointer mapping with SVG letterboxing, PDF aspe
 
 Component tests use jsdom and fake IndexedDB. PDF decoding, image rasterization, font asset loading, and canvas drawing are mocked platform operations. The PDF library itself encodes a real tiny PNG into a PDF in the export test. This verifies control flow and output creation; it does **not** prove a real contractor's PDF renders correctly, printed dimensions are correct, or the UI looks right in a browser.
 
-The available preview browser could not open the local app in this environment. Full browser, visual, touch, and print verification remains outstanding. No live deployment was performed. A passing dependency audit is a point-in-time advisory check, not a complete security assessment.
+Physical-device checks, wider browser coverage, and print verification are included in the checklist below.
 
 ## Before sharing with customers
 

@@ -1,4 +1,4 @@
-# Blueprint Studio: frontend beta
+# PlanPatch frontend beta
 
 A refreshed version of `policypal1/blueprint`, based on commit `679effc`.
 This package contains normal React, JavaScript, CSS, HTML, and configuration files.
@@ -7,15 +7,15 @@ There is no BAT file, generated installer, backend, payment collection, or passw
 ## Start here
 
 1. Download backups of important drawings from your current app and keep a copy of your repository.
-2. Extract the ZIP. Copy **the contents of the `blueprint-studio` folder** into your repository root, beside `package.json`. Replace matching files. Include all new modules and the `tests` folder. Do not paste everything into `App.jsx`.
-3. Use Node.js **22.12 or newer**. In that project folder, run:
+2. Extract the ZIP and open the `PlanPatch` folder. For a local preview, run the commands below in the folder containing `package.json`.
+3. Use Node.js **22.12 or newer**:
 
 ```bash
 npm ci
 npm run dev
 ```
 
-4. Open the localhost URL printed by Vite. The default page is the landing page. Pricing is at `/#/pricing`; the editor is at `/#/editor`.
+4. Open the localhost URL printed by Vite. **Open editor** takes you to Recent plans, where **Upload a plan** starts a new drawing. **Try a sample plan** opens the editable Oak St. Remodel.
 5. Before deploying, run:
 
 ```bash
@@ -30,9 +30,11 @@ Opening `index.html` directly by double-clicking is not supported; Vite builds a
 
 ## What changed
 
-- A short landing page with an original interactive before/after floor-plan illustration, clear product explanation, and direct editor links.
+- A short landing page with an interactive plan comparison and a link straight into the editable example.
 - A separate pricing page: proposed **$15 per project for 30 days**, or **$29/month** for regular use. Both buttons open the free beta. There is no checkout, credit meter, expiration enforcement, or hidden paywall.
-- One locally hosted font, **Inter**, a consistent icon set, warmer colors, simpler controls, mobile tool drawers, and accessible confirmation dialogs.
+- Charcoal toolbars, an orange action color, and warm drawing surfaces. The phone toolbar groups View, Edit, and Measure. Edit puts walls, doors, and fixtures within thumb reach. Desktop shows the full palette beside the drawing.
+- On a phone, choose **Edit → Wall** and tap each endpoint. **Cancel** clears the first endpoint before a wall is placed. On desktop, drag to draw a wall.
+- Returning to PlanPatch opens Recent plans. Open any plan saved in this browser, or upload a PDF or image as a separate plan.
 - Password removal from the active application. `Root.jsx` routes the marketing pages and lazy-loads the editor.
 - Safer project switching and autosave, honest save-failure messages, portable JSON backups and restoration, and a reusable sample project.
 - Undo for property changes, persistent dimension rendering, better measurement input parsing, pointer capture, and corrected pointer coordinates when the viewport adds margins around the drawing.
@@ -48,6 +50,8 @@ Opening `index.html` directly by double-clicking is not supported; Vite builds a
 | `styles.css`           | Shared design system and responsive layouts        |
 | `PlanIllustration.jsx` | Original marketing illustration                    |
 | `App.jsx`              | Editor interactions, geometry, imports and exports |
+| `EditorControls.jsx`   | Phone toolbar and door and fixture choices         |
+| `RecentPlans.jsx`      | Saved plan list and upload entry point              |
 | `editor-core.js`       | Validation, measurements, coordinates, PDF layout  |
 | `useProjectStore.js`   | Local IndexedDB saving and loading                 |
 | `ui.jsx`               | Icons, brand and dialogs                           |

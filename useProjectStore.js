@@ -4,6 +4,14 @@ import { validateProject } from './editor-core.js';
 const DB_NAME = 'blueprint-studio-db';
 const CURRENT_KEY = 'blueprint-studio-current-v1';
 let writeQueue = Promise.resolve();
+
+export function hasOpenedPlan() {
+  try {
+    return Boolean(localStorage.getItem(CURRENT_KEY));
+  } catch {
+    return false;
+  }
+}
 function openDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
@@ -66,20 +74,24 @@ export function useProjectStore(makeEmpty) {
     revision.current += 1;
     setSaveStatus('Saving…');
   };
-  const setProject = (fn) => {
-    const next = typeof fn === 'function' ? fn(projectRef.current) : fn;
+  const selectProject = (next) => {
     projectRef.current = next;
     setActiveState(next);
-    setProjects(
-      [...listRef.current.filter((p) => p.id !== next.id), next].sort(
-        (a, b) => b.updatedAt - a.updatedAt,
-      ),
-    );
     try {
       localStorage.setItem(CURRENT_KEY, next.id);
     } catch {
       /* IndexedDB remains the authoritative project store. */
     }
+  };
+
+  const setProject = (fn) => {
+    const next = typeof fn === 'function' ? fn(projectRef.current) : fn;
+    selectProject(next);
+    setProjects(
+      [...listRef.current.filter((p) => p.id !== next.id), next].sort(
+        (a, b) => b.updatedAt - a.updatedAt,
+      ),
+    );
   };
   const flush = async () => {
     if (!ready.current || failedLoad.current || revision.current === persistedRevision.current)
@@ -100,7 +112,7 @@ export function useProjectStore(makeEmpty) {
       .then((list) => {
         if (!alive) return;
         // Validate all records before writing: never silently overwrite a damaged archive.
-        const validated = list.map(validateProject);
+        const validated = list.map(validateProject).sort((a, b) => b.updatedAt - a.updatedAt);
         let id;
         try {
           id = localStorage.getItem(CURRENT_KEY);
@@ -108,7 +120,7 @@ export function useProjectStore(makeEmpty) {
           /* unavailable */
         }
         const current = validated.find((p) => p.id === id) || validated[0] || projectRef.current;
-        listRef.current = validated.length ? validated : [current];
+        listRef.current = validated;
         projectRef.current = current;
         setActiveState(current);
         setListState(listRef.current);
@@ -157,5 +169,5 @@ export function useProjectStore(makeEmpty) {
       void flush();
     };
   }, []);
-  return { project, projects, setProject, setProjects, hydrated, saveStatus, projectRef };
+  return { project, projects, setProject, selectProject, setProjects, hydrated, saveStatus, projectRef };
 }

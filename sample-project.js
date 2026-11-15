@@ -1,4 +1,6 @@
 // Original demonstration drawing; no client plans are published.
+export const SAMPLE_NAME = 'Oak St. Remodel';
+
 export function sampleProject(id = 'sample') {
   const wall = (x1, y1, x2, y2) => ({
     type: 'wall',
@@ -40,7 +42,7 @@ export function sampleProject(id = 'sample') {
   ].map((el, i) => ({ ...el, id: `${id}-${i}` }));
   return {
     id,
-    name: 'Sample · Primary suite',
+    name: SAMPLE_NAME,
     unitsPerInch: 4,
     calibrated: true,
     background: null,

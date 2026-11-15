@@ -12,8 +12,13 @@ await fs.mkdir(path.join(base, '.test-build'), { recursive: true });
 // Unit/component environment only: PDF decoding and rasterization are platform mocks.
 // This deliberately does not pretend to replace real-device PDF/browser acceptance tests.
 await build({
-  entryPoints: [path.join(base, 'App.jsx')],
-  outfile: path.join(base, '.test-build/editor.mjs'),
+  entryPoints: {
+    editor: path.join(base, 'App.jsx'),
+    marketing: path.join(base, 'Marketing.jsx'),
+    root: path.join(base, 'Root.jsx'),
+  },
+  outdir: path.join(base, '.test-build'),
+  outExtension: { '.js': '.mjs' },
   bundle: true,
   platform: 'node',
   format: 'esm',
@@ -44,14 +49,6 @@ await build({
     },
   ],
 });
-await build({
-  entryPoints: [path.join(base, 'Marketing.jsx')],
-  outfile: path.join(base, '.test-build/marketing.mjs'),
-  bundle: true,
-  platform: 'node',
-  format: 'esm',
-  packages: 'external',
-});
 const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   url: 'https://blueprint.test',
   pretendToBeVisual: true,
@@ -78,7 +75,15 @@ Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator, co
 globalThis.indexedDB = indexedDB;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0);
-dom.window.PointerEvent = dom.window.MouseEvent;
+dom.window.scrollTo = () => {};
+dom.window.PointerEvent = class extends dom.window.MouseEvent {
+  constructor(type, options = {}) {
+    super(type, options);
+    this.pointerId = options.pointerId ?? 0;
+    this.pointerType = options.pointerType ?? 'mouse';
+    this.isPrimary = options.isPrimary ?? true;
+  }
+};
 dom.window.SVGElement.prototype.setPointerCapture = function () {};
 dom.window.SVGElement.prototype.hasPointerCapture = function () {
   return false;
@@ -141,6 +146,7 @@ const { render, fireEvent, screen, within, waitFor, act, cleanup } =
   await import('@testing-library/react');
 const { default: Editor } = await import('../.test-build/editor.mjs');
 const { default: Marketing } = await import('../.test-build/marketing.mjs');
+const { default: Root } = await import('../.test-build/root.mjs');
 const click = (role, name) => {
   const dialog = screen.queryByRole('dialog');
   return fireEvent.click((dialog ? within(dialog) : screen).getByRole(role, { name, exact: true }));
@@ -154,6 +160,11 @@ function draw(x1, y1, x2, y2) {
   fireEvent.pointerMove(svg(), { clientX: x2, clientY: y2, pointerId: 1 });
   fireEvent.pointerUp(svg(), { clientX: x2, clientY: y2, pointerId: 1 });
 }
+function tap(x, y) {
+  const pointer = { button: 0, clientX: x, clientY: y, pointerId: 1, pointerType: 'touch' };
+  fireEvent.pointerDown(svg(), pointer);
+  fireEvent.pointerUp(svg(), pointer);
+}
 async function newProject(name) {
   fireEvent.click(document.querySelector('.projectButton'));
   click('button', 'New project');
@@ -164,10 +175,10 @@ async function newProject(name) {
 
 test('landing and pricing explain the product, show the comparison, and lead to the open editor', async () => {
   render(React.createElement(Marketing, { page: 'home' }));
-  assert.ok(screen.getByRole('heading', { name: /Update the plan/ }));
+  assert.ok(screen.getByRole('heading', { name: /Update floor plans/ }));
   assert.equal(
-    screen.getByRole('link', { name: 'Access blueprint editor' }).getAttribute('href'),
-    '#/editor',
+    screen.getByRole('link', { name: 'Try a sample plan' }).getAttribute('href'),
+    '#/editor/sample',
   );
   click('button', 'Before');
   assert.ok(screen.getByRole('img', { name: /original primary suite/ }));
@@ -285,7 +296,7 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
   assert.ok(!(await svgBlob.text()).includes('data-editor-only'));
   assert.ok((await svgBlob.text()).includes('@font-face'));
   click('button', 'Export');
-  click('button', 'Export PDF');
+  click('button', 'Download PDF');
   await waitFor(() => assert.ok(downloads.some((d) => d.name.endsWith('.pdf'))));
   const pdfDownload = downloads.find((d) => d.name.endsWith('.pdf'));
   assert.ok((await pdfDownload.blob.text()).startsWith('%PDF-'));
@@ -296,5 +307,114 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
   assert.equal(document.querySelector('.projectButton').textContent, 'Regression A (restored)');
   assert.equal(count(), 2);
   assert.ok(svg().querySelector('image'));
+  cleanup();
+});
+
+test('phone editor reaches the core drawing tools and keeps pinch gestures in View', async () => {
+  const previousMedia = window.matchMedia;
+  window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
+  try {
+    render(React.createElement(Editor));
+    await waitSaved();
+    await newProject('Phone plan');
+    click('button', 'Edit');
+    draw(200, 200, 600, 200);
+    assert.equal(count(), 0);
+    tap(200, 200);
+    assert.ok(svg().querySelector('[data-wall-start]'));
+    assert.ok(screen.getByText('Tap the other endpoint.'));
+    assert.equal(count(), 0);
+    click('button', 'Cancel');
+    assert.ok(!svg().querySelector('[data-wall-start]'));
+    tap(200, 200);
+    tap(600, 200);
+    assert.equal(count(), 1);
+    assert.ok(!svg().querySelector('[data-wall-start]'));
+
+    click('button', 'Door');
+    assert.ok(screen.getByRole('dialog', { name: 'Choose a door' }));
+    click('button', 'Single left');
+    fireEvent.pointerDown(svg(), { button: 0, clientX: 390, clientY: 200, pointerId: 1 });
+    fireEvent.pointerUp(svg(), { pointerId: 1 });
+    assert.equal(count(), 2);
+    click('button', 'Properties');
+    assert.ok(screen.getByRole('dialog', { name: 'Object properties' }));
+    click('button', 'Close dialog');
+
+    click('button', 'Fixture');
+    click('button', 'Shower');
+    fireEvent.pointerDown(svg(), { button: 0, clientX: 500, clientY: 380, pointerId: 1 });
+    fireEvent.pointerUp(svg(), { pointerId: 1 });
+    assert.equal(count(), 3);
+
+    click('button', 'View');
+    fireEvent.pointerDown(svg(), {
+      button: 0, clientX: 600, clientY: 400, pointerId: 2, pointerType: 'touch',
+    });
+    fireEvent.pointerDown(svg(), {
+      button: 0, clientX: 800, clientY: 400, pointerId: 3, pointerType: 'touch',
+    });
+    fireEvent.pointerMove(svg(), {
+      clientX: 900, clientY: 400, pointerId: 3, pointerType: 'touch',
+    });
+    assert.ok(screen.getByText('150%'));
+    fireEvent.pointerUp(svg(), { pointerId: 2, pointerType: 'touch' });
+    fireEvent.pointerUp(svg(), { pointerId: 3, pointerType: 'touch' });
+    assert.equal(count(), 3);
+    await waitSaved();
+  } finally {
+    cleanup();
+    window.matchMedia = previousMedia;
+  }
+});
+
+test('reopening shows saved plans and uploading from the list creates a new plan', async () => {
+  window.history.replaceState(null, '', '#/editor/workspace');
+  render(React.createElement(Root));
+  await screen.findByRole('heading', { name: 'Recent plans' });
+  await waitSaved();
+  assert.equal(window.location.hash, '#/editor');
+
+  click('button', 'New blank plan');
+  fireEvent.change(screen.getByLabelText('Project name'), { target: { value: 'Kitchen revision' } });
+  click('button', 'Create project');
+  await screen.findByRole('main', { name: 'Drawing workspace' });
+  click('button', 'Wall');
+  draw(200, 200, 600, 200);
+  assert.equal(count(), 1);
+  await waitSaved();
+
+  click('link', 'Recent plans');
+  await screen.findByRole('heading', { name: 'Recent plans' });
+  assert.ok(screen.getByRole('button', { name: /Kitchen revision/ }));
+  const upload = () => fireEvent.change(document.querySelector('input[type=file]'), {
+    target: {
+      files: [{ size: 100, name: 'Garage addition.pdf', arrayBuffer: async () => new ArrayBuffer(4) }],
+    },
+  });
+  upload();
+  await screen.findByRole('dialog', { name: 'Choose a PDF page' });
+  click('button', 'Cancel');
+  await waitFor(() => assert.equal(screen.getByRole('button', { name: 'Upload a plan' }).disabled, false));
+  assert.equal(screen.queryByRole('button', { name: /Garage addition/ }), null);
+
+  upload();
+  await screen.findByRole('dialog', { name: 'Choose a PDF page' });
+  fireEvent.change(screen.getByLabelText('Page number'), { target: { value: '2' } });
+  click('button', 'Import page');
+  await screen.findByRole('main', { name: 'Drawing workspace' });
+  assert.equal(document.querySelector('.projectButton').textContent, 'Garage addition');
+  assert.ok(svg().querySelector('image'));
+  assert.equal(count(), 0);
+  await waitSaved();
+  cleanup();
+
+  render(React.createElement(Root));
+  await screen.findByRole('heading', { name: 'Recent plans' });
+  assert.ok(await screen.findByRole('button', { name: /Garage addition/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Kitchen revision/ }));
+  await screen.findByRole('main', { name: 'Drawing workspace' });
+  assert.equal(count(), 1);
+  assert.equal(svg().querySelector('image'), null);
   cleanup();
 });

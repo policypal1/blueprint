@@ -1,0 +1,30 @@
+BLUEPRINT STUDIO — EDITOR-ONLY REVERT
+
+This removes the product website shell and loads the original Blueprint Studio editor directly again.
+
+COPY THESE 4 FILES INTO THE ROOT OF YOUR EXISTING BLUEPRINT REPO:
+- main.jsx                         (replace existing)
+- index.html                       (replace existing)
+- editor-polish.css                (new)
+- editor-polish.js                 (new)
+
+KEEP YOUR EXISTING:
+- App.jsx
+- styles.css
+- package.json
+- favicon.svg
+- sample-blueprint.jpeg
+- vite.config.js
+- any other original editor files
+
+You can optionally delete these old launch/product files because they are no longer imported or used:
+- ProductApp.jsx
+- launch.css
+- product.config.js
+- productServices.js
+- README-LAUNCH.md
+
+IMPORTANT:
+Do NOT delete App.jsx or styles.css. This revert intentionally uses your original editor code and only keeps the improved SVG tool icons + editor typography polish.
+
+Nothing in this package pushes to GitHub.

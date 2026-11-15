@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
+export const PRODUCT_NAME = 'PlanPatch';
+
 const paths = {
   arrow: 'M5 12h14m-6-6 6 6-6 6',
   chevron: 'm8 10 4 4 4-4',
@@ -38,6 +40,8 @@ const paths = {
   file: 'M5 3h9l5 5v13H5Zm9 0v5h5M8 12h8m-8 4h6',
   trash: 'M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7',
   settings: 'M4 7h16M4 17h16M8 4v6m8 4v6',
+  edit: 'm4 16 12-12 4 4L8 20H4ZM13 7l4 4',
+  more: 'M5 12h.1m6.9 0h.1m6.9 0h.1',
   back: 'm10 5-7 7 7 7M3 12h18',
   help: 'M9 9a3 3 0 1 1 5 2c-2 1-2 2-2 3m0 3h.1M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z',
 };
@@ -70,19 +74,16 @@ export function Brand({ compact = false }) {
           fill="none"
           stroke="currentColor"
           strokeWidth="1.6"
+          aria-hidden="true"
         >
           <path d="M4 20V4h16v16H4Zm0-7h9V4m0 9v7m0-7h7" />
         </svg>
       </span>
-      {!compact && (
-        <span>
-          Blueprint<span className="brandLight"> Studio</span>
-        </span>
-      )}
+      {!compact && <span>{PRODUCT_NAME}</span>}
     </span>
   );
 }
-export function Modal({ title, onClose, children, className = '' }) {
+export function Modal({ title, onClose, children, className = '', placement = 'center' }) {
   const ref = useRef(null);
   useEffect(() => {
     const previous = document.activeElement;
@@ -91,7 +92,7 @@ export function Modal({ title, onClose, children, className = '' }) {
       'button:not(:disabled), input:not(:disabled), select, textarea, a[href], [tabindex="0"]';
     (
       root.querySelector('[autofocus]') ||
-      root.querySelector('input, textarea') ||
+      (placement === 'center' && root.querySelector('input, textarea')) ||
       root.querySelector(selector)
     )?.focus();
     const onKey = (e) => {
@@ -125,7 +126,7 @@ export function Modal({ title, onClose, children, className = '' }) {
   }, []);
   return (
     <div
-      className="modalBackdrop"
+      className={placement === 'bottom' ? 'modalBackdrop sheetBackdrop' : 'modalBackdrop'}
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
