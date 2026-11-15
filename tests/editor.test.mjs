@@ -23,6 +23,7 @@ await build({
   platform: 'node',
   format: 'esm',
   packages: 'external',
+  loader: { '.svg': 'dataurl' },
   plugins: [
     {
       name: 'pdf-platform-mock',
@@ -173,17 +174,16 @@ async function newProject(name) {
   await waitFor(() => assert.equal(document.querySelector('.projectButton').textContent, name));
 }
 
-test('landing and pricing explain the product, show the comparison, and lead to the open editor', async () => {
+test('landing and pricing explain the product and lead to the editor', async () => {
   render(React.createElement(Marketing, { page: 'home' }));
-  assert.ok(screen.getByRole('heading', { name: /Update floor plans/ }));
+  assert.ok(screen.getByRole('heading', { name: /Edit your current blueprint/ }));
+  assert.ok(screen.getByText(/Paste a blueprint image or upload a PDF/));
   assert.equal(
-    screen.getByRole('link', { name: 'Try a sample plan' }).getAttribute('href'),
-    '#/editor/sample',
+    screen.getByRole('link', { name: 'Edit your blueprint' }).getAttribute('href'),
+    '#/editor',
   );
-  click('button', 'Before');
-  assert.ok(screen.getByRole('img', { name: /original primary suite/ }));
-  click('button', 'After');
-  assert.ok(screen.getByRole('img', { name: /revised primary suite/ }));
+  assert.equal(document.querySelector('video').getAttribute('src'), '/planpatch-demo.mp4');
+  assert.ok(document.querySelector('.stickyEdit').hidden);
   cleanup();
   render(React.createElement(Marketing, { page: 'pricing' }));
   assert.ok(screen.getByText('$15'));
@@ -416,5 +416,14 @@ test('reopening shows saved plans and uploading from the list creates a new plan
   await screen.findByRole('main', { name: 'Drawing workspace' });
   assert.equal(count(), 1);
   assert.equal(svg().querySelector('image'), null);
+  click('link', 'Recent plans');
+  await screen.findByRole('heading', { name: 'Recent plans' });
+  const image = new File(['test image'], 'image.png', { type: 'image/png' });
+  fireEvent.paste(document.body, { clipboardData: { files: [image] } });
+  await screen.findByRole('main', { name: 'Drawing workspace' });
+  assert.equal(document.querySelector('.projectButton').textContent, 'Pasted blueprint');
+  assert.ok(svg().querySelector('image'));
+  assert.equal(count(), 0);
+  await waitSaved();
   cleanup();
 });

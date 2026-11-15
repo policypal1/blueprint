@@ -20,6 +20,9 @@ export default function RecentPlans({
             <Icon name="upload" /> {busy ? 'Opening plan…' : 'Upload a plan'}
           </button>
         </div>
+        <p className="recentPasteHint">
+          Paste a blueprint image with <kbd>⌘V</kbd> or <kbd>Ctrl+V</kbd>.
+        </p>
         <div className="recentActions">
           <button onClick={onCreate} disabled={disabled}><Icon name="plus" /> New blank plan</button>
           <button onClick={onRestore} disabled={disabled}><Icon name="folder" /> Restore backup</button>

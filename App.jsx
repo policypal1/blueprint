@@ -26,6 +26,11 @@ const GRID = 20;
 const COMPACT_LAYOUT = '(max-width: 800px), (pointer: coarse) and (max-height: 520px)';
 const DRAWING_ACCENT = '#a9441b';
 const TAP_SLOP = 10;
+const CLIPBOARD_IMAGES = new Map([
+  ['image/png', 'png'],
+  ['image/jpeg', 'jpg'],
+  ['image/webp', 'webp'],
+]);
 const VIEW_TOOLS = [['select', 'Select'], ['pan', 'Pan']];
 const DRAW_TOOLS = [['wall', 'Wall'], ['window', 'Window'], ['line', 'Line'], ['rect', 'Rectangle']];
 const MEASUREMENT_TOOLS = [
@@ -1093,8 +1098,27 @@ export function BlueprintApp({
         }
       }
     };
+    const onPaste = (event) => {
+      if (!showRecent || busy || !hydrated || dialog) return;
+      const clipboard = event.clipboardData;
+      const file = Array.from(clipboard?.files ?? []).find((item) =>
+        CLIPBOARD_IMAGES.has(item.type),
+      );
+      const item = file ? null : Array.from(clipboard?.items ?? []).find((entry) =>
+        entry.kind === 'file' && CLIPBOARD_IMAGES.has(entry.type),
+      );
+      const image = file ?? item?.getAsFile();
+      if (!image) return;
+      event.preventDefault();
+      const extension = CLIPBOARD_IMAGES.get(image.type) ?? CLIPBOARD_IMAGES.get(item?.type);
+      void handleImport(new File([image], `Pasted blueprint.${extension}`, { type: image.type }));
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('paste', onPaste);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('paste', onPaste);
+    };
   });
 
   const clientToWorld = (evt) => {

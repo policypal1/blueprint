@@ -45,7 +45,7 @@ export default function Root() {
         ? `Editor · ${PRODUCT_NAME}`
         : route === 'pricing'
           ? `Pricing · ${PRODUCT_NAME}`
-          : `${PRODUCT_NAME} · Revise a floor plan`;
+          : `${PRODUCT_NAME} · Edit your current blueprint`;
   }, [route, showEditor]);
   return (
     <>

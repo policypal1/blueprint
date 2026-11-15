@@ -15,7 +15,7 @@ npm ci
 npm run dev
 ```
 
-4. Open the localhost URL printed by Vite. **Open editor** takes you to Recent plans, where **Upload a plan** starts a new drawing. **Try a sample plan** opens the editable Oak St. Remodel.
+4. Open the localhost URL printed by Vite. **Edit your blueprint** takes you to Recent plans. Upload a PDF or image, paste a clipboard image, or open the editable Oak St. Remodel with **Try a sample plan**.
 5. Before deploying, run:
 
 ```bash

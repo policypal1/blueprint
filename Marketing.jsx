@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
 import PlanIllustration from './PlanIllustration.jsx';
-import { SAMPLE_NAME } from './sample-project.js';
 export const PRICING = { project: 15, monthly: 29 };
 const EditorLink = ({ children, href = '#/editor', className = '', primary = true }) => (
   <a href={href} className={`button ${primary ? 'primary' : ''} ${className}`}>
@@ -9,11 +8,124 @@ const EditorLink = ({ children, href = '#/editor', className = '', primary = tru
     <Icon name="arrow" size={17} />
   </a>
 );
+
+function BlueprintDemo() {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (!window.IntersectionObserver) return;
+    const video = videoRef.current;
+    const motion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    let inView = false;
+    let pausedByUser = false;
+
+    const syncPlayback = () => {
+      if (!inView || document.hidden) {
+        if (!video.paused) video.pause();
+      } else if (!pausedByUser && !motion?.matches) {
+        void video.play().catch(() => {});
+      }
+    };
+    const onPause = () => {
+      if (inView && !document.hidden) pausedByUser = true;
+    };
+    const onPlay = () => { pausedByUser = false; };
+    const onMotionChange = () => {
+      if (motion.matches) {
+        if (!video.paused) video.pause();
+      } else {
+        syncPlayback();
+      }
+    };
+    const observer = new window.IntersectionObserver(([entry]) => {
+      inView = entry.intersectionRatio >= 0.5;
+      syncPlayback();
+    }, { threshold: 0.5 });
+    observer.observe(video);
+    video.addEventListener('play', onPlay);
+    video.addEventListener('pause', onPause);
+    document.addEventListener('visibilitychange', syncPlayback);
+    motion?.addEventListener('change', onMotionChange);
+    return () => {
+      observer.disconnect();
+      video.removeEventListener('play', onPlay);
+      video.removeEventListener('pause', onPause);
+      document.removeEventListener('visibilitychange', syncPlayback);
+      motion?.removeEventListener('change', onMotionChange);
+      if (!video.paused) video.pause();
+    };
+  }, []);
+
+  return (
+    <section className="blueprintDemo" aria-labelledby="blueprint-demo-title">
+      <h2 id="blueprint-demo-title">See a blueprint edit</h2>
+      <video
+        ref={videoRef}
+        src="/planpatch-demo.mp4"
+        poster="/planpatch-demo-poster.webp"
+        aria-label="Pasting a blueprint image, drawing a wall, placing a door, and downloading a PDF"
+        muted
+        playsInline
+        controls
+        loop
+        preload="none"
+      />
+    </section>
+  );
+}
+
+function HomeContent() {
+  const heroAction = useRef(null);
+  const [showSticky, setShowSticky] = useState(false);
+
+  useEffect(() => {
+    if (!window.IntersectionObserver) return;
+    const observer = new window.IntersectionObserver(([entry]) => {
+      setShowSticky(entry.boundingClientRect.bottom <= 0);
+    });
+    observer.observe(heroAction.current);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <>
+      <section className="hero" aria-labelledby="blueprint-hero-title">
+        <div className="heroBlueprint" aria-hidden="true"><PlanIllustration /></div>
+        <div className="heroCopy">
+          <h1 id="blueprint-hero-title">Edit your current blueprint.</h1>
+          <p>Paste a blueprint image or upload a PDF. Draw your changes right on top.</p>
+          <div className="heroActions" ref={heroAction}>
+            <EditorLink>Edit your blueprint</EditorLink>
+          </div>
+        </div>
+      </section>
+      <BlueprintDemo />
+      <section className="workflowSection" aria-label="How PlanPatch works">
+        <div className="workflowGrid">
+          {[
+            ['upload', 'Bring your plan', 'Paste an image or upload a PDF.'],
+            ['wall', 'Make your changes', 'Draw walls, place doors, and drop in fixtures.'],
+            ['download', 'Download a PDF', 'Send a copy of the revised plan.'],
+          ].map(([icon, title, description]) => (
+            <article key={icon}>
+              <Icon name={icon} size={24} />
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+      <aside className="stickyEdit" aria-label="Blueprint editor shortcut" hidden={!showSticky}>
+        <EditorLink>Edit your blueprint</EditorLink>
+      </aside>
+    </>
+  );
+}
+
 export default function Marketing({ page }) {
-  const [revised, setRevised] = useState(true);
   const pricing = page === 'pricing';
   return (
-    <div className="marketing">
+    <div className={pricing ? 'marketing' : 'marketing marketingHome'}>
       <a
         className="skipLink"
         href="#main-content"
@@ -30,7 +142,7 @@ export default function Marketing({ page }) {
         <a href="#/" aria-label={`${PRODUCT_NAME} home`}>
           <Brand />
         </a>
-        <EditorLink className="navCta" primary={false}>Open editor</EditorLink>
+        {pricing && <EditorLink className="navCta" primary={false}>Open editor</EditorLink>}
       </header>
       <main id="main-content" tabIndex="-1">
         {pricing ? (
@@ -162,61 +274,7 @@ export default function Marketing({ page }) {
               </div>
             </section>
           </>
-        ) : (
-          <>
-            <section className="hero">
-              <div className="heroCopy">
-                <h1>Update floor plans from the job site.</h1>
-                <p>Add walls, doors, and fixtures to a plan you already have. Send the revision as a PDF.</p>
-                <div className="heroActions">
-                  <EditorLink href="#/editor/sample">Try a sample plan</EditorLink>
-                </div>
-                <p className="heroNote">Free during beta</p>
-              </div>
-              <div className="heroVisual">
-                <div className="previewHeader">
-                  <span>
-                    <Icon name="folder" size={15} /> {SAMPLE_NAME}
-                  </span>
-                  <span className="previewSheet">{revised ? 'Revised plan' : 'Original plan'}</span>
-                </div>
-                <PlanIllustration revised={revised} />
-                <div className="previewFooter">
-                  <span>Bathroom layout</span>
-                  <div className="segmented" role="group" aria-label="Plan comparison">
-                    <button aria-pressed={!revised} onClick={() => setRevised(false)}>
-                      Before
-                    </button>
-                    <button aria-pressed={revised} onClick={() => setRevised(true)}>
-                      After
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </section>
-            <section className="workflowSection" aria-label="How PlanPatch works">
-              <div className="workflowGrid">
-                {[
-                  ['upload', 'Upload a plan', 'Start from a PDF or an image.'],
-                  ['wall', 'Make your changes', 'Draw walls, place doors, and drop in fixtures.'],
-                  ['download', 'Download a PDF', 'Send a copy of the revised plan.'],
-                ].map(([icon, title, text]) => (
-                  <article key={icon}>
-                    <Icon name={icon} size={24} />
-                    <h3>{title}</h3>
-                    <p>{text}</p>
-                  </article>
-                ))}
-              </div>
-            </section>
-            <section className="closingCta">
-              <div>
-                <h2>Ready to revise your own plan?</h2>
-              </div>
-              <EditorLink>Open editor</EditorLink>
-            </section>
-          </>
-        )}
+        ) : <HomeContent />}
       </main>
       <footer className="siteFooter">
         <a href="#/" aria-label={`${PRODUCT_NAME} home`}>

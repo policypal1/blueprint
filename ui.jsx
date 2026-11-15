@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import brandMark from './favicon.svg';
 
 export const PRODUCT_NAME = 'PlanPatch';
 
@@ -67,17 +68,7 @@ export function Brand({ compact = false }) {
   return (
     <span className="brand">
       <span className="brandMark">
-        <svg
-          viewBox="0 0 24 24"
-          width="23"
-          height="23"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          aria-hidden="true"
-        >
-          <path d="M4 20V4h16v16H4Zm0-7h9V4m0 9v7m0-7h7" />
-        </svg>
+        <img src={brandMark} width="40" height="40" alt="" />
       </span>
       {!compact && <span>{PRODUCT_NAME}</span>}
     </span>
