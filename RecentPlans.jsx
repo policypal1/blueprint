@@ -32,7 +32,8 @@ function PlanList({ plans, disabled, onSelect }) {
 }
 
 export default function RecentPlans({
-  projects, hydrated, busy, saveStatus, onUpload, onCreate, onSample, onSelect, account, onSignIn, authBusy,
+  projects, hydrated, busy, saveStatus, onUpload, onCreate, onSample, onSelect,
+  account, onSignIn, authBusy, canCreate = true, singleProject = false,
 }) {
   const disabled = !hydrated || busy;
   const saveWarning = /failed|unavailable/.test(saveStatus);
@@ -41,7 +42,7 @@ export default function RecentPlans({
       <main className="recentBody" aria-busy={disabled}>
         <div className="recentTitle">
           <h1>Recent plans</h1>
-          <button className="primary" onClick={onUpload} disabled={disabled}>
+          <button className="primary" onClick={onUpload} disabled={disabled || !canCreate}>
             <Icon name="upload" /> {busy ? 'Opening plan…' : 'Upload a plan'}
           </button>
         </div>
@@ -49,9 +50,15 @@ export default function RecentPlans({
           Paste a blueprint image with <kbd>⌘V</kbd> or <kbd>Ctrl+V</kbd>.
         </p>
         <div className="recentActions">
-          <button onClick={onCreate} disabled={disabled}><Icon name="plus" /> New blank plan</button>
-          <button onClick={onSample} disabled={disabled}><Icon name="file" /> Try a sample plan</button>
+          <button onClick={onCreate} disabled={disabled || !canCreate}><Icon name="plus" /> New blank plan</button>
+          <button onClick={onSample} disabled={disabled || !canCreate}><Icon name="file" /> Try a sample plan</button>
         </div>
+        {singleProject && (
+          <p className="recentPasteHint">
+            {canCreate ? 'Opening a new project uses one project credit.' : 'Your project credits are used.'}{' '}
+            <a className="accountTextLink" href="#/account/billing">Manage project credits</a>
+          </p>
+        )}
         {account && (
           <section className="recentGroup" aria-labelledby="account-plans-title">
             <h2 id="account-plans-title">Saved to your account</h2>
@@ -65,7 +72,7 @@ export default function RecentPlans({
             )}
             {account.plans.length > 0
               ? <PlanList plans={account.plans} disabled={disabled} onSelect={(plan) => account.onSelect(plan.id)} />
-              : account.status === 'ready' && <p className="recentSaveStatus">Open a plan and choose Save to account.</p>}
+              : account.status === 'ready' && <p className="recentSaveStatus">{singleProject ? 'No unlocked projects yet.' : 'Open a plan and choose Save to account.'}</p>}
           </section>
         )}
         {onSignIn && (
@@ -76,7 +83,7 @@ export default function RecentPlans({
         {account && <h2 className="devicePlansTitle">On this device</h2>}
         <p className={`recentSaveStatus${saveWarning ? ' saveWarning' : ''}`} role="status">{saveStatus}</p>
         {hydrated && (projects.length ? (
-          <PlanList plans={projects} disabled={disabled} onSelect={onSelect} />
+          <PlanList plans={projects} disabled={disabled || !canCreate} onSelect={onSelect} />
         ) : (
           <div className="recentEmpty">
             <Icon name="folder" size={32} />

@@ -865,7 +865,7 @@ function regularizeImportedElements(elements, unitsPerInch = 4) {
 
 export function BlueprintApp({
   active = true, showRecent = false, sampleRequested = false, onSampleOpened, onOpenWorkspace,
-  repository, accountsEnabled = false, authBusy = false, onSignIn, onRegisterSave,
+  repository, projectAccess, accountsEnabled = false, authBusy = false, onSignIn, onRegisterSave,
 }) {
   const svgRef = useRef(null);
   const fileRef = useRef(null);
@@ -880,6 +880,8 @@ export function BlueprintApp({
     projects, setProjects, project, setProject, addLocalProject, selectProject, hydrated,
     saveStatus, projectRef, cloud, accountId, accountIdRef, flush,
   } = useProjectStore(() => emptyProject('Untitled project'), repository, active && showRecent);
+  const showPlans = showRecent || Boolean(projectAccess && !accountId);
+  const canCreateProject = !projectAccess || projectAccess.credits > 0;
   const [accountNotice, setAccountNotice] = useState('');
   const accountOperation = useRef(false);
   const accountDraft = cloud.current(accountId);
@@ -952,7 +954,7 @@ export function BlueprintApp({
 
   useEffect(() => {
     routeVersion.current += 1;
-    if (active && !showRecent) return;
+    if (active && !showPlans) return;
     resetPointerInput();
     setCalibration(null);
     setMeasurement(null);
@@ -962,7 +964,7 @@ export function BlueprintApp({
     setImportOpen(false);
     setHelpOpen(false);
     dismissDialog();
-  }, [active, showRecent]);
+  }, [active, showPlans]);
 
   useEffect(() => {
     onRegisterSave?.(repository ? cloud.flush : flush);
@@ -1111,7 +1113,7 @@ export function BlueprintApp({
     const onKey = (e) => {
       if (
         !active ||
-        showRecent ||
+        showPlans ||
         e.defaultPrevented ||
         document.querySelector('[role=dialog]') ||
         busy ||
@@ -1180,7 +1182,7 @@ export function BlueprintApp({
       }
     };
     const onPaste = (event) => {
-      if (!active || !showRecent || busy || !hydrated || dialog) return;
+      if (!active || !showPlans || !canCreateProject || busy || !hydrated || dialog) return;
       const clipboard = event.clipboardData;
       const file = Array.from(clipboard?.files ?? []).find((item) =>
         CLIPBOARD_IMAGES.has(item.type),
@@ -1684,7 +1686,7 @@ export function BlueprintApp({
     setBusy(true);
     try {
       if (
-        !showRecent &&
+        !showPlans &&
         (target.background || target.elements.length) &&
         !(await ask({
           title: 'Replace the background?',
@@ -1748,10 +1750,9 @@ export function BlueprintApp({
         backgroundOpacity: 1,
         calibrated: false,
       };
-      if (showRecent) {
+      if (showPlans) {
         const name = file.name.replace(/\.[^.]+$/, '').trim().slice(0, 100) || 'Untitled plan';
-        chooseProject({ ...emptyProject(name), ...background });
-        onOpenWorkspace?.();
+        if (!(await openNewPlan({ ...emptyProject(name), ...background }))) return;
       } else {
         pushHistory();
         updateProject((p) => ({ ...p, ...background }));
@@ -1794,10 +1795,9 @@ export function BlueprintApp({
       if (content.format !== 'blueprint-studio-project' || content.version !== 1)
         throw new Error('Choose a PlanPatch .json backup.');
       const restored = validateProject(content.project);
-      chooseProject({
-        ...restored, id: uid(), name: restored.name + ' (restored)', updatedAt: Date.now(),
-      });
-      onOpenWorkspace?.();
+      if (!(await openNewPlan({
+        ...restored, id: uid(), name: restored.name.slice(0, 89) + ' (restored)', updatedAt: Date.now(),
+      }))) return;
       setStatus('Backup restored as a new project');
     } catch (err) {
       if (onSamePage()) {
@@ -2005,6 +2005,7 @@ export function BlueprintApp({
   };
 
   const createProject = async () => {
+    if (!canCreateProject) return;
     const suggested = `Project ${Math.max(1, projects.length + 1)}`;
     const name = await ask({
       title: 'New project',
@@ -2014,9 +2015,7 @@ export function BlueprintApp({
     });
     if (name === null) return;
     const cleanName = name.trim().slice(0, 100) || suggested;
-    const p = emptyProject(cleanName);
-    chooseProject(p);
-    onOpenWorkspace?.();
+    await openNewPlan(emptyProject(cleanName));
   };
 
   const renameProject = async (target = project) => {
@@ -2051,13 +2050,42 @@ export function BlueprintApp({
     setZoom(1);
     setPan({ x: 0, y: 0 });
   };
-  const loadSample = (navigate = onOpenWorkspace) => {
-    chooseProject(sampleProject(uid()));
-    navigate?.();
+  const openNewPlan = async (plan, navigate = onOpenWorkspace, existingDeviceDraft = false) => {
+    if (!projectAccess) {
+      chooseProject(plan, !existingDeviceDraft);
+      navigate?.();
+      return true;
+    }
+    if (!canCreateProject || accountOperation.current) {
+      setAccountNotice('This plan needs a project credit. Open Billing to add one.');
+      return false;
+    }
+    const onSamePage = captureRoute();
+    accountOperation.current = true;
+    setBusy(true);
+    try {
+      const saved = await cloud.saveNew(plan);
+      if (!saved) throw new Error('Could not save the new account project.');
+      void projectAccess.refresh();
+      if (!onSamePage()) return false;
+      // The cloud save owns the credit. Keep the device draft until that save succeeds.
+      if (existingDeviceDraft) setProjects((list) => list.filter((item) => item.id !== plan.id));
+      chooseProject(saved.project, false, saved.id);
+      navigate?.();
+      return true;
+    } catch {
+      if (onSamePage()) setAccountNotice('Could not create this project. Check your available credits and try again.');
+      void projectAccess.refresh();
+      return false;
+    } finally {
+      accountOperation.current = false;
+      setBusy(false);
+    }
   };
+  const loadSample = (navigate = onOpenWorkspace) => openNewPlan(sampleProject(uid()), navigate);
   useEffect(() => {
     if (hydrated && sampleRequested && window.location.hash === '#/editor/sample') {
-      loadSample(onSampleOpened);
+      if (canCreateProject) void loadSample(onSampleOpened);
     }
   }, [hydrated, sampleRequested]);
 
@@ -2080,7 +2108,7 @@ export function BlueprintApp({
   };
 
   const openAccountPlan = async (id) => {
-    if (accountOperation.current || busy) return;
+    if (accountOperation.current || busy || (projectAccess && !projectAccess.ids.includes(id))) return;
     accountOperation.current = true;
     const onSamePage = captureRoute();
     setAccountNotice('');
@@ -2103,7 +2131,7 @@ export function BlueprintApp({
       onSignIn?.();
       return;
     }
-    if (accountOperation.current || busy) return;
+    if (accountOperation.current || busy || !canCreateProject) return;
     const local = projectRef.current;
     const onSamePage = captureRoute();
     accountOperation.current = true;
@@ -2116,6 +2144,7 @@ export function BlueprintApp({
       const latest = projectRef.current;
       const next = latest === local ? saved.project : { ...latest, name: saved.project.name };
       selectProject(next, saved.id);
+      if (projectAccess) void projectAccess.refresh();
       if (next !== saved.project) cloud.edit(saved.id, next);
       if (asCopy) {
         cloud.dropDraft(accountId);
@@ -2135,7 +2164,9 @@ export function BlueprintApp({
     setProjectMenu(false);
     if (accountOperation.current || !(await ask({
       title: 'Delete this account plan?',
-      message: 'This removes the plan from your account on every device.',
+      message: projectAccess
+        ? 'This removes the plan from every device. Its project credit stays used.'
+        : 'This removes the plan from your account on every device.',
       type: 'confirm',
       confirmLabel: 'Delete plan',
       danger: true,
@@ -2148,6 +2179,7 @@ export function BlueprintApp({
     setAccountNotice('');
     try {
       await cloud.remove(id);
+      if (projectAccess) void projectAccess.refresh();
       if (accountIdRef.current === id) chooseProject(projects[0] || emptyProject('Untitled project'), false);
       if (onSamePage()) window.location.hash = '#/editor';
     } catch {
@@ -2390,24 +2422,24 @@ export function BlueprintApp({
     </>
   );
 
-  if (showRecent) {
+  if (showPlans) {
     return (
       <>
         {fileInputs}
         <RecentPlans
           projects={projects}
+          canCreate={canCreateProject}
+          singleProject={Boolean(projectAccess)}
           hydrated={hydrated}
           busy={busy}
           saveStatus={saveStatus}
           onUpload={() => fileRef.current?.click()}
           onCreate={createProject}
           onSample={() => loadSample()}
-          onSelect={(plan) => {
-            chooseProject(plan, false);
-            onOpenWorkspace?.();
-          }}
+          onSelect={(plan) => openNewPlan(plan, onOpenWorkspace, true)}
           account={repository ? {
-            plans: cloud.list, status: cloud.listStatus, notice: accountNotice,
+            plans: projectAccess ? cloud.list.filter((plan) => projectAccess.ids.includes(plan.id)) : cloud.list,
+            status: cloud.listStatus, notice: accountNotice,
             onRefresh: cloud.refresh, onSelect: openAccountPlan,
           } : null}
           onSignIn={accountsEnabled && !repository ? onSignIn : null}
@@ -2453,7 +2485,7 @@ export function BlueprintApp({
               {conflict ? 'Newer changes on another device' : accountDraft?.error ? 'Account save failed' : savedStatus}
             </span>
             {saveAction && (
-              <button className="accountSaveButton" disabled={busy || authBusy || !hydrated}
+              <button className="accountSaveButton" disabled={busy || authBusy || !hydrated || (conflict && !canCreateProject)}
                 onClick={saveAction.onClick}>
                 {saveAction.label}
               </button>
@@ -2468,7 +2500,7 @@ export function BlueprintApp({
                 onClick={() => setProjectMenu(false)}
               />
               <div className="projectMenu">
-                <button onClick={createProject}>
+                <button onClick={createProject} disabled={!canCreateProject}>
                   <Icon name="plus" /> New project
                 </button>
                 <button onClick={() => renameProject(project)}>
@@ -2479,7 +2511,7 @@ export function BlueprintApp({
                     <Icon name="trash" /> Delete account plan
                   </button>
                 )}
-                <button onClick={() => loadSample()}>
+                <button onClick={() => loadSample()} disabled={!canCreateProject}>
                   <Icon name="file" /> Open sample project
                 </button>
                 {compact && (
@@ -2487,7 +2519,7 @@ export function BlueprintApp({
                     <Icon name="upload" /> Upload a plan
                   </button>
                 )}
-                <button onClick={() => { setProjectMenu(false); backupRef.current?.click(); }}>
+                <button disabled={!canCreateProject} onClick={() => { setProjectMenu(false); backupRef.current?.click(); }}>
                   <Icon name="folder" /> Restore backup
                 </button>
                 {compact && (
@@ -2501,7 +2533,7 @@ export function BlueprintApp({
                   </>
                 )}
                 <div className="projectMenuDivider" />
-                {projects.map((p) => (
+                {!projectAccess && projects.map((p) => (
                   <div className="projectRow" key={p.id}>
                     <button onClick={() => chooseProject(p, false)}>{p.name}</button>
                     <button

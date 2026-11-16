@@ -6,6 +6,7 @@ import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
 import { hasOpenedPlan } from './useProjectStore.js';
 import { createProjectRepository } from './account-projects.js';
 import { useAccount } from './useAccount.js';
+import usePlanPatchAccount from './usePlanPatchAccount.js';
 
 const Editor = lazy(() => import('./App.jsx'));
 const RECENT_HASH = '#/editor';
@@ -39,9 +40,45 @@ function readRoute() {
 function isEditorRoute(route) {
   return ['recent', 'workspace', 'sample'].includes(route);
 }
+function EditorAccess({ account, access, onSignIn }) {
+  if (account.loading || (account.user && access.loading)) {
+    return <main className="accessPage" role="status">Checking editor access…</main>;
+  }
+
+  let title, message, action;
+  if (!account.user) {
+    title = 'Sign in to open the editor';
+    message = account.client
+      ? 'Use your PlanPatch account to open and manage your saved plans.'
+      : 'Account sign-in is currently unavailable.';
+    action = account.client && <button className="primary" onClick={onSignIn}>Sign in</button>;
+  } else if (access.data?.deleting) {
+    title = 'Account deletion in progress';
+    message = 'Open security settings to finish deleting your account.';
+    action = <a className="button primary" href="#/account/security">Open security settings</a>;
+  } else if (!access.data) {
+    title = 'Editor access could not be checked';
+    message = access.error || 'Try checking your account again.';
+    action = <button className="primary" onClick={access.refresh}>Try again</button>;
+  } else {
+    title = 'Unlock the editor';
+    message = 'Use a $10 sandbox credit for one saved project or start a $19 monthly test subscription.';
+    action = <a className="button primary" href="#/account/billing">View sandbox plans</a>;
+  }
+
+  return (
+    <main className="accessPage">
+      <h1>{title}</h1>
+      <p>{message}</p>
+      {action}
+    </main>
+  );
+}
+
 export default function Root() {
   const account = useAccount();
   const owner = account.user?.id;
+  const access = usePlanPatchAccount(account.client, owner);
   const priorOwner = useRef(owner);
   const beforeLeaving = useRef(null);
   const registerSave = useCallback((save) => { beforeLeaving.current = save; }, []);
@@ -55,6 +92,14 @@ export default function Root() {
   const [signInDialog, setSignInDialog] = useState(false);
   const signInTarget = useRef('#/account');
   const showEditor = isEditorRoute(route);
+  const policy = access.data;
+  const requireSignIn = Boolean(import.meta.env?.PROD || account.enabled);
+  const editorAllowed = !requireSignIn || Boolean(owner && policy && !policy.deleting && (
+    !policy.paymentsRequired || policy.monthly || policy.projectCredits > 0 || policy.projectIds?.length
+  ));
+  const projectAccess = policy?.paymentsRequired && !policy.monthly
+    ? { credits: policy.projectCredits, ids: policy.projectIds, refresh: access.refresh }
+    : null;
   const showAccount = ['account', 'security', 'billing'].includes(route);
   const showAuthPage = route === 'signIn' || route === 'resetPassword';
 
@@ -78,6 +123,10 @@ export default function Root() {
   }, []);
 
   const signOut = () => account.signOut(beforeLeaving.current);
+  const finishDeletion = async () => {
+    await account.signOut();
+    window.location.hash = '#/';
+  };
   const signInProps = {
     account,
     onAuthenticate: (mode, email, password) => account.authenticate(mode, email, password, beforeLeaving.current),
@@ -86,8 +135,9 @@ export default function Root() {
   };
   const accountNav = account.enabled ? {
     signedIn: Boolean(owner),
+    user: account.user,
+    onSignOut: signOut,
     busy: account.busy || account.loading,
-    onSignIn: showEditor ? openSignIn : undefined,
   } : null;
   useEffect(() => {
     if (window.location.hash === WORKSPACE_HASH || (!window.location.hash && hasOpenedPlan())) {
@@ -140,12 +190,14 @@ export default function Root() {
         <>
           <SiteHeader page={route} account={accountNav} />
           <AccountPage billing={route === 'billing'} security={route === 'security'}
-            account={account} onSignIn={openSignIn} onSignOut={signOut} />
+            account={account} access={access} onSignIn={openSignIn}
+            onSignOut={signOut} onDeleted={finishDeletion} />
         </>
       )}
-      {visitedEditor && (
+      {(showEditor || (visitedEditor && editorAllowed)) && (
         <div className="editorRoot" hidden={!showEditor}>
           {showEditor && <SiteHeader page={route} account={accountNav} />}
+          {!editorAllowed ? <EditorAccess account={account} access={access} onSignIn={openSignIn} /> : (
           <div className="editorSurface">
             <Suspense
               fallback={
@@ -161,6 +213,7 @@ export default function Root() {
                 key={owner || 'guest'}
                 active={showEditor}
                 repository={repository}
+                projectAccess={projectAccess}
                 accountsEnabled={Boolean(account.client)}
                 authBusy={account.busy}
                 onSignIn={openSignIn}
@@ -178,6 +231,7 @@ export default function Root() {
               />}
             </Suspense>
           </div>
+          )}
         </div>
       )}
       {signInDialog && showEditor && (

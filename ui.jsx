@@ -4,6 +4,10 @@ import brandMark from './favicon.svg';
 export const PRODUCT_NAME = 'PlanPatch';
 
 const paths = {
+  user: 'M20 21v-2a5 5 0 0 0-5-5H9a5 5 0 0 0-5 5v2M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
+  lock: 'M6 10h12v11H6ZM9 10V7a3 3 0 0 1 6 0v3m-3 4v3',
+  card: 'M3 5h18v14H3Zm0 5h18M7 15h4',
+  logout: 'M10 4H5v16h5m4-5 3-3-3-3m-5 3h8',
   menu: 'M4 6h16M4 12h16M4 18h16',
   arrow: 'M5 12h14m-6-6 6 6-6 6',
   chevron: 'm8 10 4 4 4-4',

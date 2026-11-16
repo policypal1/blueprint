@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
+import AccountMenu from './AccountMenu.jsx';
 import PlanIllustration, { DoorPlan } from './PlanIllustration.jsx';
 
 export const PRICING = { project: 10, monthly: 19 };
@@ -108,15 +109,9 @@ function SiteNav({ page, account, mobile = false, onNavigate }) {
   return (
     <nav className="siteNav" aria-label="Main navigation" onClick={onNavigate}>
       <a href="#/pricing" aria-current={page === 'pricing' ? 'page' : undefined}>Pricing</a>
-      {account && (account.signedIn ? (
-        <a href="#/account" aria-current={['account', 'security', 'billing'].includes(page) ? 'true' : undefined}>
-          Account
-        </a>
-      ) : account.onSignIn ? (
-        <button className="accountNavButton" disabled={account.busy} onClick={account.onSignIn}>Sign in</button>
-      ) : (
+      {account && !account.signedIn && (
         <a href="#/sign-in" aria-current={page === 'signIn' ? 'page' : undefined}>Sign in</a>
-      ))}
+      )}
       {mobile
         ? <a href="#/editor" className="mobileEditorLink">Edit your blueprint</a>
         : <EditorLink />}
@@ -140,13 +135,23 @@ function MobileMenu({ page, account }) {
 }
 
 export function SiteHeader({ page, account }) {
+  const workspace = ['recent', 'workspace', 'sample'].includes(page);
   return (
-    <header className="siteHeader">
+    <header className={`siteHeader${workspace ? ' workspaceHeader' : ''}`}>
       <a href="#/" aria-label={`${PRODUCT_NAME} home`}>
         <Brand />
       </a>
-      <SiteNav page={page} account={account} />
-      <MobileMenu page={page} account={account} />
+      <div className="siteHeaderActions">
+        {!workspace && (
+          <>
+            <SiteNav page={page} account={account} />
+            <MobileMenu page={page} account={account} />
+          </>
+        )}
+        {account?.signedIn && (
+          <AccountMenu user={account.user} page={page} busy={account.busy} onSignOut={account.onSignOut} />
+        )}
+      </div>
     </header>
   );
 }

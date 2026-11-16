@@ -39,7 +39,24 @@ After signing in, open **Account**. **Profile settings** saves the display name.
 
 Keep email confirmation enabled for email sign-ups. Supabase’s built-in sender can deliver auth mail to project team addresses during testing. Set up [custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp) before inviting testers outside the team.
 
-**Billing** uses a [Stripe-hosted customer portal](https://docs.stripe.com/customer-management/activate-no-code-customer-portal). Set `VITE_STRIPE_PORTAL_URL` if the project’s sandbox portal login link changes. Use an email verified in Stripe that matches a customer in the sandbox.
+**Billing** opens a server-created Stripe sandbox portal for the signed-in customer's saved payment methods, invoices, and test subscriptions.
+
+
+## Sandbox editor access
+
+The deployed editor requires a verified PlanPatch sign-in. A $10 sandbox purchase assigns one credit to a saved project when it is created. A $19 monthly sandbox subscription permits new and existing projects while its paid period is active. Billing, profile settings, and account deletion are available from the account menu.
+
+Deploy the `planpatch-account` Edge Function after applying the account and sandbox migrations. The function verifies signed Stripe events and confirms the underlying test payment before granting editor access. The first verified payment activates paid enforcement across the editor and the database. Saved project records stay attached to their owner.
+
+Set these in Supabase Edge Function Secrets for the existing PlanPatch project.
+
+- `STRIPE_TEST_SECRET_KEY` is the restricted test key for the Plan Patch sandbox. It needs Customers, Checkout Sessions, and Billing Portal sessions write access, plus Subscriptions, Invoices, Payment Intents, and Charges read access.
+- `STRIPE_TEST_WEBHOOK_SECRET` is the signing secret for the sandbox destination at the deployed `/functions/v1/planpatch-account` endpoint.
+
+Subscribe the endpoint to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, and `radar.early_fraud_warning.created`. The endpoint's GET response reports whether both secrets are configured. Test both offers and confirm the resulting access before using the sandbox for demonstrations. Disable the gate in `planpatch_private.sandbox_settings` if you need to roll back paid enforcement.
+
+Account deletion requires typing `DELETE`. It removes the signed-in account and its saved cloud plans, and closes its sandbox billing customer. Review any plans you want to export before deleting the account.
+
 
 ## What changed
 
