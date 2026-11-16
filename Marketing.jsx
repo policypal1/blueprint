@@ -109,11 +109,13 @@ function SiteNav({ page, account, mobile = false, onNavigate }) {
     <nav className="siteNav" aria-label="Main navigation" onClick={onNavigate}>
       <a href="#/pricing" aria-current={page === 'pricing' ? 'page' : undefined}>Pricing</a>
       {account && (account.signedIn ? (
-        <a href="#/account" aria-current={page === 'account' || page === 'billing' ? 'true' : undefined}>
+        <a href="#/account" aria-current={['account', 'security', 'billing'].includes(page) ? 'true' : undefined}>
           Account
         </a>
-      ) : (
+      ) : account.onSignIn ? (
         <button className="accountNavButton" disabled={account.busy} onClick={account.onSignIn}>Sign in</button>
+      ) : (
+        <a href="#/sign-in" aria-current={page === 'signIn' ? 'page' : undefined}>Sign in</a>
       ))}
       {mobile
         ? <a href="#/editor" className="mobileEditorLink">Edit your blueprint</a>

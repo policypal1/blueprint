@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AccountPage from './Account.jsx';
+import { ResetPasswordPage, SignInPage } from './Auth.jsx';
 import Marketing, { DEMO_HASH, SiteHeader } from './Marketing.jsx';
 import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
 import { hasOpenedPlan } from './useProjectStore.js';
@@ -9,13 +10,17 @@ import { useAccount } from './useAccount.js';
 const Editor = lazy(() => import('./App.jsx'));
 const RECENT_HASH = '#/editor';
 const WORKSPACE_HASH = '#/editor/workspace';
+const SIGN_IN_HASH = '#/sign-in';
 const PAGE_TITLES = {
   recent: 'Recent plans',
   workspace: 'Editor',
   sample: 'Editor',
   pricing: 'Pricing',
   account: 'Account',
+  security: 'Sign-in & security',
   billing: 'Billing',
+  signIn: 'Sign in',
+  resetPassword: 'Reset password',
 };
 
 function readRoute() {
@@ -24,7 +29,10 @@ function readRoute() {
   if (hash === '#/editor/sample') return 'sample';
   if (hash.startsWith(RECENT_HASH) || (!hash && hasOpenedPlan())) return 'recent';
   if (hash === '#/account') return 'account';
+  if (hash === '#/account/security') return 'security';
   if (hash === '#/account/billing') return 'billing';
+  if (hash === SIGN_IN_HASH) return 'signIn';
+  if (hash === '#/reset-password') return 'resetPassword';
   if (hash === DEMO_HASH) return 'demo';
   return hash.startsWith('#/pricing') ? 'pricing' : 'home';
 }
@@ -37,13 +45,6 @@ export default function Root() {
   const priorOwner = useRef(owner);
   const beforeLeaving = useRef(null);
   const registerSave = useCallback((save) => { beforeLeaving.current = save; }, []);
-  const signIn = () => account.signIn(beforeLeaving.current);
-  const signOut = () => account.signOut(beforeLeaving.current);
-  const accountNav = account.client ? {
-    signedIn: Boolean(owner),
-    busy: account.busy || account.loading,
-    onSignIn: signIn,
-  } : null;
   const repository = useMemo(() => owner && account.client
     ? createProjectRepository(account.client, owner) : null, [account.client, owner]);
   const [route, setRoute] = useState(() => {
@@ -51,8 +52,43 @@ export default function Root() {
     return initial === 'workspace' ? 'recent' : initial;
   });
   const [visitedEditor, setVisitedEditor] = useState(() => isEditorRoute(route));
+  const [signInDialog, setSignInDialog] = useState(false);
+  const signInTarget = useRef('#/account');
   const showEditor = isEditorRoute(route);
-  const showAccount = route === 'account' || route === 'billing';
+  const showAccount = ['account', 'security', 'billing'].includes(route);
+  const showAuthPage = route === 'signIn' || route === 'resetPassword';
+
+  function openSignIn() {
+    if (showEditor) {
+      signInTarget.current = route === 'workspace' ? WORKSPACE_HASH : RECENT_HASH;
+      setSignInDialog(true);
+      return;
+    }
+    signInTarget.current = showAccount ? window.location.hash : '#/account';
+    window.location.hash = SIGN_IN_HASH;
+  }
+
+  const finishSignIn = useCallback(() => {
+    if (window.location.hash === SIGN_IN_HASH) {
+      window.history.replaceState(window.history.state, '', signInTarget.current);
+      window.dispatchEvent(new Event('hashchange'));
+    }
+    setSignInDialog(false);
+    signInTarget.current = '#/account';
+  }, []);
+
+  const signOut = () => account.signOut(beforeLeaving.current);
+  const signInProps = {
+    account,
+    onAuthenticate: (mode, email, password) => account.authenticate(mode, email, password, beforeLeaving.current),
+    onGoogle: () => account.signInWithGoogle(beforeLeaving.current, signInTarget.current),
+    onAuthenticated: finishSignIn,
+  };
+  const accountNav = account.enabled ? {
+    signedIn: Boolean(owner),
+    busy: account.busy || account.loading,
+    onSignIn: showEditor ? openSignIn : undefined,
+  } : null;
   useEffect(() => {
     if (window.location.hash === WORKSPACE_HASH || (!window.location.hash && hasOpenedPlan())) {
       window.history.replaceState(window.history.state, '', RECENT_HASH);
@@ -61,6 +97,7 @@ export default function Root() {
       const next = readRoute();
       setRoute(next);
       if (isEditorRoute(next)) setVisitedEditor(true);
+      else setSignInDialog(false);
       if (next !== 'demo') window.scrollTo(0, 0);
     };
     window.addEventListener('hashchange', navigate);
@@ -76,6 +113,9 @@ export default function Root() {
     priorOwner.current = owner;
   }, [owner]);
   useEffect(() => {
+    if (owner && (route === 'signIn' || signInDialog)) finishSignIn();
+  }, [owner, route, signInDialog, finishSignIn]);
+  useEffect(() => {
     const title = PAGE_TITLES[route];
     document.title = title
       ? `${title} · ${PRODUCT_NAME}`
@@ -89,11 +129,18 @@ export default function Root() {
           <button aria-label="Dismiss sign-in notice" onClick={account.clearError}><Icon name="close" /></button>
         </div>
       )}
-      {!showEditor && !showAccount && <Marketing page={route} account={accountNav} />}
+      {!showEditor && !showAccount && !showAuthPage && <Marketing page={route} account={accountNav} />}
+      {showAuthPage && (
+        <>
+          <SiteHeader page={route} account={accountNav} />
+          {route === 'signIn' ? <SignInPage {...signInProps} /> : <ResetPasswordPage account={account} />}
+        </>
+      )}
       {showAccount && (
         <>
           <SiteHeader page={route} account={accountNav} />
-          <AccountPage billing={route === 'billing'} account={account} onSignIn={signIn} onSignOut={signOut} />
+          <AccountPage billing={route === 'billing'} security={route === 'security'}
+            account={account} onSignIn={openSignIn} onSignOut={signOut} />
         </>
       )}
       {visitedEditor && (
@@ -116,7 +163,7 @@ export default function Root() {
                 repository={repository}
                 accountsEnabled={Boolean(account.client)}
                 authBusy={account.busy}
-                onSignIn={signIn}
+                onSignIn={openSignIn}
                 onRegisterSave={registerSave}
                 showRecent={route === 'recent'}
                 sampleRequested={route === 'sample'}
@@ -132,6 +179,9 @@ export default function Root() {
             </Suspense>
           </div>
         </div>
+      )}
+      {signInDialog && showEditor && (
+        <SignInPage {...signInProps} onClose={() => setSignInDialog(false)} />
       )}
     </>
   );

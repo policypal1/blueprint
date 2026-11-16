@@ -33,7 +33,11 @@ Drafts begin on the device. **Save to account** moves a draft after the cloud sa
 
 ## Account and billing
 
-After signing in, open **Account** from the site navigation. **Profile settings** saves the display name to the signed-in account. **Saved plans** opens the editor’s project list.
+Open **Sign in** from the site navigation to create an email and password account or continue with Google. In the editor, **Sign in** opens the same form without leaving the current plan. The sign-in page also offers password recovery. Open confirmation and recovery links in the browser where you requested them.
+
+After signing in, open **Account**. **Profile settings** saves the display name. **Sign-in & security** requests an email change or password reset and **Saved plans** opens the editor’s project list.
+
+Keep email confirmation enabled for email sign-ups. Supabase’s built-in sender can deliver auth mail to project team addresses during testing. Set up [custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp) before inviting testers outside the team.
 
 **Billing** uses a [Stripe-hosted customer portal](https://docs.stripe.com/customer-management/activate-no-code-customer-portal). Set `VITE_STRIPE_PORTAL_URL` if the project’s sandbox portal login link changes. Use an email verified in Stripe that matches a customer in the sandbox.
 

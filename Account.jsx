@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { authErrorText } from './useAccount.js';
 
 const SANDBOX_PORTAL_URL = 'https://billing.stripe.com/p/login/test_00w8wIf8fdke23P1oO4ZG00';
 const BILLING_PORTAL_URL = import.meta.env?.VITE_STRIPE_PORTAL_URL?.trim() || SANDBOX_PORTAL_URL;
@@ -59,7 +60,7 @@ function ProfileSettings({ account, onSignOut }) {
           Email address
           <input type="email" value={user.email ?? ''} readOnly />
         </label>
-        <p>Your sign-in email is managed by Google.</p>
+        <p><a className="accountTextLink" href="#/account/security">Change email or password</a></p>
         {error && <p className="accountError" role="alert">{error}</p>}
         {message && <p role="status">{message}</p>}
         <div className="accountActions">
@@ -69,6 +70,69 @@ function ProfileSettings({ account, onSignOut }) {
           <button type="button" onClick={onSignOut} disabled={busy || saving}>Sign out</button>
         </div>
       </form>
+    </section>
+  );
+}
+
+function SecuritySettings({ account }) {
+  const [email, setEmail] = useState('');
+  const [pending, setPending] = useState('');
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const currentEmail = account.user.email ?? '';
+  const nextEmail = email.trim();
+
+  async function perform(action, request, success, failure) {
+    if (pending) return;
+    setPending(action);
+    setNotice('');
+    setError('');
+    try {
+      await request();
+      setNotice(success);
+      if (action === 'email') setEmail('');
+    } catch (problem) {
+      setError(authErrorText(problem, failure));
+    } finally {
+      setPending('');
+    }
+  }
+
+  function changeEmail(event) {
+    event.preventDefault();
+    if (!nextEmail || nextEmail.toLowerCase() === currentEmail.toLowerCase()) return;
+    return perform('email', () => account.updateEmail(nextEmail),
+      'Follow the instructions sent by email to confirm the change.',
+      'Could not request an email change. Try again.');
+  }
+
+  return (
+    <section className="accountCard securitySettings" aria-labelledby="security-title">
+      <h2 id="security-title">Sign-in &amp; security</h2>
+      <form className="profileSettings" method="post" onSubmit={changeEmail}>
+        <p>Current email <strong>{currentEmail}</strong></p>
+        <label>New email address
+          <input type="email" autoComplete="email" name="email" required
+            value={email} disabled={Boolean(pending)} onChange={(event) => setEmail(event.target.value)} />
+        </label>
+        <div className="accountActions">
+          <button type="submit" disabled={Boolean(pending) || !nextEmail || nextEmail.toLowerCase() === currentEmail.toLowerCase()}>
+            {pending === 'email' ? 'Sending…' : 'Send email change link'}
+          </button>
+        </div>
+      </form>
+      <div className="accountSecurityRow">
+        <h3>Password</h3>
+        <button type="button" disabled={Boolean(pending) || !currentEmail} onClick={() => perform(
+          'password', () => account.requestPasswordReset(currentEmail),
+          'Check your current email for a reset link and open it in this browser.',
+          'Could not request a password reset. Try again.',
+        )}>
+          {pending === 'password' ? 'Sending…' : 'Send password reset link'}
+        </button>
+      </div>
+      {notice && <p role="status">{notice}</p>}
+      {error && <p className="accountError" role="alert">{error}</p>}
     </section>
   );
 }
@@ -97,34 +161,37 @@ function BillingSettings({ portalUrl }) {
 }
 
 export default function AccountPage({
-  billing, account, onSignIn, onSignOut, portalUrl = BILLING_PORTAL_URL,
+  billing, security, account, onSignIn, onSignOut, portalUrl = BILLING_PORTAL_URL,
 }) {
   const title = useRef(null);
-  useEffect(() => { title.current?.focus(); }, [billing]);
+  useEffect(() => { title.current?.focus(); }, [billing, security]);
 
   return (
     <main className="accountPage">
-      <h1 ref={title} tabIndex={-1}>{billing ? 'Billing' : 'Account'}</h1>
+      <h1 ref={title} tabIndex={-1}>{billing ? 'Billing' : security ? 'Security' : 'Account'}</h1>
       {account.loading ? (
         <p role="status">Opening your account…</p>
       ) : account.user ? (
         <div className="accountLayout">
           <nav className="accountSections" aria-label="Account">
-            <a href="#/account" aria-current={billing ? undefined : 'page'}>Profile settings</a>
+            <a href="#/account" aria-current={billing || security ? undefined : 'page'}>Profile settings</a>
+            <a href="#/account/security" aria-current={security ? 'page' : undefined}>Sign-in &amp; security</a>
             <a href="#/account/billing" aria-current={billing ? 'page' : undefined}>Billing</a>
             <a href="#/editor">Saved plans</a>
           </nav>
           {billing
             ? <BillingSettings portalUrl={portalUrl} />
-            : <ProfileSettings key={account.user.id} account={account} onSignOut={onSignOut} />}
+            : security
+              ? <SecuritySettings key={account.user.id} account={account} />
+              : <ProfileSettings key={account.user.id} account={account} onSignOut={onSignOut} />}
         </div>
       ) : (
         <section className="accountCard accountSignIn" aria-labelledby="account-sign-in-title">
           <h2 id="account-sign-in-title">Sign in to continue</h2>
-          <p>{account.client ? 'Use your Google account to open your settings.' : 'Account sign-in is currently unavailable.'}</p>
+          <p>{account.client ? 'Sign in with email or Google to manage your account.' : 'Account sign-in is currently unavailable.'}</p>
           <div className="accountActions">
             {account.client && (
-              <button className="primary" onClick={onSignIn} disabled={account.busy}>Sign in with Google</button>
+              <button className="primary" onClick={onSignIn} disabled={account.busy}>Open sign in</button>
             )}
             <a className="button" href="#/editor">Open editor</a>
           </div>
