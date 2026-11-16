@@ -273,8 +273,8 @@ p {
 @media (max-width: 800px) and (prefers-reduced-motion: no-preference) {
   .mobileMenu[open] .siteNav { animation: menu-unfold 180ms ease-out; }
   @keyframes menu-unfold {
-    from { clip-path: inset(0 0 100%); opacity: 0.7; }
-    to { clip-path: inset(0); opacity: 1; }
+    from { transform: translateY(-6px); opacity: 0.7; }
+    to { transform: translateY(0); opacity: 1; }
   }
 }
 .marketingHome {
@@ -560,33 +560,25 @@ p {
 .editorRoot {
   height: 100dvh;
   overflow: hidden;
-  background: var(--canvas);
+  background: var(--paper);
+}
+.editorRoot:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+}
+.editorRoot > .siteHeader {
+  z-index: 60;
+  flex: none;
+  width: 100%;
+}
+.editorSurface {
+  flex: 1;
+  min-height: 0;
 }
 .recentPage {
   height: 100%;
   overflow: auto;
   background: var(--site);
-}
-.recentHeader {
-  min-height: 68px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: max(8px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
-  color: var(--chromeText);
-  background: var(--chrome);
-}
-.recentHeader a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-}
-.recentHeader a:focus-visible { outline-color: var(--orange); }
-.recentHeader > span {
-  font-size: 12px;
-  color: var(--chromeMuted);
-  text-align: right;
 }
 .recentBody {
   max-width: 920px;
@@ -603,9 +595,10 @@ p {
 .recentTitle h1 {
   margin: 0;
   font-size: clamp(25px, 4vw, 40px);
+  line-height: 1.15;
   letter-spacing: -0.04em;
 }
-.recentTitle button { min-height: 48px; }
+.recentTitle button { min-height: 48px; padding-inline: 18px; font-size: 14px; }
 .recentPasteHint {
   margin: 12px 0 0;
   color: var(--muted);
@@ -626,6 +619,17 @@ p {
   margin: 16px 0;
 }
 .recentActions button { min-height: 44px; }
+.recentSaveStatus { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+.recentSaveStatus.saveWarning { color: var(--accent); }
+@media (max-width: 620px) {
+  .recentBody {
+    padding: 28px max(20px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  }
+  .recentTitle { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .recentTitle button { min-height: 52px; }
+  .recentActions { display: grid; gap: 10px; margin: 20px 0; }
+  .recentActions button { justify-content: flex-start; min-height: 48px; font-size: 14px; }
+}
 .recentList {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 335px), 1fr));
@@ -689,7 +693,7 @@ p {
   min-height: 68px;
   align-items: center;
   gap: 12px;
-  padding: max(8px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
+  padding: 8px max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
   background: var(--chrome);
   color: var(--chromeText);
   position: relative;
@@ -1060,15 +1064,21 @@ p {
 }
 .projectUtilities {
   border-top: 1px solid var(--line);
-  padding-top: 18px;
-  margin-top: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  margin-top: 16px;
 }
+.projectUtilities summary {
+  padding-block: 12px;
+  min-height: 44px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+.projectUtilityButtons { display: grid; gap: 8px; }
 .projectUtilities .hint {
   margin: 4px 0;
 }
+.planSettingsButton { min-height: 44px; margin-top: 16px; justify-content: flex-start; }
+.backgroundSettings { margin-bottom: 16px; }
 hr {
   border: 0;
   border-top: 1px solid var(--line);
@@ -1097,12 +1107,12 @@ hr {
   border-radius: 9px;
   padding: 7px;
   width: min(310px, calc(100vw - 32px));
-  max-height: 65dvh;
+  max-height: min(65dvh, calc(100dvh - 154px - env(safe-area-inset-top)));
   overflow: auto;
+  overscroll-behavior: contain;
   box-shadow: 0 12px 30px #252a2b30;
 }
-.projectMenu > button,
-.projectHome {
+.projectMenu > button {
   display: flex;
   justify-content: flex-start;
   align-items: center;
@@ -1114,7 +1124,6 @@ hr {
   border-radius: 6px;
   font-size: 13px;
 }
-.projectHome:hover { background: var(--panel); }
 .projectRow { display: flex; align-items: center; gap: 4px; }
 .projectRow > button:first-child {
   flex: 1;
@@ -1229,8 +1238,9 @@ hr {
   z-index: 100;
   background: #252a2b70;
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
   place-items: center;
-  padding: 20px;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
 }
 .dialog {
   background: var(--paper);
@@ -1239,10 +1249,15 @@ hr {
   box-shadow: 0 25px 80px #252a2b30;
   padding: 25px;
   border-radius: 12px;
-  max-height: calc(100dvh - 40px);
+  max-height: 100%;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 .modalHeader {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--paper);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1260,21 +1275,8 @@ hr {
   border: 0;
   background: transparent;
 }
-.sheetBackdrop {
-  align-items: end;
-  padding: 0 max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
-}
-.sheetBackdrop > .dialog {
-  width: min(560px, 100%);
-  padding: 14px 15px max(20px, env(safe-area-inset-bottom));
-  max-height: min(76dvh, 620px);
-  border-radius: 14px 14px 0 0;
-  overscroll-behavior: contain;
-}
-.sheetBackdrop .modalHeader { margin-bottom: 12px; }
 .sheetTools > button { min-height: 48px; padding-inline: 10px; font-size: 14px; }
-.editorSheet.properties .field input:not([type='range']) { font-size: 16px; }
-.editorSheet.properties button { min-height: 44px; }
+.toolDialog button { min-height: 44px; }
 .printSettings {
   padding: 4px 12px;
   border: 1px solid var(--line);
@@ -1406,7 +1408,7 @@ hr {
 }
 @media (max-width: 620px) {
   .importWorkflow { grid-template-columns: minmax(0, 1fr); }
-  .dialog:not(.editorSheet) { padding: 18px; }
+  .dialog { padding: 18px; }
   .dialog :is(input:not([type='checkbox'], [type='range']), select, textarea) { font-size: 16px; }
   .modalActions button { min-height: 44px; }
 }

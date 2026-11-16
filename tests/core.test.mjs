@@ -65,11 +65,13 @@ test('scaled export maps a known 120-inch wall to 2.5 inches on paper at 1:48', 
   );
 });
 test('backup validation accepts a real sample and preserves a round trip', () => {
-  const source = sampleProject('original');
+  const source = { ...sampleProject('original'), createdAt: 100, updatedAt: 200 };
   const restored = validateProject(JSON.parse(JSON.stringify(source)));
   assert.equal(restored.elements.length, source.elements.length);
   assert.equal(restored.unitsPerInch, 4);
   assert.equal(restored.calibrated, true);
+  assert.equal(restored.createdAt, 100);
+  assert.equal(restored.updatedAt, 200);
 });
 test('backup validation rejects remote/script backgrounds and invalid geometry', () => {
   for (const bg of [

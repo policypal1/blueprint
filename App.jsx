@@ -1,12 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { jsPDF } from 'jspdf';
-import { Icon, Modal, PRODUCT_NAME, useDialog } from './ui.jsx';
+import { Icon, Modal, useDialog } from './ui.jsx';
 import { DOORS, FIXTURES, PhoneControls, ToolButton, ToolChoices, editorMode } from './EditorControls.jsx';
 import {
   parseLength,
   pdfLayout,
   MAX_FILE_BYTES,
   MAX_ELEMENTS,
+  MAX_BRUSH_POINTS,
+  MAX_PROJECT_NUMBER,
+  isProjectNumber,
+  isProjectScale,
   validateProject,
   downloadBlob,
   clientToWorkspace,
@@ -26,25 +30,27 @@ const GRID = 20;
 const COMPACT_LAYOUT = '(max-width: 800px), (pointer: coarse) and (max-height: 520px)';
 const DRAWING_ACCENT = '#a9441b';
 const TAP_SLOP = 10;
+const DRAG_SLOP = 4;
 const CLIPBOARD_IMAGES = new Map([
   ['image/png', 'png'],
   ['image/jpeg', 'jpg'],
   ['image/webp', 'webp'],
 ]);
 const VIEW_TOOLS = [['select', 'Select'], ['pan', 'Pan']];
-const DRAW_TOOLS = [['wall', 'Wall'], ['window', 'Window'], ['line', 'Line'], ['rect', 'Rectangle']];
+const OTHER_DRAW_TOOLS = [['window', 'Window'], ['line', 'Line'], ['rect', 'Rectangle']];
+const DRAW_TOOLS = [['wall', 'Wall'], ...OTHER_DRAW_TOOLS];
 const MEASUREMENT_TOOLS = [
   ['measure', 'Measure'],
   ['dimension', 'Dimension'],
   ['calibrate', 'Set scale'],
   ['text', 'Text'],
 ];
-const SHEET_TITLES = {
+const PANEL_TITLES = {
   doors: 'Choose a door',
   fixtures: 'Choose a fixture',
   properties: 'Object properties',
   settings: 'Plan settings',
-  tools: 'All tools',
+  tools: 'More tools',
 };
 const TOOL_HINTS = {
   select: 'Tap or click an object to edit it.',
@@ -735,21 +741,29 @@ function cleanElementsInRect(elements, rect, units) {
   return out;
 }
 
+function translatePoint(point, dx, dy) {
+  return {
+    x: clamp(point.x + dx, -MAX_PROJECT_NUMBER, MAX_PROJECT_NUMBER),
+    y: clamp(point.y + dy, -MAX_PROJECT_NUMBER, MAX_PROJECT_NUMBER),
+  };
+}
+
 function offsetElement(el, amount = 24) {
   const clone = JSON.parse(JSON.stringify(el));
   clone.id = uid();
   if (clone.a && clone.b) {
-    clone.a.x += amount;
-    clone.a.y += amount;
-    clone.b.x += amount;
-    clone.b.y += amount;
+    clone.a = translatePoint(clone.a, amount, amount);
+    clone.b = translatePoint(clone.b, amount, amount);
   } else if (Array.isArray(clone.points)) {
-    clone.points = clone.points.map((p) => ({ x: p.x + amount, y: p.y + amount }));
+    clone.points = clone.points.map((p) => translatePoint(p, amount, amount));
   } else if (Number.isFinite(clone.x) && Number.isFinite(clone.y)) {
-    clone.x += amount;
-    clone.y += amount;
+    Object.assign(clone, translatePoint(clone, amount, amount));
   }
   return clone;
+}
+
+function countBrushPoints(elements) {
+  return elements.reduce((count, el) => count + (el.type === 'erase' ? el.points.length : 0), 0);
 }
 
 function regularizeImportedElements(elements, unitsPerInch = 4) {
@@ -850,7 +864,7 @@ function regularizeImportedElements(elements, unitsPerInch = 4) {
 }
 
 export function BlueprintApp({
-  showRecent = false, sampleRequested = false, onSampleOpened, onOpenWorkspace,
+  active = true, showRecent = false, sampleRequested = false, onSampleOpened, onOpenWorkspace,
 }) {
   const svgRef = useRef(null);
   const fileRef = useRef(null);
@@ -858,13 +872,16 @@ export function BlueprintApp({
   const panPointers = useRef(new Map());
   const pinch = useRef(null);
   const wallTap = useRef(null);
+  const dragRef = useRef(null);
+  const routeVersion = useRef(0);
+  const importPending = useRef(false);
   const { projects, setProjects, project, setProject, selectProject, hydrated, saveStatus, projectRef } =
     useProjectStore(() => emptyProject('Untitled project'));
-  const [ask, dialog] = useDialog();
+  const [ask, dialog, dismissDialog] = useDialog();
   const backupRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
-  const [mobilePanel, setMobilePanel] = useState(null);
+  const [editorPanel, setEditorPanel] = useState(null);
   const [phoneMode, setPhoneMode] = useState('view');
   const [compact, setCompact] = useState(() => window.matchMedia?.(COMPACT_LAYOUT).matches ?? false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -877,7 +894,6 @@ export function BlueprintApp({
   const [future, setFuture] = useState([]);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [drag, setDrag] = useState(null);
   const [status, setStatus] = useState('Ready');
   const [calibration, setCalibration] = useState(null);
   const [projectMenu, setProjectMenu] = useState(false);
@@ -899,40 +915,74 @@ export function BlueprintApp({
     if (!media) return;
     const update = () => {
       setCompact(media.matches);
-      wallTap.current = null;
-      setDraft(null);
-      setDrag(null);
-      if (!media.matches) setMobilePanel(null);
+      resetPointerInput();
+      setEditorPanel(null);
     };
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
   }, []);
 
-  const pushHistory = () => {
-    const snapshot = JSON.stringify(projectRef.current);
+  const pushHistory = (snapshot = projectRef.current) => {
     setHistory((h) => [...h.slice(-49), snapshot]);
     setFuture([]);
+  };
+
+  const finishDrag = (commit) => {
+    const before = dragRef.current?.before;
+    dragRef.current = null;
+    const current = projectRef.current;
+    if (!before || before.id !== current.id || before === current) return;
+    if (commit) pushHistory(before);
+    else setProject(before);
+  };
+
+  const resetPointerInput = () => {
+    finishDrag(false);
+    panPointers.current.clear();
+    pinch.current = null;
+    wallTap.current = null;
+    setDraft(null);
+  };
+
+  useEffect(() => {
+    routeVersion.current += 1;
+    if (active && !showRecent) return;
+    resetPointerInput();
+    setCalibration(null);
+    setMeasurement(null);
+    setEditorPanel(null);
+    setProjectMenu(false);
+    setExportMenu(false);
+    setImportOpen(false);
+    setHelpOpen(false);
+    dismissDialog();
+  }, [active, showRecent]);
+
+  const captureRoute = () => {
+    const hash = window.location.hash;
+    const version = routeVersion.current;
+    return () => window.location.hash === hash && routeVersion.current === version;
   };
 
   const updateProject = (fn) => setProject((p) => ({ ...fn(p), updatedAt: Date.now() }));
   const commitElement = (id, patch) => {
     const current = projectRef.current.elements.find((el) => el.id === id);
     if (!current || Object.entries(patch).every(([key, value]) => current[key] === value)) return;
+    if (Object.values(patch).some((value) => typeof value === 'number' && !isProjectNumber(value))) {
+      setStatus('Choose a smaller value');
+      return;
+    }
     pushHistory();
     updateElement(id, patch);
   };
   const changeTool = (next) => {
-    panPointers.current.clear();
-    pinch.current = null;
-    wallTap.current = null;
-    setDraft(null);
-    setDrag(null);
+    resetPointerInput();
     setCalibration(null);
     setMeasurement(null);
     setTool(next);
     if (next !== 'select' && next !== 'pan') setSelectedId(null);
     setPhoneMode(editorMode(next));
-    setMobilePanel(null);
+    setEditorPanel(null);
   };
 
   const addElement = (el) => {
@@ -961,10 +1011,12 @@ export function BlueprintApp({
     pushHistory();
     updateProject((p) => ({ ...p, elements: p.elements.filter((e) => e.id !== selectedId) }));
     setSelectedId(null);
+    if (editorPanel === 'properties') setEditorPanel(null);
+    setStatus('Object deleted · Undo to restore');
   };
 
   const clearAll = async () => {
-    setMobilePanel(null);
+    setEditorPanel(null);
     if (!project.background && project.elements.length === 0) return;
     if (
       !(await ask({
@@ -995,21 +1047,28 @@ export function BlueprintApp({
 
   const undo = () => {
     if (!history.length) return;
-    const previous = history[history.length - 1];
-    setFuture((f) => [JSON.stringify(project), ...f].slice(0, 50));
+    resetPointerInput();
+    setCalibration(null);
+    setMeasurement(null);
+    const snapshot = projectRef.current;
+    setFuture((f) => [snapshot, ...f].slice(0, 50));
     setHistory((h) => h.slice(0, -1));
-    setProject(JSON.parse(previous));
+    setProject({ ...history.at(-1), updatedAt: Date.now() });
     setSelectedId(null);
+    setStatus('Undid last change');
   };
 
   const redo = () => {
     if (!future.length) return;
-    const next = future[0];
-    const snapshot = JSON.stringify(projectRef.current);
+    resetPointerInput();
+    setCalibration(null);
+    setMeasurement(null);
+    const snapshot = projectRef.current;
     setHistory((h) => [...h, snapshot].slice(-50));
     setFuture((f) => f.slice(1));
-    setProject(JSON.parse(next));
+    setProject({ ...future[0], updatedAt: Date.now() });
     setSelectedId(null);
+    setStatus('Redid last change');
   };
 
   const copySelected = () => {
@@ -1019,9 +1078,15 @@ export function BlueprintApp({
   };
 
   const pasteCopied = () => {
-    if (!clipboardRef.current || projectRef.current.elements.length >= MAX_ELEMENTS) return;
+    const copied = clipboardRef.current;
+    const elements = projectRef.current.elements;
+    if (!copied || elements.length >= MAX_ELEMENTS) return;
+    if (copied.type === 'erase' && countBrushPoints(elements) + copied.points.length > MAX_BRUSH_POINTS) {
+      setStatus('Project brush limit reached');
+      return;
+    }
     pushHistory();
-    const clone = offsetElement(clipboardRef.current, 24);
+    const clone = offsetElement(copied, 24);
     updateProject((p) => ({ ...p, elements: [...p.elements, clone] }));
     setSelectedId(clone.id);
     setTool('select');
@@ -1031,7 +1096,9 @@ export function BlueprintApp({
   useEffect(() => {
     const onKey = (e) => {
       if (
+        !active ||
         showRecent ||
+        e.defaultPrevented ||
         document.querySelector('[role=dialog]') ||
         busy ||
         exporting ||
@@ -1042,6 +1109,7 @@ export function BlueprintApp({
       const typing =
         ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) ||
         document.activeElement?.isContentEditable;
+      const unmodified = !e.ctrlKey && !e.metaKey && !e.altKey;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) {
         e.preventDefault();
         e.shiftKey ? redo() : undo();
@@ -1050,11 +1118,11 @@ export function BlueprintApp({
         e.preventDefault();
         redo();
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !typing) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !typing && selected) {
         e.preventDefault();
         copySelected();
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !typing) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !typing && clipboardRef.current) {
         e.preventDefault();
         pasteCopied();
       }
@@ -1064,6 +1132,7 @@ export function BlueprintApp({
       }
       if (
         e.key.toLowerCase() === 'r' &&
+        unmodified &&
         !typing &&
         selected &&
         ['door', 'window', 'symbol'].includes(selected.type)
@@ -1074,15 +1143,13 @@ export function BlueprintApp({
         setStatus('Rotated 90°');
       }
       if (e.key === 'Escape') {
-        wallTap.current = null;
-        setDraft(null);
-        setDrag(null);
+        resetPointerInput();
         setSelectedId(null);
         setCalibration(null);
         setMeasurement(null);
         setProjectMenu(false);
       }
-      if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (!typing && unmodified) {
         const shortcuts = {
           v: 'select',
           h: 'pan',
@@ -1099,7 +1166,7 @@ export function BlueprintApp({
       }
     };
     const onPaste = (event) => {
-      if (!showRecent || busy || !hydrated || dialog) return;
+      if (!active || !showRecent || busy || !hydrated || dialog) return;
       const clipboard = event.clipboardData;
       const file = Array.from(clipboard?.files ?? []).find((item) =>
         CLIPBOARD_IMAGES.has(item.type),
@@ -1137,10 +1204,12 @@ export function BlueprintApp({
         : { id: e.pointerId, x: e.clientX, y: e.clientY };
       return;
     }
+    if (tool !== 'pan' && e.isPrimary === false) return;
     if (tool === 'pan') {
       const start = { x: e.clientX, y: e.clientY };
       if (e.pointerType === 'touch') {
         const pointers = panPointers.current;
+        if (pointers.size >= 2) return;
         pointers.set(e.pointerId, start);
         if (pointers.size === 2 && !pinch.current) {
           const [[first, a], [second, b]] = pointers;
@@ -1156,15 +1225,16 @@ export function BlueprintApp({
             centerX: bounds.left + bounds.width / 2,
             centerY: bounds.top + bounds.height / 2,
           };
-          setDrag(null);
+          dragRef.current = null;
         }
         if (pinch.current) return;
       }
-      setDrag({ kind: 'pan', start, pan });
+      dragRef.current = { kind: 'pan', pointerId: e.pointerId, start, pan };
       return;
     }
 
     const raw = clientToWorld(e);
+    if (!isProjectNumber(raw.x) || !isProjectNumber(raw.y)) return;
     const linePrecision = tool === 'line' && e.shiftKey;
     const point =
       linePrecision || tool === 'measure' || tool === 'dimension'
@@ -1173,7 +1243,6 @@ export function BlueprintApp({
 
     if (tool === 'select') {
       setSelectedId(null);
-      setDrag({ kind: 'marquee', start: point });
       return;
     }
 
@@ -1193,14 +1262,19 @@ export function BlueprintApp({
     }
 
     if (tool === 'erase') {
-      pushHistory();
+      const before = projectRef.current;
+      const maxPoints = Math.min(10000, MAX_BRUSH_POINTS - countBrushPoints(before.elements));
+      if (before.elements.length >= MAX_ELEMENTS || maxPoints <= 0) {
+        setStatus('Project brush limit reached');
+        return;
+      }
       const path = [{ ...raw }];
       const id = uid();
+      dragRef.current = { kind: 'erase', pointerId: e.pointerId, id, before, maxPoints };
       updateProject((p) => ({
         ...p,
         elements: [...p.elements, { id, type: 'erase', points: path, size: eraseSize }],
       }));
-      setDrag({ kind: 'erase', id });
       return;
     }
 
@@ -1291,6 +1365,8 @@ export function BlueprintApp({
       }
       return;
     }
+    if (tool !== 'pan' && e.isPrimary === false) return;
+    const drag = dragRef.current;
     if (tool === 'pan') {
       const pointers = panPointers.current;
       const gesture = pinch.current;
@@ -1309,7 +1385,7 @@ export function BlueprintApp({
             y: gesture.pan.y + (a.y + b.y) / 2 - gesture.y + shift * (gesture.y - gesture.centerY),
           });
         }
-      } else if (drag?.kind === 'pan') {
+      } else if (drag?.kind === 'pan' && drag.pointerId === e.pointerId) {
         setPan({
           x: drag.pan.x + e.clientX - drag.start.x,
           y: drag.pan.y + e.clientY - drag.start.y,
@@ -1317,8 +1393,13 @@ export function BlueprintApp({
       }
       return;
     }
+    if (drag && drag.pointerId !== e.pointerId) return;
+    if (!draft && !drag && calibration?.stage !== 1) return;
+    if (drag?.origin && drag.before === projectRef.current &&
+        Math.hypot(e.clientX - drag.origin.x, e.clientY - drag.origin.y) < DRAG_SLOP) return;
 
     const raw = clientToWorld(e);
+    if (!isProjectNumber(raw.x) || !isProjectNumber(raw.y)) return;
     const precisionWall = draft?.type === 'wall' && e.shiftKey;
     const precisionLine = draft?.type === 'line' && e.shiftKey;
     const drawingTarget = precisionLine ? raw : angleSnap(draft?.a || raw, raw);
@@ -1369,7 +1450,7 @@ export function BlueprintApp({
 
     if (drag?.kind === 'erase') {
       const stroke = projectRef.current.elements.find((el) => el.id === drag.id);
-      if (stroke && stroke.points.length < 10000 && dist(stroke.points.at(-1), raw) > 2)
+      if (stroke && stroke.points.length < drag.maxPoints && dist(stroke.points.at(-1), raw) > 2)
         updateProject((p) => ({
           ...p,
           elements: p.elements.map((el) =>
@@ -1377,26 +1458,24 @@ export function BlueprintApp({
           ),
         }));
     }
-    if (drag?.kind === 'move' && selected) {
+    if (drag?.kind === 'move') {
       const dx = raw.x - drag.start.x,
         dy = raw.y - drag.start.y;
       const base = drag.base;
-      if (selected.type === 'wall' || selected.type === 'dimension' || selected.type === 'line') {
-        updateElement(selected.id, {
-          a: { x: base.a.x + dx, y: base.a.y + dy },
-          b: { x: base.b.x + dx, y: base.b.y + dy },
+      if (base.type === 'wall' || base.type === 'dimension' || base.type === 'line') {
+        updateElement(base.id, {
+          a: translatePoint(base.a, dx, dy),
+          b: translatePoint(base.b, dx, dy),
         });
-      } else if (selected.type === 'rect') {
-        updateElement(selected.id, { x: base.x + dx, y: base.y + dy });
-      } else if (selected.type === 'erase') {
-        updateElement(selected.id, {
-          points: base.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
+      } else if (base.type === 'erase') {
+        updateElement(base.id, {
+          points: base.points.map((p) => translatePoint(p, dx, dy)),
         });
-      } else if (selected.type === 'door') {
-        const target = { x: base.x + dx, y: base.y + dy };
+      } else if (base.type === 'door') {
+        const target = translatePoint(base, dx, dy);
         const wallSnap = nearestWallSnap(target, project.elements, 30);
         updateElement(
-          selected.id,
+          base.id,
           wallSnap
             ? {
                 x: wallSnap.point.x,
@@ -1407,7 +1486,7 @@ export function BlueprintApp({
             : { x: target.x, y: target.y, rotation: base.rotation || 0, attachedWallId: null },
         );
       } else {
-        updateElement(selected.id, { x: base.x + dx, y: base.y + dy });
+        updateElement(base.id, translatePoint(base, dx, dy));
       }
     }
     if (drag?.kind === 'resize') {
@@ -1420,17 +1499,17 @@ export function BlueprintApp({
         const localY = dx * Math.sin(angle) + dy * Math.cos(angle);
         if (base.type === 'symbol') {
           updateElement(base.id, {
-            widthInches: Math.max(1, (Math.abs(localX) * 2) / project.unitsPerInch),
-            heightInches: Math.max(1, (Math.abs(localY) * 2) / project.unitsPerInch),
+            widthInches: clamp((Math.abs(localX) * 2) / project.unitsPerInch, 1, MAX_PROJECT_NUMBER),
+            heightInches: clamp((Math.abs(localY) * 2) / project.unitsPerInch, 1, MAX_PROJECT_NUMBER),
           });
         } else if (base.type === 'window') {
           updateElement(base.id, {
-            widthInches: Math.max(1, (Math.abs(localX) * 2) / project.unitsPerInch),
-            heightInches: Math.max(0.25, (Math.abs(localY) * 2) / project.unitsPerInch),
+            widthInches: clamp((Math.abs(localX) * 2) / project.unitsPerInch, 1, MAX_PROJECT_NUMBER),
+            heightInches: clamp((Math.abs(localY) * 2) / project.unitsPerInch, 0.25, MAX_PROJECT_NUMBER),
           });
         } else if (base.type === 'door') {
           updateElement(base.id, {
-            widthInches: Math.max(1, Math.abs(localX) / project.unitsPerInch),
+            widthInches: clamp(Math.abs(localX) / project.unitsPerInch, 1, MAX_PROJECT_NUMBER),
           });
         }
       }
@@ -1438,23 +1517,44 @@ export function BlueprintApp({
   };
 
   const cleanBackgroundRect = (rect) => {
-    pushHistory();
-    const cleaned = cleanElementsInRect(project.elements, rect, project.unitsPerInch);
+    const current = projectRef.current;
+    const cleaned = cleanElementsInRect(current.elements, rect, current.unitsPerInch);
+    if (cleaned.length >= MAX_ELEMENTS) {
+      setStatus('Project object limit reached');
+      return;
+    }
+    pushHistory(current);
     // A reversible white mask preserves the original background resolution.
     updateProject((p) => ({ ...p, elements: [...cleaned, { id: uid(), type: 'clean', ...rect }] }));
     setSelectedId(null);
     setStatus('Area cleaned · Undo to restore');
   };
 
+  const releasePanPointer = (pointerId) => {
+    const pointers = panPointers.current;
+    const tracked = pointers.delete(pointerId);
+    if (pinch.current && tracked) {
+      pinch.current = null;
+      const remaining = pointers.entries().next().value;
+      dragRef.current = remaining
+        ? { kind: 'pan', pointerId: remaining[0], start: remaining[1], pan }
+        : null;
+    } else if (dragRef.current?.pointerId === pointerId) dragRef.current = null;
+  };
+
   const handlePointerUp = (e) => {
-    if (e && svgRef.current?.hasPointerCapture(e.pointerId))
+    if (svgRef.current?.hasPointerCapture(e.pointerId))
       svgRef.current.releasePointerCapture(e.pointerId);
-    if (e) panPointers.current.delete(e.pointerId);
-    if (!panPointers.current.size) pinch.current = null;
+    if (tool === 'pan') {
+      releasePanPointer(e.pointerId);
+      return;
+    }
+    if (e.isPrimary === false) return;
     if (useWallTaps) {
       const tap = wallTap.current;
+      if (!tap || tap.id !== e.pointerId) return;
       wallTap.current = null;
-      if (!e || !tap || tap.id !== e.pointerId || busy || exporting ||
+      if (busy || exporting ||
           Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > TAP_SLOP) return;
       const point = clientToWorld(e);
       if (!Number.isFinite(point.x) || !Number.isFinite(point.y) ||
@@ -1472,8 +1572,11 @@ export function BlueprintApp({
       }
       return;
     }
-    if (draft?.type === 'wall' && dist(draft.a, draft.b) > 3)
+    if (dragRef.current && dragRef.current.pointerId !== e.pointerId) return;
+    if (draft?.type === 'wall' && dist(draft.a, draft.b) > 3) {
+      setStatus('Wall added');
       addElement({ type: 'wall', a: draft.a, b: draft.b, thicknessInches: 4.5 });
+    }
     if (draft?.type === 'line' && dist(draft.a, draft.b) > 3)
       addElement({ type: 'line', a: draft.a, b: draft.b, strokeWidth: 2 });
     if (draft?.type === 'rect') {
@@ -1498,31 +1601,52 @@ export function BlueprintApp({
       if (width > 3 && height > 3) cleanBackgroundRect({ x, y, width, height });
     }
     setDraft(null);
-    setDrag(null);
+    finishDrag(true);
+  };
+
+  const handlePointerCancel = (e) => {
+    if (tool === 'pan') {
+      releasePanPointer(e.pointerId);
+    } else if (useWallTaps) {
+      if (wallTap.current?.id === e.pointerId) wallTap.current = null;
+    } else if (e.isPrimary !== false && (!dragRef.current || dragRef.current.pointerId === e.pointerId)) {
+      resetPointerInput();
+    }
   };
 
   const startMove = (e, el) => {
-    if (tool !== 'select' || busy || exporting) return;
+    if (e.button !== 0 || e.isPrimary === false || tool !== 'select' || busy || exporting) return;
     svgRef.current.setPointerCapture(e.pointerId);
     e.stopPropagation();
     setSelectedId(el.id);
-    const p = clientToWorld(e);
-    pushHistory();
-    setDrag({ kind: 'move', start: p, base: JSON.parse(JSON.stringify(el)) });
+    dragRef.current = {
+      kind: 'move',
+      pointerId: e.pointerId,
+      origin: { x: e.clientX, y: e.clientY },
+      start: clientToWorld(e),
+      base: el,
+      before: projectRef.current,
+    };
   };
 
   const startResize = (e, el, handle = 'corner') => {
-    if (tool !== 'select' || busy || exporting) return;
+    if (e.button !== 0 || e.isPrimary === false || tool !== 'select' || busy || exporting) return;
     svgRef.current.setPointerCapture(e.pointerId);
     e.preventDefault();
     e.stopPropagation();
     setSelectedId(el.id);
-    pushHistory();
-    setDrag({ kind: 'resize', base: JSON.parse(JSON.stringify(el)), handle });
+    dragRef.current = {
+      kind: 'resize',
+      pointerId: e.pointerId,
+      origin: { x: e.clientX, y: e.clientY },
+      base: el,
+      before: projectRef.current,
+      handle,
+    };
   };
 
   async function handleImport(file) {
-    if (!file || busy) return;
+    if (!file || busy || importPending.current || !active || !hydrated) return;
     if (file.size > MAX_FILE_BYTES) {
       await ask({
         title: 'File is too large',
@@ -1540,7 +1664,9 @@ export function BlueprintApp({
       return;
     }
     const target = projectRef.current;
+    const onSamePage = captureRoute();
     let pdf, objectUrl;
+    importPending.current = true;
     setBusy(true);
     try {
       if (
@@ -1555,12 +1681,14 @@ export function BlueprintApp({
         }))
       )
         return;
+      if (!onSamePage()) return;
       setStatus('Importing plan…');
       let dataUrl,
         pageNumber = 1;
       if (/\.pdf$/i.test(file.name)) {
         pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false })
           .promise;
+        if (!onSamePage()) return;
         if (pdf.numPages > 1) {
           const choice = await ask({
             title: 'Choose a PDF page',
@@ -1599,7 +1727,7 @@ export function BlueprintApp({
           throw new Error('Choose an image smaller than 40 megapixels.');
         dataUrl = fitRasterToWorkspace(img);
       }
-      if (projectRef.current.id !== target.id) return;
+      if (!onSamePage() || projectRef.current.id !== target.id) return;
       const background = {
         background: dataUrl,
         showBackground: true,
@@ -1617,6 +1745,7 @@ export function BlueprintApp({
       setStatus(`Plan imported${pdf ? ` · page ${pageNumber}` : ''} · set scale next`);
       changeTool('calibrate');
     } catch (err) {
+      if (!onSamePage()) return;
       setStatus('Import failed');
       await ask({
         title: 'Could not import this file',
@@ -1633,16 +1762,21 @@ export function BlueprintApp({
         /* Release UI state even if the worker has already stopped. */
       }
       if (objectUrl) URL.revokeObjectURL(objectUrl);
+      importPending.current = false;
       setBusy(false);
     }
   }
 
   const restoreProject = async (file) => {
-    if (!file) return;
+    if (!file || busy || importPending.current || !active || !hydrated) return;
+    const onSamePage = captureRoute();
+    importPending.current = true;
+    setBusy(true);
     try {
       if (file.size > MAX_FILE_BYTES * 1.5)
         throw new Error('Choose a project backup smaller than 37.5 MB.');
       const content = JSON.parse(await file.text());
+      if (!onSamePage()) return;
       if (content.format !== 'blueprint-studio-project' || content.version !== 1)
         throw new Error('Choose a PlanPatch .json backup.');
       const restored = validateProject(content.project);
@@ -1652,7 +1786,12 @@ export function BlueprintApp({
       onOpenWorkspace?.();
       setStatus('Backup restored as a new project');
     } catch (err) {
-      await ask({ title: 'Could not restore project', message: err.message, type: 'notice' });
+      if (onSamePage()) {
+        await ask({ title: 'Could not restore project', message: err.message, type: 'notice' });
+      }
+    } finally {
+      importPending.current = false;
+      setBusy(false);
     }
   };
   const backupProject = () => {
@@ -1672,7 +1811,7 @@ export function BlueprintApp({
     setStatus('Project backup downloaded');
   };
   const openLockedImport = () => {
-    setMobilePanel(null);
+    setEditorPanel(null);
     setImportOpen(true);
     setImportError('');
   };
@@ -1732,8 +1871,8 @@ export function BlueprintApp({
 
   const exportRaster = async (kind = 'png') => {
     if (exporting || busy) return;
+    const onSamePage = captureRoute();
     let svgUrl = null;
-    let pngUrl = null;
     try {
       const layout =
         kind === 'pdf'
@@ -1750,6 +1889,7 @@ export function BlueprintApp({
       // Give React a frame to render the clean export state without selection handles,
       // temporary measurements, calibration marks, or an in-progress drawing.
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      if (!onSamePage()) return;
 
       const svg = svgRef.current;
       if (!svg) throw new Error('Blueprint canvas is not available.');
@@ -1831,27 +1971,21 @@ export function BlueprintApp({
             1,
           );
         });
-        pngUrl = URL.createObjectURL(pngBlob);
-        const a = document.createElement('a');
-        a.href = pngUrl;
-        a.download = `${safeName}.png`;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        downloadBlob(pngBlob, `${safeName}.png`);
         setStatus('PNG exported');
       }
     } catch (err) {
       console.error('Export failed', err);
       setStatus('Export failed');
-      await ask({
-        title: 'Export needs attention',
-        message: err?.message || 'Try again or download a project backup.',
-        type: 'notice',
-      });
+      if (onSamePage()) {
+        await ask({
+          title: 'Export needs attention',
+          message: err?.message || 'Try again or download a project backup.',
+          type: 'notice',
+        });
+      }
     } finally {
       if (svgUrl) URL.revokeObjectURL(svgUrl);
-      if (pngUrl) setTimeout(() => URL.revokeObjectURL(pngUrl), 1500);
       setExporting(false);
     }
   };
@@ -1887,9 +2021,7 @@ export function BlueprintApp({
   };
 
   const chooseProject = (p, addToRecent = true) => {
-    panPointers.current.clear();
-    pinch.current = null;
-    wallTap.current = null;
+    resetPointerInput();
     if (addToRecent) setProject(p);
     else selectProject(p);
     setSelectedId(null);
@@ -1899,13 +2031,11 @@ export function BlueprintApp({
     setExportMenu(false);
     setImportOpen(false);
     setHelpOpen(false);
-    setDraft(null);
-    setDrag(null);
     setCalibration(null);
     setMeasurement(null);
     setTool(compact ? 'pan' : 'select');
     setPhoneMode('view');
-    setMobilePanel(null);
+    setEditorPanel(null);
     setZoom(1);
     setPan({ x: 0, y: 0 });
   };
@@ -1941,17 +2071,20 @@ export function BlueprintApp({
     const inches = parseLengthInput(value);
     if (!(inches > 0) || !Number.isFinite(inches)) {
       setStatus('Enter a valid positive length');
-      return;
+      return false;
     }
     if (Math.abs(inches - wallLengthInches) < 0.001) return;
-    pushHistory();
     const a = selected.a,
       b = selected.b;
     const angle = Math.atan2(b.y - a.y, b.x - a.x);
     const units = inches * project.unitsPerInch;
-    updateElement(selected.id, {
-      b: { x: a.x + Math.cos(angle) * units, y: a.y + Math.sin(angle) * units },
-    });
+    const end = { x: a.x + Math.cos(angle) * units, y: a.y + Math.sin(angle) * units };
+    if (!isProjectNumber(end.x) || !isProjectNumber(end.y)) {
+      setStatus('Choose a shorter wall length');
+      return false;
+    }
+    pushHistory();
+    updateElement(selected.id, { b: end });
   };
 
   const finishCalibration = async () => {
@@ -1991,10 +2124,10 @@ export function BlueprintApp({
     }
 
     const nextUnitsPerInch = canvasDistance / inches;
-    if (!Number.isFinite(nextUnitsPerInch) || nextUnitsPerInch <= 0) {
+    if (!isProjectScale(nextUnitsPerInch)) {
       await ask({
         title: 'Could not set scale',
-        message: 'Choose two different points and enter a positive distance.',
+        message: 'Use two different points and enter a realistic distance, such as 120 inches.',
         type: 'notice',
       });
       setStatus('Blueprint scale not changed');
@@ -2010,6 +2143,25 @@ export function BlueprintApp({
 
   const wallLengthInches =
     selected?.type === 'wall' ? dist(selected.a, selected.b) / project.unitsPerInch : null;
+
+  const eraserControl = (
+    <>
+      <ToolButton tool={tool} id="erase" setTool={changeTool} label="Erase background" />
+      {tool === 'erase' && (
+        <label className="brushControl">
+          <span>Brush size <strong>{eraseSize}px</strong></span>
+          <input
+            type="range"
+            min="8"
+            max="120"
+            step="2"
+            value={eraseSize}
+            onChange={(e) => setEraseSize(Number(e.target.value))}
+          />
+        </label>
+      )}
+    </>
+  );
 
   const toolPalette = (
     <>
@@ -2033,20 +2185,7 @@ export function BlueprintApp({
       </Section>
       <Section title="Clean up">
         <ToolButton tool={tool} id="clean" setTool={changeTool} label="Clean area" />
-        <ToolButton tool={tool} id="erase" setTool={changeTool} label="Erase background" />
-        {tool === 'erase' && (
-          <label className="brushControl">
-            <span>Brush size <strong>{eraseSize}px</strong></span>
-            <input
-              type="range"
-              min="8"
-              max="120"
-              step="2"
-              value={eraseSize}
-              onChange={(e) => setEraseSize(Number(e.target.value))}
-            />
-          </label>
-        )}
+        {eraserControl}
       </Section>
     </>
   );
@@ -2065,27 +2204,34 @@ export function BlueprintApp({
 
   const planSettings = (
     <>
-      <label className="field">
-        <span>Background opacity</span>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.05"
-          value={project.backgroundOpacity}
-          onChange={(e) =>
-            updateProject((p) => ({ ...p, backgroundOpacity: Number(e.target.value) }))
-          }
-        />
-      </label>
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={project.showBackground}
-          onChange={(e) => updateProject((p) => ({ ...p, showBackground: e.target.checked }))}
-        />{' '}
-        Show imported blueprint
-      </label>
+      {project.background && (
+        <div className="backgroundSettings">
+          <label className="field">
+            <span>Background opacity</span>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={project.backgroundOpacity}
+              onChange={(e) =>
+                updateProject((p) => ({ ...p, backgroundOpacity: Number(e.target.value) }))
+              }
+            />
+          </label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={project.showBackground}
+              onChange={(e) => {
+                pushHistory();
+                updateProject((p) => ({ ...p, showBackground: e.target.checked }));
+              }}
+            />{' '}
+            Show imported blueprint
+          </label>
+        </div>
+      )}
       <div className="metric">
         <span>Scale</span>
         <strong>{project.calibrated ? 'Calibrated' : 'Not set'}</strong>
@@ -2093,24 +2239,22 @@ export function BlueprintApp({
       <button className="wide" onClick={() => changeTool('calibrate')}>
         <Icon name="calibrate" /> Set blueprint scale
       </button>
-      <div className="hint">
-        Use a known distance to calibrate. Check dimensions against the actual site before using
-        a revision.
-      </div>
-      <div className="projectUtilities">
-        <button className="wide" onClick={backupProject}>
-          <Icon name="download" /> Download backup
-        </button>
-        <button className="wide subtle" onClick={openLockedImport}>
-          Advanced JSON import
-        </button>
-        <button className="wide danger" onClick={clearAll}>
-          Clear drawing
-        </button>
-        <p className="hint">
-          Projects are saved in this browser. Download a backup before clearing browser data.
-        </p>
-      </div>
+      <p className="hint">Use a known distance to set the scale.</p>
+      <details className="projectUtilities">
+        <summary>Project actions</summary>
+        <div className="projectUtilityButtons">
+          <button className="wide" onClick={backupProject}>
+            <Icon name="download" /> Download backup
+          </button>
+          <button className="wide subtle" onClick={openLockedImport}>
+            Advanced JSON import
+          </button>
+          <button className="wide danger" onClick={clearAll}>
+            Clear drawing
+          </button>
+          <p className="hint">Download a backup before clearing browser data.</p>
+        </div>
+      </details>
     </>
   );
 
@@ -2178,7 +2322,7 @@ export function BlueprintApp({
 
   return (
     <div className={`app${compact ? ' compactEditor' : ''}`}>
-      <header className="topbar">
+      <div className="topbar" role="group" aria-label="Project controls">
         <a className="recentBack" href="#/editor" aria-label="Recent plans">
           <Icon name="back" /> <span>Recent plans</span>
         </a>
@@ -2233,9 +2377,6 @@ export function BlueprintApp({
                     </button>
                   </>
                 )}
-                <a className="projectHome" href="#/" onClick={() => setProjectMenu(false)}>
-                  <Icon name="back" /> {PRODUCT_NAME} home
-                </a>
                 <div className="projectMenuDivider" />
                 {projects.map((p) => (
                   <div className="projectRow" key={p.id}>
@@ -2301,7 +2442,7 @@ export function BlueprintApp({
             <Icon name="help" />
           </button>
         </div>
-      </header>
+      </div>
       {fileInputs}
       <div className="workspace">
         {!compact && <aside className="sidebar leftbar" aria-label="Drawing tools">{toolPalette}</aside>}
@@ -2333,7 +2474,7 @@ export function BlueprintApp({
           )}
           {busy && (
             <div className="canvasBusy" role="status">
-              Importing your plan…
+              Opening your plan…
             </div>
           )}
           <div
@@ -2348,16 +2489,7 @@ export function BlueprintApp({
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
-              onPointerCancel={(e) => {
-                if (useWallTaps) {
-                  if (wallTap.current?.id === e.pointerId) wallTap.current = null;
-                  return;
-                }
-                panPointers.current.delete(e.pointerId);
-                if (!panPointers.current.size) pinch.current = null;
-                setDraft(null);
-                setDrag(null);
-              }}
+              onPointerCancel={handlePointerCancel}
             >
               <defs>
                 <pattern id="smallGrid" width={GRID} height={GRID} patternUnits="userSpaceOnUse">
@@ -2504,9 +2636,13 @@ export function BlueprintApp({
           <aside className="sidebar properties" aria-label="Object and plan settings">
             <h3>Object properties</h3>
             {objectProperties}
-            <hr />
-            <h3>Plan settings</h3>
-            {planSettings}
+            <button
+              className="wide planSettingsButton"
+              aria-haspopup="dialog"
+              onClick={() => setEditorPanel('settings')}
+            >
+              <Icon name="settings" /> Plan settings
+            </button>
           </aside>
         )}
       </div>
@@ -2520,7 +2656,7 @@ export function BlueprintApp({
           onCancelWall={awaitingWallEnd ? () => changeTool('wall') : undefined}
           canSetDistance={calibration?.stage === 2}
           onTool={changeTool}
-          onOpen={setMobilePanel}
+          onOpen={setEditorPanel}
           onSetDistance={finishCalibration}
         />
       )}
@@ -2531,22 +2667,28 @@ export function BlueprintApp({
           {project.calibrated ? 'Calibrated' : 'Set scale for measurements'}
         </span>
       </footer>
-      {compact && mobilePanel && (
+      {editorPanel && (
         <Modal
-          title={SHEET_TITLES[mobilePanel]}
-          className={`editorSheet ${mobilePanel === 'settings' || mobilePanel === 'properties' ? 'properties' : ''}`}
-          placement="bottom"
-          onClose={() => setMobilePanel(null)}
+          title={PANEL_TITLES[editorPanel]}
+          className="toolDialog"
+          onClose={() => setEditorPanel(null)}
         >
-          {mobilePanel === 'doors' && (
+          {editorPanel === 'doors' && (
             <div className="sheetTools"><ToolChoices choices={DOORS} tool={tool} setTool={changeTool} /></div>
           )}
-          {mobilePanel === 'fixtures' && (
+          {editorPanel === 'fixtures' && (
             <div className="sheetTools"><ToolChoices choices={FIXTURES} tool={tool} setTool={changeTool} /></div>
           )}
-          {mobilePanel === 'properties' && objectProperties}
-          {mobilePanel === 'settings' && planSettings}
-          {mobilePanel === 'tools' && toolPalette}
+          {editorPanel === 'properties' && objectProperties}
+          {editorPanel === 'settings' && planSettings}
+          {editorPanel === 'tools' && (
+            <>
+              <Section title="Draw">
+                <ToolChoices choices={[...OTHER_DRAW_TOOLS, ['text', 'Text']]} tool={tool} setTool={changeTool} />
+              </Section>
+              <Section title="Clean up">{eraserControl}</Section>
+            </>
+          )}
         </Modal>
       )}
       {dialog}
@@ -2584,7 +2726,6 @@ export function BlueprintApp({
         <Modal
           title="Export plan"
           onClose={() => setExportMenu(false)}
-          placement={compact ? 'bottom' : 'center'}
         >
           <details className="printSettings">
             <summary>PDF print settings</summary>
@@ -3433,7 +3574,7 @@ function symbolLabel(symbol) {
   );
 }
 
-function NumberInput({ value, onCommit, min = -Infinity, max = Infinity, step = 'any' }) {
+function NumberInput({ value, onCommit, min = -MAX_PROJECT_NUMBER, max = MAX_PROJECT_NUMBER, step = 'any' }) {
   const [text, setText] = useState(String(value ?? ''));
   useEffect(() => {
     setText(String(value ?? ''));
@@ -3486,7 +3627,10 @@ function Properties({
               key={selected.id + fmt(wallLengthInches)}
               defaultValue={inchesLabel(wallLengthInches)}
               placeholder={`8' 10" or 106`}
-              onBlur={(e) => applyExactLength(e.target.value)}
+              onBlur={(e) => {
+                if (applyExactLength(e.target.value) === false)
+                  e.target.value = inchesLabel(wallLengthInches);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') e.currentTarget.blur();
               }}
@@ -3506,8 +3650,7 @@ function Properties({
             <strong>{inchesLabel(wallLengthInches)}</strong>
           </div>
           <div className="hint compactHint">
-            Edit walls here with exact numbers. Canvas corner/end resize handles stay disabled so
-            the wall is not cluttered or accidentally distorted.
+            Enter inches or feet and inches to set the wall length.
           </div>
         </>
       )}

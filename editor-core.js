@@ -2,6 +2,16 @@ export const WIDTH = 1600;
 export const HEIGHT = 1000;
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 export const MAX_ELEMENTS = 5000;
+export const MAX_BRUSH_POINTS = 100000;
+export const MAX_PROJECT_NUMBER = 1e7;
+
+export function isProjectScale(value) {
+  return Number.isFinite(value) && value > 0 && value <= 1e5;
+}
+
+export function isProjectNumber(value) {
+  return Number.isFinite(value) && Math.abs(value) <= MAX_PROJECT_NUMBER;
+}
 
 export function clientToWorkspace(clientX, clientY, rect) {
   // SVG's default xMidYMid meet adds letterboxing when a short viewport
@@ -96,15 +106,14 @@ const symbols = new Set([
   'stairs',
 ]);
 const styles = new Set(['single-left', 'single-right', 'double', 'pocket', 'sliding', 'bifold']);
-const finite = (n) => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 1e7;
-const point = (p) => p && finite(p.x) && finite(p.y);
+const point = (p) => p && isProjectNumber(p.x) && isProjectNumber(p.y);
 
 export function validateProject(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data))
     throw new Error('This is not a Blueprint Studio project.');
   if (!Array.isArray(data.elements) || data.elements.length > MAX_ELEMENTS)
     throw new Error(`A project can contain up to ${MAX_ELEMENTS.toLocaleString()} objects.`);
-  if (!Number.isFinite(data.unitsPerInch) || data.unitsPerInch <= 0 || data.unitsPerInch > 1e5)
+  if (!isProjectScale(data.unitsPerInch))
     throw new Error('The project has an invalid measurement scale.');
   if (
     data.background != null &&
@@ -131,7 +140,7 @@ export function validateProject(data) {
       'rx',
       'ry',
     ]) {
-      if (el[key] !== undefined && !finite(el[key]))
+      if (el[key] !== undefined && !isProjectNumber(el[key]))
         throw new Error('An object contains an invalid number.');
     }
     for (const key of [
@@ -154,7 +163,7 @@ export function validateProject(data) {
       if (!Array.isArray(el.points) || !el.points.length || !el.points.every(point))
         throw new Error('An erase stroke is invalid.');
       points += el.points.length;
-      if (points > 100000) throw new Error('This project contains too many brush points.');
+      if (points > MAX_BRUSH_POINTS) throw new Error('This project contains too many brush points.');
     } else if (!point(el)) throw new Error('An object has invalid coordinates.');
     if (el.type === 'symbol' && !symbols.has(el.symbol)) throw new Error('Unknown fixture.');
     if (el.type === 'door' && el.doorStyle && !styles.has(el.doorStyle))
@@ -180,7 +189,7 @@ export function validateProject(data) {
     ),
     showBackground: data.showBackground !== false,
     createdAt: Number.isFinite(data.createdAt) ? data.createdAt : Date.now(),
-    updatedAt: Date.now(),
+    updatedAt: Number.isFinite(data.updatedAt) ? data.updatedAt : Date.now(),
   };
 }
 

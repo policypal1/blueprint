@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -145,6 +145,7 @@ globalThis.__pdfDocument = () => ({
 const React = (await import('react')).default;
 const { render, fireEvent, screen, within, waitFor, act, cleanup } =
   await import('@testing-library/react');
+afterEach(cleanup);
 const { default: Editor } = await import('../.test-build/editor.mjs');
 const { default: Marketing } = await import('../.test-build/marketing.mjs');
 const { default: Root } = await import('../.test-build/root.mjs');
@@ -253,7 +254,11 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
   fireEvent.click(document.querySelector('.projectButton'));
   click('button', 'Regression A');
   assert.equal(count(), 2);
+  click('button', 'Plan settings');
+  assert.equal(screen.queryByLabelText('Show imported blueprint'), null);
+  fireEvent.click(screen.getByText('Project actions'));
   click('button', 'Download backup');
+  click('button', 'Close dialog');
   assert.ok(downloads.at(-1).name.endsWith('.blueprint.json'));
   const backup = JSON.parse(await downloads.at(-1).blob.text());
   assert.equal(backup.project.elements.length, 2);
@@ -269,6 +274,7 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
   await screen.findByRole('dialog', { name: 'Could not restore project' });
   click('button', 'Continue');
   assert.equal(count(), 2);
+  await waitFor(() => assert.equal(screen.getByRole('button', { name: 'Import plan' }).disabled, false));
   // Restoring creates a new project rather than overwriting the original.
   fireEvent.change(inputs[1], {
     target: { files: [{ size: 100, text: async () => JSON.stringify(backup) }] },
@@ -301,6 +307,27 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
   fireEvent.change(screen.getByLabelText('Known distance'), { target: { value: '100' } });
   click('button', 'Set scale');
   await waitFor(() => assert.ok(screen.getByText('Scale calibrated')));
+  click('button', 'Plan settings');
+  fireEvent.click(screen.getByLabelText('Show imported blueprint'));
+  assert.equal(svg().querySelector('image'), null);
+  click('button', 'Close dialog');
+  click('button', 'Undo');
+  assert.ok(svg().querySelector('image'));
+
+  click('button', 'Plan settings');
+  fireEvent.click(screen.getByText('Project actions'));
+  click('button', 'Clear drawing');
+  click('button', 'Cancel');
+  assert.equal(count(), 2);
+  click('button', 'Plan settings');
+  fireEvent.click(screen.getByText('Project actions'));
+  click('button', 'Clear drawing');
+  click('button', 'Clear drawing');
+  await waitFor(() => assert.equal(count(), 0));
+  click('button', 'Undo');
+  assert.equal(count(), 2);
+  assert.ok(svg().querySelector('image'));
+
   click('button', 'Toggle grid');
   assert.ok(svg().querySelector('[data-editor-only]'));
   click('button', 'Export');
@@ -376,12 +403,172 @@ test('phone editor reaches the core drawing tools and keeps pinch gestures in Vi
     });
     assert.ok(screen.getByText('150%'));
     fireEvent.pointerUp(svg(), { pointerId: 2, pointerType: 'touch' });
+    const canvasStyle = () => document.querySelector('.canvasChrome').style.transform;
+    const afterPinch = canvasStyle();
+    fireEvent.pointerMove(svg(), {
+      clientX: 910, clientY: 410, pointerId: 3, pointerType: 'touch',
+    });
+    assert.notEqual(canvasStyle(), afterPinch);
     fireEvent.pointerUp(svg(), { pointerId: 3, pointerType: 'touch' });
     assert.equal(count(), 3);
+
+    click('button', 'Fit');
+    click('button', 'Edit');
+    tap(150, 640);
+    assert.ok(svg().querySelector('[data-wall-start]'));
+    click('button', 'Undo');
+    assert.equal(count(), 2);
+    assert.equal(svg().querySelector('[data-wall-start]'), null);
+    fireEvent.click(document.querySelector('.projectButton'));
+    click('button', 'Redo');
+    assert.equal(count(), 3);
+
+    click('button', 'More');
+    const tools = within(screen.getByRole('dialog', { name: 'More tools' }));
+    assert.ok(tools.getByRole('button', { name: 'Window' }));
+    assert.ok(tools.getByRole('button', { name: 'Erase background' }));
+    assert.equal(tools.queryByRole('button', { name: 'Wall' }), null);
+    click('button', 'Window');
+    tap(310, 200);
+    assert.equal(count(), 4);
+    click('button', 'Measure');
+    assert.ok(screen.getByRole('button', { name: 'Distance' }));
+
     await waitSaved();
   } finally {
     cleanup();
     window.matchMedia = previousMedia;
+  }
+});
+
+test('selecting, cancelling a move, and cancelling an erase preserve redo', async () => {
+  render(React.createElement(Editor));
+  try {
+    await waitSaved();
+    await newProject('Interrupted gestures');
+    click('button', 'Wall');
+    draw(200, 200, 600, 200);
+    draw(200, 400, 600, 400);
+    click('button', 'Undo');
+    assert.equal(count(), 1);
+    click('button', 'Select');
+    const wall = () => svg().querySelector('line[stroke="#000"]');
+    const start = { button: 0, clientX: 400, clientY: 200, pointerId: 7 };
+    fireEvent.pointerDown(wall(), start);
+    fireEvent.pointerUp(svg(), start);
+    assert.equal(screen.getByRole('button', { name: 'Redo' }).disabled, false);
+
+    fireEvent.pointerDown(wall(), start);
+    fireEvent.pointerMove(svg(), { ...start, clientY: 250 });
+    assert.equal(wall().getAttribute('y1'), '250');
+    fireEvent.pointerCancel(svg(), { pointerId: 7 });
+    assert.equal(wall().getAttribute('y1'), '200');
+
+    click('button', 'Erase background');
+    fireEvent.pointerDown(svg(), start);
+    fireEvent.pointerMove(svg(), { ...start, clientX: 450 });
+    fireEvent.pointerCancel(svg(), { pointerId: 7 });
+    assert.equal(count(), 1);
+    click('button', 'Redo');
+    assert.equal(count(), 2);
+
+    click('button', 'Select');
+    fireEvent.pointerDown(wall(), start);
+    fireEvent.pointerMove(svg(), { ...start, clientY: 280 });
+    fireEvent.pointerUp(svg(), { ...start, clientY: 280 });
+    assert.equal(wall().getAttribute('y1'), '280');
+    click('button', 'Undo');
+    assert.equal(wall().getAttribute('y1'), '200');
+    assert.equal(count(), 2);
+    await waitSaved();
+  } finally {
+    cleanup();
+  }
+});
+
+test('reload shortcuts leave selected objects alone and plain R rotates them', async () => {
+  render(React.createElement(Editor));
+  try {
+    await waitSaved();
+    await newProject('Keyboard controls');
+    click('button', 'Sink');
+    tap(400, 300);
+    const rotation = () => screen.getByLabelText('Rotation (degrees)').value;
+    assert.equal(rotation(), '0');
+    assert.equal(fireEvent.keyDown(window, { key: 'r', ctrlKey: true }), true);
+    assert.equal(fireEvent.keyDown(window, { key: 'r', metaKey: true }), true);
+    assert.equal(rotation(), '0');
+    fireEvent.keyDown(window, { key: 'r' });
+    assert.equal(rotation(), '90');
+    click('button', 'Undo');
+    assert.equal(count(), 1);
+    await waitSaved();
+  } finally {
+    cleanup();
+  }
+});
+
+test('all door and fixture choices place objects and copy, delete, and undo stay consistent', async () => {
+  render(React.createElement(Editor));
+  await waitSaved();
+  await newProject('Tool choices');
+  const doors = ['Single left', 'Single right', 'Double', 'Pocket', 'Sliding', 'Bifold'];
+  const fixtures = ['Toilet', 'Sink', 'Shower', 'Bathtub', 'Bed', 'Water heater', 'Washer / dryer', 'Counter', 'Stove'];
+  const choices = [...doors, ...fixtures];
+  for (const [index, choice] of choices.entries()) {
+    click('button', choice);
+    tap(180 + (index % 5) * 250, 200 + Math.floor(index / 5) * 260);
+    assert.equal(count(), index + 1, choice);
+  }
+  fireEvent.keyDown(window, { key: 'c', ctrlKey: true });
+  fireEvent.keyDown(window, { key: 'v', ctrlKey: true });
+  assert.equal(count(), choices.length + 1);
+  click('button', 'Delete selected');
+  assert.equal(count(), choices.length);
+  click('button', 'Undo');
+  assert.equal(count(), choices.length + 1);
+  click('button', 'Export');
+  click('button', 'Project backup');
+  const { project } = JSON.parse(await downloads.at(-1).blob.text());
+  assert.equal(new Set(project.elements.map((el) => el.id)).size, choices.length + 1);
+  assert.equal(project.elements.filter((el) => el.type === 'door').length, doors.length);
+  assert.equal(project.elements.filter((el) => el.type === 'symbol').length, fixtures.length + 1);
+  await waitSaved();
+});
+
+test('out-of-range measurements cannot make a project fail to reopen', async () => {
+  render(React.createElement(Editor));
+  try {
+    await waitSaved();
+    await newProject('Measurement limits');
+    click('button', 'Wall');
+    draw(200, 200, 600, 200);
+    click('button', 'Select');
+    const wall = svg().querySelector('line[stroke="#000"]');
+    fireEvent.pointerDown(wall, { button: 0, clientX: 400, clientY: 200, pointerId: 2 });
+    fireEvent.pointerUp(svg(), { pointerId: 2 });
+    const length = screen.getByLabelText('Exact wall length');
+    fireEvent.change(length, { target: { value: '10000000' } });
+    fireEvent.blur(length);
+    assert.equal(wall.getAttribute('x2'), '600');
+
+    click('button', 'Set scale');
+    tap(200, 300);
+    tap(600, 300);
+    click('button', 'Set real distance');
+    fireEvent.change(screen.getByLabelText('Known distance'), { target: { value: '0.000001' } });
+    click('button', 'Set scale');
+    await screen.findByRole('dialog', { name: 'Could not set scale' });
+    click('button', 'Continue');
+    assert.ok(screen.getByText('Scale not calibrated'));
+    await waitSaved();
+    cleanup();
+    render(React.createElement(Editor));
+    await waitSaved();
+    assert.equal(document.querySelector('.projectButton').textContent, 'Measurement limits');
+    assert.equal(count(), 1);
+  } finally {
+    cleanup();
   }
 });
 
@@ -390,6 +577,7 @@ test('reopening shows saved plans and uploading from the list creates a new plan
   render(React.createElement(Root));
   await screen.findByRole('heading', { name: 'Recent plans' });
   await waitSaved();
+  assert.ok(within(screen.getByRole('banner')).getByRole('link', { name: 'PlanPatch home' }));
   assert.equal(window.location.hash, '#/editor');
   assert.equal(screen.queryByRole('button', { name: 'Restore backup' }), null);
   assert.ok(screen.getByRole('button', { name: 'Try a sample plan' }));
@@ -398,6 +586,7 @@ test('reopening shows saved plans and uploading from the list creates a new plan
   fireEvent.change(screen.getByLabelText('Project name'), { target: { value: 'Kitchen revision' } });
   click('button', 'Create project');
   await screen.findByRole('main', { name: 'Drawing workspace' });
+  assert.ok(within(screen.getByRole('banner')).getByRole('link', { name: 'PlanPatch home' }));
   click('button', 'Wall');
   draw(200, 200, 600, 200);
   assert.equal(count(), 1);
@@ -445,4 +634,48 @@ test('reopening shows saved plans and uploading from the list creates a new plan
   assert.equal(count(), 0);
   await waitSaved();
   cleanup();
+});
+
+test('leaving Recent plans during an import keeps the destination page and allows retry', async () => {
+  window.history.replaceState(null, '', '#/editor');
+  render(React.createElement(Root));
+  try {
+    await screen.findByRole('heading', { name: 'Recent plans' });
+    await waitSaved();
+    let finishReading;
+    const file = {
+      size: 100,
+      name: 'Delayed blueprint.pdf',
+      arrayBuffer: () => new Promise((resolve) => { finishReading = resolve; }),
+    };
+    const upload = (plan) => fireEvent.change(document.querySelector('input[type=file]'), {
+      target: { files: [plan] },
+    });
+    const navigate = async (hash) => {
+      await act(async () => {
+        window.location.hash = hash;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    };
+    upload(file);
+    assert.equal(typeof finishReading, 'function');
+    await navigate('#/pricing');
+    await screen.findByRole('heading', { name: 'Pricing', level: 1 });
+    await act(async () => finishReading(new ArrayBuffer(4)));
+    assert.equal(window.location.hash, '#/pricing');
+    assert.equal(screen.queryByRole('dialog'), null);
+
+    await navigate('#/editor');
+    await screen.findByRole('heading', { name: 'Recent plans' });
+    assert.equal(screen.queryByRole('button', { name: /Delayed blueprint/ }), null);
+    upload({ ...file, name: 'Retry blueprint.pdf', arrayBuffer: async () => new ArrayBuffer(4) });
+    await screen.findByRole('dialog', { name: 'Choose a PDF page' });
+    click('button', 'Import page');
+    await screen.findByRole('main', { name: 'Drawing workspace' });
+    assert.equal(document.querySelector('.projectButton').textContent, 'Retry blueprint');
+    assert.ok(svg().querySelector('image'));
+    await waitSaved();
+  } finally {
+    cleanup();
+  }
 });

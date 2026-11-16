@@ -130,6 +130,18 @@ function MobileMenu({ page }) {
   );
 }
 
+export function SiteHeader({ page }) {
+  return (
+    <header className="siteHeader">
+      <a href="#/" aria-label={`${PRODUCT_NAME} home`}>
+        <Brand />
+      </a>
+      <SiteNav page={page} />
+      <MobileMenu page={page} />
+    </header>
+  );
+}
+
 function PriceOptions({ compact = false }) {
   return (
     <div className={compact ? 'priceOptions compactPrices' : 'priceOptions'}>
@@ -241,13 +253,7 @@ export default function Marketing({ page }) {
       >
         Skip to content
       </a>
-      <header className="siteHeader">
-        <a href="#/" aria-label={`${PRODUCT_NAME} home`}>
-          <Brand />
-        </a>
-        <SiteNav page={page} />
-        <MobileMenu page={page} />
-      </header>
+      <SiteHeader page={page} />
       <main id="main-content" className={pricing ? 'pricingPage' : undefined} tabIndex={-1}>
         {pricing ? <PricingContent /> : <HomeContent />}
       </main>

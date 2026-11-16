@@ -62,7 +62,7 @@ const CONTROLS = {
     ['clean', 'Clean up'],
     ['tools', 'More', 'more'],
   ],
-  measure: [['dimension', 'Dimension'], ['calibrate', 'Set scale']],
+  measure: [['measure', 'Distance'], ['dimension', 'Dimension'], ['calibrate', 'Set scale']],
 };
 const PANELS = ['doors', 'fixtures', 'tools', 'settings'];
 
@@ -85,7 +85,7 @@ export function PhoneControls({
         <span aria-live="polite">{hint}</span>
         {onCancelWall && <button onClick={onCancelWall}>Cancel</button>}
         {selected && (
-          <button onClick={() => onOpen('properties')}>
+          <button aria-haspopup="dialog" onClick={() => onOpen('properties')}>
             <Icon name="settings" size={16} /> Properties
           </button>
         )}

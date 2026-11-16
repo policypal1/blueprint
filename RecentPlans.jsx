@@ -1,5 +1,5 @@
 import React from 'react';
-import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
+import { Icon } from './ui.jsx';
 
 const formatDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 
@@ -7,12 +7,9 @@ export default function RecentPlans({
   projects, hydrated, busy, saveStatus, onUpload, onCreate, onSample, onSelect,
 }) {
   const disabled = !hydrated || busy;
+  const saveWarning = /failed|unavailable/.test(saveStatus);
   return (
     <div className="recentPage">
-      <header className="recentHeader">
-        <a href="#/" aria-label={`${PRODUCT_NAME} home`}><Brand /></a>
-        <span role="status">{saveStatus}</span>
-      </header>
       <main className="recentBody" aria-busy={disabled}>
         <div className="recentTitle">
           <h1>Recent plans</h1>
@@ -27,6 +24,7 @@ export default function RecentPlans({
           <button onClick={onCreate} disabled={disabled}><Icon name="plus" /> New blank plan</button>
           <button onClick={onSample} disabled={disabled}><Icon name="file" /> Try a sample plan</button>
         </div>
+        <p className={`recentSaveStatus${saveWarning ? ' saveWarning' : ''}`} role="status">{saveStatus}</p>
         {hydrated && (projects.length ? (
           <ul className="recentList">
             {projects.map((plan) => {

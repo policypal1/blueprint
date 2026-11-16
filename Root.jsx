@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
-import Marketing, { DEMO_HASH } from './Marketing.jsx';
+import Marketing, { DEMO_HASH, SiteHeader } from './Marketing.jsx';
 import { Brand, PRODUCT_NAME } from './ui.jsx';
 import { hasOpenedPlan } from './useProjectStore.js';
 
@@ -53,27 +53,31 @@ export default function Root() {
       {!showEditor && <Marketing page={route} />}
       {visitedEditor && (
         <div className="editorRoot" hidden={!showEditor}>
-          <Suspense
-            fallback={
-              <div className="loadingScreen">
-                <Brand />
-                <p>Opening your workspace…</p>
-              </div>
-            }
-          >
-            <Editor
-              showRecent={route === 'recent'}
-              sampleRequested={route === 'sample'}
-              onOpenWorkspace={() => {
-                if (window.location.hash !== WORKSPACE_HASH) window.location.hash = WORKSPACE_HASH;
-                setRoute('workspace');
-              }}
-              onSampleOpened={() => {
-                window.history.replaceState(window.history.state, '', WORKSPACE_HASH);
-                setRoute('workspace');
-              }}
-            />
-          </Suspense>
+          {showEditor && <SiteHeader page={route} />}
+          <div className="editorSurface">
+            <Suspense
+              fallback={
+                <div className="loadingScreen">
+                  <Brand />
+                  <p>Opening your workspace…</p>
+                </div>
+              }
+            >
+              <Editor
+                active={showEditor}
+                showRecent={route === 'recent'}
+                sampleRequested={route === 'sample'}
+                onOpenWorkspace={() => {
+                  if (window.location.hash !== WORKSPACE_HASH) window.location.hash = WORKSPACE_HASH;
+                  setRoute('workspace');
+                }}
+                onSampleOpened={() => {
+                  window.history.replaceState(window.history.state, '', WORKSPACE_HASH);
+                  setRoute('workspace');
+                }}
+              />
+            </Suspense>
+          </div>
         </div>
       )}
     </>

@@ -75,36 +75,33 @@ export function Brand({ compact = false }) {
     </span>
   );
 }
-export function Modal({ title, onClose, children, className = '', placement = 'center' }) {
+export function Modal({ title, onClose, children, className = '' }) {
   const ref = useRef(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     const previous = document.activeElement;
     const root = ref.current;
     const selector =
-      'button:not(:disabled), input:not(:disabled), select, textarea, a[href], [tabindex="0"]';
-    (
-      root.querySelector('[autofocus]') ||
-      (placement === 'center' && root.querySelector('input, textarea')) ||
-      root.querySelector(selector)
-    )?.focus();
+      'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex="0"]';
     const onKey = (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
       }
       if (e.key === 'Tab') {
-        const items = [...root.querySelectorAll(selector)].filter(
-          (el) => el.getClientRects().length,
-        );
+        const items = [...root.querySelectorAll(selector)].filter((el) => el.getClientRects().length);
+        const focusedIndex = items.indexOf(document.activeElement);
         if (!items.length) {
           e.preventDefault();
           return;
         }
-        if (e.shiftKey && document.activeElement === items[0]) {
+        if (e.shiftKey && focusedIndex <= 0) {
           e.preventDefault();
           items.at(-1).focus();
-        } else if (!e.shiftKey && document.activeElement === items.at(-1)) {
+        } else if (!e.shiftKey && (focusedIndex < 0 || focusedIndex === items.length - 1)) {
           e.preventDefault();
           items[0].focus();
         }
@@ -113,12 +110,20 @@ export function Modal({ title, onClose, children, className = '', placement = 'c
     root.addEventListener('keydown', onKey);
     return () => {
       root.removeEventListener('keydown', onKey);
-      previous?.focus?.();
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, []);
+
+  useEffect(() => {
+    const root = ref.current;
+    root.scrollTop = 0;
+    (root.querySelector('[data-dialog-focus]') || root.querySelector('.modalHeader button'))
+      ?.focus({ preventScroll: true });
+  }, [title]);
+
   return (
     <div
-      className={placement === 'bottom' ? 'modalBackdrop sheetBackdrop' : 'modalBackdrop'}
+      className="modalBackdrop"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -173,7 +178,7 @@ export function useDialog() {
           <label className="field">
             <span>{state.label || 'Value'}</span>
             <input
-              autoFocus
+              data-dialog-focus
               name="answer"
               type={state.type || 'text'}
               defaultValue={state.initialValue || ''}
@@ -197,5 +202,5 @@ export function useDialog() {
       </form>
     </Modal>
   );
-  return [ask, dialog];
+  return [ask, dialog, () => finish(null)];
 }
