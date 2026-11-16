@@ -2164,7 +2164,6 @@ export function BlueprintApp({
           busy={busy}
           saveStatus={saveStatus}
           onUpload={() => fileRef.current?.click()}
-          onRestore={() => backupRef.current?.click()}
           onCreate={createProject}
           onSample={() => loadSample()}
           onSelect={(plan) => {

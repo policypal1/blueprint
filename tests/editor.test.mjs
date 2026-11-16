@@ -186,15 +186,25 @@ test('landing and pricing explain the product and lead to the editor', async () 
   assert.equal(document.querySelector('video').getAttribute('src'), '/planpatch-demo.mp4');
   assert.equal(document.querySelector('.stickyEdit').getAttribute('aria-hidden'), 'true');
   assert.ok(screen.getByRole('heading', { name: 'How it works' }));
+  assert.equal(screen.queryByText('Bring your plan'), null);
   const pricing = screen.getByRole('heading', { name: 'Pay per project' });
   const comparison = screen.getByRole('heading', { name: 'See what changed' });
   assert.ok(pricing.compareDocumentPosition(comparison) & Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.ok(screen.getByRole('img', { name: /pocket door slides into the wall/ }));
+  assert.ok(document.querySelector('.mobileMenu .siteNav a.primary[href="#/editor"]'));
+  assert.equal(
+    within(document.querySelector('.siteHeader > nav')).getByRole('link', { name: 'How it works' }).getAttribute('href'),
+    '#/how-it-works',
+  );
+  assert.doesNotMatch(screen.getByRole('main').textContent, /\bbeta\b/i);
   cleanup();
   render(React.createElement(Marketing, { page: 'pricing' }));
+  assert.ok(screen.getByRole('heading', { name: 'Pricing', level: 1 }));
   assert.ok(screen.getByText('$10'));
   assert.ok(screen.getByText('$19'));
-  assert.ok(screen.getByText('The editor is free during beta.'));
-  assert.equal(screen.getAllByRole('link', { name: 'Try the editor free' }).length, 2);
+  assert.ok(screen.getByRole('heading', { name: 'FAQs' }));
+  assert.doesNotMatch(screen.getByRole('main').textContent, /\bbeta\b/i);
+  assert.equal(screen.getAllByRole('article').length, 2);
   assert.equal(
     document.querySelectorAll('input[type=password],input[autocomplete=cc-number]').length,
     0,
@@ -379,6 +389,8 @@ test('reopening shows saved plans and uploading from the list creates a new plan
   await screen.findByRole('heading', { name: 'Recent plans' });
   await waitSaved();
   assert.equal(window.location.hash, '#/editor');
+  assert.equal(screen.queryByRole('button', { name: 'Restore backup' }), null);
+  assert.ok(screen.getByRole('button', { name: 'Try a sample plan' }));
 
   click('button', 'New blank plan');
   fireEvent.change(screen.getByLabelText('Project name'), { target: { value: 'Kitchen revision' } });

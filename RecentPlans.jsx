@@ -4,7 +4,7 @@ import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
 const formatDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 
 export default function RecentPlans({
-  projects, hydrated, busy, saveStatus, onUpload, onCreate, onRestore, onSample, onSelect,
+  projects, hydrated, busy, saveStatus, onUpload, onCreate, onSample, onSelect,
 }) {
   const disabled = !hydrated || busy;
   return (
@@ -25,7 +25,6 @@ export default function RecentPlans({
         </p>
         <div className="recentActions">
           <button onClick={onCreate} disabled={disabled}><Icon name="plus" /> New blank plan</button>
-          <button onClick={onRestore} disabled={disabled}><Icon name="folder" /> Restore backup</button>
           <button onClick={onSample} disabled={disabled}><Icon name="file" /> Try a sample plan</button>
         </div>
         {hydrated && (projects.length ? (

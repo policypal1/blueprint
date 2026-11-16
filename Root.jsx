@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
-import Marketing from './Marketing.jsx';
+import Marketing, { DEMO_HASH } from './Marketing.jsx';
 import { Brand, PRODUCT_NAME } from './ui.jsx';
 import { hasOpenedPlan } from './useProjectStore.js';
 
@@ -12,6 +12,7 @@ function readRoute() {
   if (hash === WORKSPACE_HASH) return 'workspace';
   if (hash === '#/editor/sample') return 'sample';
   if (hash.startsWith(RECENT_HASH) || (!hash && hasOpenedPlan())) return 'recent';
+  if (hash === DEMO_HASH) return 'demo';
   return hash.startsWith('#/pricing') ? 'pricing' : 'home';
 }
 function isEditorRoute(route) {
@@ -32,7 +33,7 @@ export default function Root() {
       const next = readRoute();
       setRoute(next);
       if (isEditorRoute(next)) setVisitedEditor(true);
-      window.scrollTo(0, 0);
+      if (next !== 'demo') window.scrollTo(0, 0);
     };
     window.addEventListener('hashchange', navigate);
     return () => window.removeEventListener('hashchange', navigate);

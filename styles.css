@@ -213,6 +213,8 @@ p {
   min-height: 100dvh;
 }
 .siteHeader {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -223,13 +225,27 @@ p {
   padding: max(12px, env(safe-area-inset-top)) max(5%, env(safe-area-inset-right)) 12px max(5%, env(safe-area-inset-left));
   border-bottom: 1px solid var(--line);
 }
-.siteHeader .navCta {
+.siteNav {
+  display: flex;
+  align-items: center;
+  gap: clamp(16px, 3vw, 30px);
+  font-size: 14px;
+  font-weight: 500;
+}
+.siteNav > a {
+  display: inline-flex;
+  align-items: center;
   min-height: 44px;
-  padding-inline: 12px;
+}
+.siteNav > a:not(.button):is(:hover, [aria-current]) { color: var(--accent); }
+.siteNav .button {
+  padding-inline: 16px;
+  font-size: 14px;
   white-space: nowrap;
 }
 .mobileMenu { display: none; }
 @media (max-width: 800px) {
+  .siteHeader > .siteNav { display: none; }
   .mobileMenu { display: block; }
   .mobileMenu summary {
     display: grid;
@@ -237,20 +253,22 @@ p {
     width: 44px;
     height: 44px;
     list-style: none;
+    border-radius: 7px;
     cursor: pointer;
   }
   .mobileMenu summary::-webkit-details-marker { display: none; }
-  .marketingHome .siteHeader { position: relative; z-index: 2; }
-  .mobileMenu nav {
+  .mobileMenu[open] summary { background: var(--soft); color: var(--accent); }
+  .mobileMenu .siteNav {
     position: absolute;
     inset: 100% 0 auto;
     display: grid;
-    padding: 8px 5% 14px;
+    gap: 0;
+    padding: 8px 5% 16px;
     background: var(--paper);
     border-bottom: 1px solid var(--line);
   }
-  .mobileMenu nav a { display: flex; align-items: center; min-height: 46px; }
-  .mobileMenu:not([open]) nav { display: none; }
+  .mobileMenu .siteNav .button { justify-content: space-between; margin-top: 6px; }
+  .mobileMenu:not([open]) .siteNav { display: none; }
 }
 .marketingHome {
   background: var(--paper);
@@ -370,44 +388,54 @@ p {
   min-height: 48px;
   font-size: 15px;
 }
-.workflowSection {
-  max-width: 1280px;
-  margin: auto;
-  padding: 0 5% 36px;
-}
 .homeSection {
   max-width: 1000px;
   margin: 0 auto;
   padding: clamp(36px, 6vw, 72px) 5%;
   border-top: 1px solid var(--line);
 }
-.homeSection h2 { margin: 0 0 12px; font-size: clamp(25px, 4vw, 38px); }
-.homeSection p { max-width: 50ch; margin: 0 0 12px; color: var(--muted); line-height: 1.6; }
-.detailsLink { display: inline-flex; align-items: center; min-height: 44px; text-decoration: underline; }
-.comparisonGrid { display: grid; gap: 18px; margin-top: 25px; }
-.comparisonGrid figure { margin: 0; }
-.comparisonGrid img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; }
-.comparisonGrid figcaption { margin-top: 9px; font-weight: 600; }
-@media (min-width: 801px) {
-  .comparisonGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.homeSection h2 { margin: 0; font-size: clamp(25px, 4vw, 38px); letter-spacing: -0.03em; }
+.priceSectionHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 12px;
+  margin-bottom: 18px;
 }
-.workflowGrid {
-  display: grid;
-  gap: 20px;
-  padding-top: 26px;
-  border-top: 1px solid var(--line);
-}
-.workflowGrid article > svg { color: var(--accent); }
-.workflowGrid h3 {
-  margin: 8px 0 4px;
-  font-size: 17px;
-  letter-spacing: -0.02em;
-}
-.workflowGrid p {
-  margin: 0;
-  color: var(--muted);
+.detailsLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--accent);
   font-size: 14px;
-  line-height: 1.5;
+  font-weight: 600;
+}
+.detailsLink:hover { text-decoration: underline; }
+.comparisonIntro { margin: 8px 0 0; color: var(--muted); line-height: 1.6; }
+.comparisonGrid { display: grid; gap: 16px; margin-top: 22px; }
+.comparisonGrid figure {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.comparisonGrid figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 5px 16px;
+  padding: 12px 16px;
+  background: var(--site);
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.comparisonGrid figcaption strong { color: var(--ink); }
+.doorPlan { display: block; width: 100%; height: auto; }
+@media (min-width: 701px) {
+  .comparisonGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .siteFooter {
   max-width: 1280px;
@@ -426,158 +454,100 @@ p {
 .siteFooter a { display: inline-flex; align-items: center; min-height: 44px; }
 .siteFooter > a:first-child { margin-right: auto; color: var(--ink); }
 .siteFooter small { font-size: 12px; }
-.pricingIntro {
-  text-align: center;
-  padding: 68px 20px 22px;
-}
-.pricingIntro .eyebrow {
-  justify-content: center;
-}
-.pricingIntro h1 {
-  font-size: 48px;
-  margin: 19px 0 18px;
-}
-.pricingIntro p {
-  font-size: 14px;
-  line-height: 1.8;
-  color: var(--muted);
-}
-.betaNote {
-  max-width: 880px;
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  border: 1px solid #d7dfd0;
-  background: #edf2e7;
-  margin: 7px auto 25px;
-  padding: 13px 18px;
-  font-size: 11px;
-  line-height: 1.7;
-}
-.betaNote .statusDot {
-  background: #648161;
-}
-.betaNote strong {
-  font-weight: 600;
-}
-.pricingCards {
+.pricingPage {
   max-width: 880px;
   margin: auto;
+  padding: clamp(36px, 7vw, 74px) 5% clamp(48px, 8vw, 84px);
+}
+.pricingPage > h1 {
+  text-align: center;
+  font-size: clamp(34px, 6vw, 54px);
+  letter-spacing: -0.045em;
+  margin: 0 0 clamp(22px, 4vw, 36px);
+}
+.priceOptions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 22px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(10px, 2vw, 18px);
 }
 .priceCard {
-  background: #fff;
-  border: 1px solid #d9dfd4;
-  border-radius: 6px;
-  padding: 32px;
-  display: flex;
-  flex-direction: column;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: clamp(16px, 3vw, 28px);
 }
-.priceCard .eyebrow {
-  font-size: 9px;
-  letter-spacing: 1.4px;
+.priceIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 8px;
+  background: var(--soft);
+  color: var(--accent);
 }
 .priceCard h2 {
-  font-size: 23px;
-  margin: 16px 0 19px;
+  margin: 13px 0 5px;
+  font-size: clamp(15px, 2.5vw, 20px);
 }
 .price {
-  font-size: 52px;
-  letter-spacing: -2px;
-  font-weight: 500;
+  margin: 0;
+  line-height: 1.14;
 }
-.price > span {
-  font-size: 12px;
+.price strong {
+  font-size: clamp(35px, 7vw, 54px);
+  letter-spacing: -0.05em;
+}
+.price span {
   color: var(--muted);
-  letter-spacing: 0;
-  font-weight: 400;
-  margin-left: 10px;
+  font-size: clamp(13px, 2vw, 16px);
+  white-space: nowrap;
 }
-.priceCard > p {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 13px;
-}
-.priceCard ul {
-  padding: 22px 0;
-  margin: 10px 0 18px;
-  border-top: 1px solid var(--line);
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.priceCard li {
+.compactPrices .priceCard {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 12px;
+  gap: 12px;
+  background: var(--site);
 }
-.priceCard li svg {
-  width: 16px;
-  color: #738a70;
+.compactPrices .price strong { font-size: clamp(29px, 4.5vw, 42px); }
+@media (max-width: 480px) {
+  .compactPrices .priceCard { display: grid; gap: 8px; }
+  .price span { display: block; margin-top: 4px; }
 }
-.priceCard > .button {
-  width: 100%;
-  min-height: 44px;
-  margin-top: auto;
-}
-.priceCard > small {
-  margin-top: 12px;
-  text-align: center;
-  color: #788272;
-  font-size: 10px;
-}
-.monthlyCard {
-  background: #eef2e9;
-  border-color: #b7c4b0;
-}
-.pricingDetails {
-  max-width: 880px;
-  margin: 52px auto;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 30px;
-  padding: 25px 0;
-  border-bottom: 1px solid var(--line);
-}
-.pricingDetails h2 {
-  font-size: 29px;
-  line-height: 1.4;
-}
-.pricingDetails p {
-  font-size: 12px;
-  color: var(--muted);
-}
-.faqSection {
-  max-width: 880px;
-  margin: 0 auto 70px;
-  display: grid;
-  grid-template-columns: 0.8fr 1.2fr;
-  gap: 45px;
-}
+.faqSection { margin-top: clamp(36px, 6vw, 60px); }
 .faqSection h2 {
-  font-size: 26px;
-  line-height: 1.4;
+  margin: 0 0 14px;
+  font-size: clamp(24px, 3.5vw, 29px);
 }
+.faqList { display: grid; gap: 8px; }
 .faqList details {
-  border-bottom: 1px solid var(--line);
-  padding: 17px 0;
-}
-.faqList details:first-child {
-  padding-top: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
 }
 .faqList summary {
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 12px 16px;
+  border-radius: inherit;
   cursor: pointer;
-  line-height: 1.7;
+  list-style: none;
+  font-size: 15px;
+  font-weight: 600;
 }
+.faqList summary::-webkit-details-marker { display: none; }
+.faqList summary:hover { background: var(--panel); }
+.faqList summary svg { color: var(--accent); flex: none; transition: transform 180ms ease; }
+.faqList details[open] summary svg { transform: rotate(180deg); }
 .faqList p {
-  font-size: 12px;
+  margin: 0;
+  padding: 0 16px 14px;
+  font-size: 15px;
   color: var(--muted);
-  margin: 12px 0 2px;
+  line-height: 1.55;
 }
 /* Workspace */
 .editorRoot {
@@ -1427,26 +1397,8 @@ hr {
   font-size: 10px;
   color: #668056;
 }
-@media (min-width: 801px) {
-  .workflowGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .workflowGrid article + article { padding-inline-start: 20px; border-inline-start: 1px solid var(--line); }
-}
-@media (max-width: 950px) {
-  .pricingCards,
-  .betaNote,
-  .pricingDetails,
-  .faqSection { margin-inline: 5%; }
-}
 @media (max-width: 620px) {
-  .pricingIntro h1 { font-size: 36px; }
-  .pricingIntro p br { display: none; }
-  .pricingCards,
-  .pricingDetails,
-  .faqSection,
   .importWorkflow { grid-template-columns: minmax(0, 1fr); }
-  .priceCard { padding: 24px; }
-  .pricingDetails,
-  .faqSection { gap: 14px; }
   .dialog:not(.editorSheet) { padding: 18px; }
   .dialog :is(input:not([type='checkbox'], [type='range']), select, textarea) { font-size: 16px; }
   .modalActions button { min-height: 44px; }
