@@ -865,7 +865,7 @@ function regularizeImportedElements(elements, unitsPerInch = 4) {
 
 export function BlueprintApp({
   active = true, showRecent = false, sampleRequested = false, onSampleOpened, onOpenWorkspace,
-  repository, projectAccess, accountsEnabled = false, authBusy = false, onSignIn, onRegisterSave,
+  repository, projectAccess, authBusy = false, onRegisterSave,
 }) {
   const svgRef = useRef(null);
   const fileRef = useRef(null);
@@ -967,7 +967,10 @@ export function BlueprintApp({
   }, [active, showPlans]);
 
   useEffect(() => {
-    onRegisterSave?.(repository ? cloud.flush : flush);
+    onRegisterSave?.(async () => {
+      const results = await Promise.all([flush(), cloud.flush()]);
+      return results.every(Boolean);
+    });
     return () => {
       routeVersion.current += 1;
       onRegisterSave?.(null);
@@ -2126,19 +2129,15 @@ export function BlueprintApp({
     }
   };
 
-  const saveToAccount = async (asCopy = false) => {
-    if (!repository) {
-      onSignIn?.();
-      return;
-    }
-    if (accountOperation.current || busy || !canCreateProject) return;
+  const saveAccountCopy = async () => {
+    if (!accountId || accountOperation.current || busy || !canCreateProject) return;
     const local = projectRef.current;
     const onSamePage = captureRoute();
     accountOperation.current = true;
     setBusy(true);
     setAccountNotice('');
     try {
-      const saved = await cloud.saveNew(local, asCopy ? accountId : null);
+      const saved = await cloud.saveNew(local, accountId);
       if (!saved) throw new Error('Account save failed');
       if (!onSamePage() || projectRef.current.id !== local.id) return;
       const latest = projectRef.current;
@@ -2146,12 +2145,7 @@ export function BlueprintApp({
       selectProject(next, saved.id);
       if (projectAccess) void projectAccess.refresh();
       if (next !== saved.project) cloud.edit(saved.id, next);
-      if (asCopy) {
-        cloud.dropDraft(accountId);
-      } else {
-        setProjects((list) => list.filter((plan) => plan.id !== local.id));
-        void flush();
-      }
+      cloud.dropDraft(accountId);
     } catch {
       if (onSamePage()) setAccountNotice('Could not save to your account. Try again.');
     } finally {
@@ -2434,16 +2428,12 @@ export function BlueprintApp({
           busy={busy}
           saveStatus={saveStatus}
           onUpload={() => fileRef.current?.click()}
-          onCreate={createProject}
-          onSample={() => loadSample()}
           onSelect={(plan) => openNewPlan(plan, onOpenWorkspace, true)}
           account={repository ? {
             plans: projectAccess ? cloud.list.filter((plan) => projectAccess.ids.includes(plan.id)) : cloud.list,
             status: cloud.listStatus, notice: accountNotice,
             onRefresh: cloud.refresh, onSelect: openAccountPlan,
           } : null}
-          onSignIn={accountsEnabled && !repository ? onSignIn : null}
-          authBusy={authBusy}
         />
         {dialog}
       </>
@@ -2457,12 +2447,10 @@ export function BlueprintApp({
   const conflict = accountDraft?.error?.name === 'ProjectConflict';
   const saveAction = accountDraft?.error
     ? { label: conflict ? 'Save a copy' : 'Retry save', onClick: () => {
-      if (conflict) void saveToAccount(true);
+      if (conflict) void saveAccountCopy();
       else void cloud.restart(accountId);
     } }
-    : !accountId && accountsEnabled
-      ? { label: repository ? 'Save to account' : 'Sign in to save', onClick: () => void saveToAccount() }
-      : null;
+    : null;
 
   return (
     <div className={`app${compact ? ' compactEditor' : ''}`}>

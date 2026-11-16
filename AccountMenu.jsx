@@ -14,6 +14,7 @@ export function AccountAvatar({ user }) {
 }
 
 export default function AccountMenu({ user, page, busy, onSignOut }) {
+  const displayName = profileName(user) || 'My account';
   const menu = useRef(null);
   const trigger = useRef(null);
   const close = (focus = false) => {
@@ -37,14 +38,16 @@ export default function AccountMenu({ user, page, busy, onSignOut }) {
       event.stopPropagation();
       close(true);
     }}>
-      <summary ref={trigger} aria-label="Account menu">
+      <summary ref={trigger} aria-label={`Account menu for ${displayName}`}>
         <AccountAvatar user={user} />
+        <span className="accountMenuName">{displayName}</span>
+        <Icon name="chevron" className="accountMenuChevron" size={16} />
       </summary>
       <div className="accountMenuPanel">
         <div className="accountMenuIdentity">
           <AccountAvatar user={user} />
           <div>
-            <strong>{profileName(user) || 'My account'}</strong>
+            <strong>{displayName}</strong>
             {user?.email && <span>{user.email}</span>}
           </div>
         </div>
@@ -57,9 +60,6 @@ export default function AccountMenu({ user, page, busy, onSignOut }) {
           </a>
           <a href="#/account/billing" aria-current={page === 'billing' ? 'page' : undefined} onClick={() => close()}>
             <Icon name="card" /> Billing &amp; payment methods
-          </a>
-          <a href="#/editor" onClick={() => close()}>
-            <Icon name="folder" /> Saved plans
           </a>
         </nav>
         <div className="accountMenuFooter">

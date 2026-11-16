@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open the localhost URL printed by Vite. **Edit your blueprint** opens Recent plans. Upload a PDF or image, paste a clipboard image, or choose **Try a sample plan**. To check a release build, run the following commands.
+Open the localhost URL printed by Vite. **Edit your blueprint** opens Recent plans. Use **Upload a plan** to add a PDF or image. To check a release build, run the following commands.
 
 ```bash
 npm test
@@ -27,15 +27,15 @@ For the existing Vercel project, use the Vite framework preset, `npm run build`,
 2. In Google Cloud, configure the Google Auth Platform consent screen for PlanPatch with the `openid`, `email`, and `profile` scopes. Create a **Web application** OAuth client. Add your live site origin and the callback URL shown in Supabase under **Authentication → Sign In / Providers → Google**. Save the Google Client ID and Client Secret in that Supabase provider and enable it. Add test users while the Google app is in Testing, and publish the consent screen before signing up customers. [Google sign-in setup](https://supabase.com/docs/guides/auth/social-sign-in/auth-google)
 3. In Supabase **Authentication → URL Configuration**, set **Site URL** to the live Vercel origin. Allow the exact URL with its trailing slash, for example `https://blueprint-blue-theta.vercel.app/`. For local testing, also allow `http://localhost:5173/`. [Redirect URL setup](https://supabase.com/docs/guides/auth/redirect-urls)
 4. In Vercel **Settings → Environment Variables**, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` from the Supabase project’s Connect panel. Redeploy with both variables. For local development use `.env.local`. Keep the Google Client Secret in Supabase. [Supabase API keys](https://supabase.com/docs/guides/api/api-keys)
-5. On the deployed site, sign in, upload a sample PDF, and click **Save to account**. Add a wall and wait for **Saved to your account**. Sign in from another browser with the same Google account and check that the image and wall reopen. Then sign in with a second Google account and check that the first account’s plan is absent.
+5. On the deployed site, sign in and upload a sample PDF. Add a wall and reload the browser to check that both reopen from **Recent plans**. If your account already has a cloud plan, sign in from another browser and check that it is listed there. Verify that a second account cannot open the first account’s cloud plan.
 
-Drafts begin on the device. **Save to account** moves a draft after the cloud save succeeds, and future edits to that plan save automatically. If another device saved a newer version, use **Save a copy** to keep both drawings. Account plans can be deleted from the project menu. Payment collection is a separate integration.
+New drafts are saved in the current browser. Plans already stored in an account and plans created with a $10 project credit still save to the account. Recent plans lists both together. If another device saved a newer version of an account plan, use **Save a copy** to keep both drawings. Account plans can be deleted from the project menu.
 
 ## Account and billing
 
-Open **Sign in** from the site navigation to create an email and password account or continue with Google. In the editor, **Sign in** opens the same form without leaving the current plan. The sign-in page also offers password recovery. Open confirmation and recovery links in the browser where you requested them.
+Open **Sign in** from the site navigation to create an email and password account or continue with Google. The editor sign-in prompt opens the same form. The sign-in page also offers password recovery. Open confirmation and recovery links in the browser where you requested them.
 
-After signing in, open **Account**. **Profile settings** saves the display name. **Sign-in & security** requests an email change or password reset and **Saved plans** opens the editor’s project list.
+After signing in, select the orange initial to open the account menu. **Profile settings** saves your display name, **Sign-in & security** manages your login, and **Billing** opens payment settings.
 
 Keep email confirmation enabled for email sign-ups. Supabase’s built-in sender can deliver auth mail to project team addresses during testing. Set up [custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp) before inviting testers outside the team.
 
@@ -96,6 +96,6 @@ Account deletion requires typing `DELETE`. It removes the signed-in account and 
 
 PDFs and images become a raster background. You can mask details and draw new editable objects over it. Importing a PDF does **not** automatically turn its original walls into CAD objects. Advanced JSON import accepts explicitly structured editable geometry. PDF output is raster-based, not CAD/vector output. Dimensions use inches and feet.
 
-Guest drafts stay in IndexedDB for the current browser and domain. Use **Download backup** under project settings to keep a portable copy.
+Device drafts stay in IndexedDB for the current browser and domain. Use **Download backup** under project settings to keep a portable copy.
 
 Run `npm test` to check guest and account editor flows. Repeat the live two-account check in step 5 when the production login and database are connected.

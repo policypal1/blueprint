@@ -21,6 +21,8 @@
   --soft: #f8e6d7;
   --blue: #4c606a;
   --danger: #a12626;
+  --site-width: 1280px;
+  --site-gutter: max(16px, 5%);
   color-scheme: light;
 }
 * {
@@ -219,10 +221,11 @@ p {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  max-width: 1280px;
+  max-width: var(--site-width);
   min-height: 72px;
   margin: auto;
-  padding: max(12px, env(safe-area-inset-top)) max(5%, env(safe-area-inset-right)) 12px max(5%, env(safe-area-inset-left));
+  padding-block: max(12px, env(safe-area-inset-top)) 12px;
+  padding-inline: max(var(--site-gutter), env(safe-area-inset-left)) max(var(--site-gutter), env(safe-area-inset-right));
   border-bottom: 1px solid var(--line);
 }
 .siteNav {
@@ -305,16 +308,30 @@ p {
 .siteHeaderActions > .siteNav { margin: 0; }
 .accountMenu { position: relative; }
 .accountMenu summary {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   min-width: 44px;
   min-height: 44px;
+  padding: 3px 8px 3px 3px;
   list-style: none;
-  border-radius: 100%;
+  border-radius: 24px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 .accountMenu summary::-webkit-details-marker { display: none; }
+.accountMenu summary:is(:hover, :focus-visible),
+.accountMenu[open] summary { background: var(--panel); }
+.accountMenuName {
+  max-width: clamp(130px, 18vw, 220px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+}
+.accountMenuChevron { flex: none; color: var(--muted); }
 .accountAvatar {
   display: grid;
   place-items: center;
@@ -385,39 +402,50 @@ p {
 @media (max-width: 800px) {
   .siteHeaderActions > .siteNav { display: none; }
   .siteHeaderActions .mobileMenu .siteNav { z-index: 3; }
+  .accountMenu summary { padding: 0; border-radius: 50%; }
+  .accountMenuName,
+  .accountMenuChevron { display: none; }
 }
 
 /* Account */
 .accountPage {
-  width: min(100%, 980px);
+  max-width: var(--site-width);
   min-height: calc(100dvh - 72px);
   margin-inline: auto;
-  padding: clamp(32px, 7vw, 80px) max(5%, 16px) clamp(48px, 8vw, 96px);
+  padding-block: clamp(24px, 3.5vw, 48px) 56px;
+  padding-inline: max(var(--site-gutter), env(safe-area-inset-left)) max(var(--site-gutter), env(safe-area-inset-right));
 }
 .accountPage h1 {
-  margin: 0 0 clamp(20px, 4vw, 32px);
-  font-size: clamp(34px, 6vw, 52px);
+  margin: 0 0 clamp(18px, 3vw, 28px);
+  font-size: clamp(29px, 4vw, 40px);
 }
 .accountPage h1:focus { outline: none; }
 .accountLayout {
   display: grid;
-  grid-template-columns: 172px minmax(0, 1fr);
+  grid-template-columns: 210px minmax(0, 680px);
   align-items: start;
-  gap: clamp(20px, 4vw, 40px);
+  gap: clamp(18px, 3vw, 32px);
 }
 .accountSections {
   display: grid;
-  gap: 6px;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
 }
 .accountSections a {
   display: flex;
   align-items: center;
+  gap: 9px;
   min-height: 44px;
   padding: 8px 12px;
-  border-radius: 7px;
+  border-radius: 6px;
   font-size: 14px;
   font-weight: 600;
 }
+.accountSections svg { flex: none; }
+.accountSectionShort { display: none; }
 .accountSections a:hover { background: var(--panel); }
 .accountSections a[aria-current] {
   color: var(--accent);
@@ -486,7 +514,16 @@ p {
 }
 @media (max-width: 620px) {
   .accountLayout { grid-template-columns: minmax(0, 1fr); }
-  .accountSections { display: flex; flex-wrap: wrap; }
+  .accountSections { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .accountSections a {
+    justify-content: center;
+    gap: 5px;
+    padding: 7px 4px;
+    font-size: 13px;
+  }
+  .accountSections svg { width: 16px; height: 16px; }
+  .accountSectionLabel { display: none; }
+  .accountSectionShort { display: inline; }
 }
 
 
@@ -915,6 +952,8 @@ p {
   background: var(--site);
 }
 .recentBody {
+  display: grid;
+  gap: 22px;
   max-width: 920px;
   margin: auto;
   padding: clamp(24px, 5vw, 48px) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
@@ -933,42 +972,22 @@ p {
   letter-spacing: -0.04em;
 }
 .recentTitle button { min-height: 48px; padding-inline: 18px; font-size: 14px; }
-.recentPasteHint {
-  margin: 12px 0 0;
+.recentMessages { display: grid; gap: 10px; }
+.recentMessage {
+  margin: 0;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.55;
 }
-.recentPasteHint kbd {
-  border: 1px solid var(--line);
-  padding: 2px 4px;
-  border-radius: 4px;
-  background: var(--paper);
-  white-space: nowrap;
-}
-.recentActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 16px 0;
-}
-.recentActions button { min-height: 44px; }
-.recentSaveStatus { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
-.recentSaveStatus.saveWarning { color: var(--accent); }
-.recentGroup { margin: 28px 0; }
-.recentGroup h2, .devicePlansTitle { margin: 0 0 10px; font-size: 16px; }
+.recentMessage.saveWarning { color: var(--accent); }
 .accountListError { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.accountListError p { margin: 0; }
 .accountListError button { min-height: 44px; }
-.accountListSignIn { min-height: 44px; margin: 0 0 16px; color: var(--accent); }
 @media (max-width: 620px) {
   .recentBody {
     padding: 28px max(20px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
   }
   .recentTitle { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
   .recentTitle button { min-height: 52px; }
-  .recentActions { display: grid; gap: 10px; margin: 20px 0; }
-  .recentActions button { justify-content: flex-start; min-height: 48px; font-size: 14px; }
 }
 .recentList {
   display: grid;

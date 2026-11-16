@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AccountAvatar, profileName } from './AccountMenu.jsx';
-import { Modal } from './ui.jsx';
+import { Icon, Modal } from './ui.jsx';
 import { authErrorText } from './useAccount.js';
 
 const SANDBOX_PORTAL_URL = 'https://billing.stripe.com/p/login/test_00w8wIf8fdke23P1oO4ZG00';
@@ -305,10 +305,19 @@ export default function AccountPage({
       ) : account.user ? (
         <div className="accountLayout">
           <nav className="accountSections" aria-label="Account">
-            <a href="#/account" aria-current={billing || security ? undefined : 'page'}>Profile settings</a>
-            <a href="#/account/security" aria-current={security ? 'page' : undefined}>Sign-in &amp; security</a>
-            <a href="#/account/billing" aria-current={billing ? 'page' : undefined}>Billing</a>
-            <a href="#/editor">Saved plans</a>
+            <a href="#/account" aria-label="Profile settings" aria-current={billing || security ? undefined : 'page'}>
+              <Icon name="user" />
+              <span className="accountSectionLabel">Profile settings</span>
+              <span className="accountSectionShort">Profile</span>
+            </a>
+            <a href="#/account/security" aria-label="Sign-in & security" aria-current={security ? 'page' : undefined}>
+              <Icon name="lock" />
+              <span className="accountSectionLabel">Sign-in &amp; security</span>
+              <span className="accountSectionShort">Security</span>
+            </a>
+            <a href="#/account/billing" aria-current={billing ? 'page' : undefined}>
+              <Icon name="card" /> Billing
+            </a>
           </nav>
           {billing
             ? <BillingSettings portalUrl={portalUrl} access={access} />

@@ -214,9 +214,7 @@ export default function Root() {
                 active={showEditor}
                 repository={repository}
                 projectAccess={projectAccess}
-                accountsEnabled={Boolean(account.client)}
                 authBusy={account.busy}
-                onSignIn={openSignIn}
                 onRegisterSave={registerSave}
                 showRecent={route === 'recent'}
                 sampleRequested={route === 'sample'}
