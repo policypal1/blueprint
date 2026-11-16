@@ -4,6 +4,7 @@ const projectUrl = import.meta.env?.VITE_SUPABASE_URL?.trim();
 const publishableKey = import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
 const enabled = Boolean(projectUrl && publishableKey);
 const RETURN_TO = 'planpatch-sign-in-return';
+const RETURN_ROUTES = new Set(['#/editor', '#/editor/workspace', '#/account', '#/account/billing']);
 let connection;
 
 async function connect() {
@@ -25,9 +26,8 @@ async function connect() {
   }
   const exchange = code ? await client.auth.exchangeCodeForSession(code) : null;
   for (const name of ['code', 'error', 'error_code', 'error_description']) url.searchParams.delete(name);
-  url.hash = url.hash.startsWith('#/') ? url.hash : '#/editor';
+  url.hash = RETURN_ROUTES.has(returnTo) ? returnTo : url.hash.startsWith('#/') ? url.hash : '#/editor';
   window.history.replaceState(window.history.state, '', url);
-  if (returnTo === '#/editor/workspace' || returnTo === '#/editor') window.location.hash = returnTo;
   window.dispatchEvent(new Event('hashchange'));
   return { client, signInFailed: rejected || Boolean(exchange?.error) };
 }
@@ -73,7 +73,8 @@ export function useAccount() {
         setError('Your draft could not be saved on this device. Download a backup before signing in.');
         return;
       }
-      const next = window.location.hash === '#/editor/workspace' ? '#/editor/workspace' : '#/editor';
+      const hash = window.location.hash;
+      const next = RETURN_ROUTES.has(hash) ? hash : '#/editor';
       const { data, error: oauthError } = await client.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: `${window.location.origin}/`, skipBrowserRedirect: true },
@@ -106,5 +107,13 @@ export function useAccount() {
     }
   }
 
-  return { enabled, client, user, loading, busy, error, signIn, signOut, clearError: () => setError('') };
+  async function updateDisplayName(displayName) {
+    if (!user || !client) throw new Error('An active account is required.');
+    const { error: profileError } = await client.auth.updateUser({
+      data: { planpatch_display_name: displayName },
+    });
+    if (profileError) throw profileError;
+  }
+
+  return { enabled, client, user, loading, busy, error, signIn, signOut, updateDisplayName, clearError: () => setError('') };
 }

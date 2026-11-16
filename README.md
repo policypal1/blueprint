@@ -31,6 +31,12 @@ For the existing Vercel project, use the Vite framework preset, `npm run build`,
 
 Drafts begin on the device. **Save to account** moves a draft after the cloud save succeeds, and future edits to that plan save automatically. If another device saved a newer version, use **Save a copy** to keep both drawings. Account plans can be deleted from the project menu. Payment collection is a separate integration.
 
+## Account and billing
+
+After signing in, open **Account** from the site navigation. **Profile settings** saves the display name to the signed-in account. **Saved plans** opens the editor’s project list.
+
+**Billing** uses a [Stripe-hosted customer portal](https://docs.stripe.com/customer-management/activate-no-code-customer-portal). Set `VITE_STRIPE_PORTAL_URL` if the project’s sandbox portal login link changes. Use an email verified in Stripe that matches a customer in the sandbox.
+
 ## What changed
 
 - A short landing page with a desktop and a phone demo, followed by the original and revised plans from the walkthrough.

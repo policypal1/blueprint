@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import AccountPage from './Account.jsx';
 import Marketing, { DEMO_HASH, SiteHeader } from './Marketing.jsx';
 import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
 import { hasOpenedPlan } from './useProjectStore.js';
@@ -8,12 +9,22 @@ import { useAccount } from './useAccount.js';
 const Editor = lazy(() => import('./App.jsx'));
 const RECENT_HASH = '#/editor';
 const WORKSPACE_HASH = '#/editor/workspace';
+const PAGE_TITLES = {
+  recent: 'Recent plans',
+  workspace: 'Editor',
+  sample: 'Editor',
+  pricing: 'Pricing',
+  account: 'Account',
+  billing: 'Billing',
+};
 
 function readRoute() {
   const hash = window.location.hash;
   if (hash === WORKSPACE_HASH) return 'workspace';
   if (hash === '#/editor/sample') return 'sample';
   if (hash.startsWith(RECENT_HASH) || (!hash && hasOpenedPlan())) return 'recent';
+  if (hash === '#/account') return 'account';
+  if (hash === '#/account/billing') return 'billing';
   if (hash === DEMO_HASH) return 'demo';
   return hash.startsWith('#/pricing') ? 'pricing' : 'home';
 }
@@ -27,10 +38,11 @@ export default function Root() {
   const beforeLeaving = useRef(null);
   const registerSave = useCallback((save) => { beforeLeaving.current = save; }, []);
   const signIn = () => account.signIn(beforeLeaving.current);
+  const signOut = () => account.signOut(beforeLeaving.current);
   const accountNav = account.client ? {
     signedIn: Boolean(owner),
     busy: account.busy || account.loading,
-    onAction: owner ? () => account.signOut(beforeLeaving.current) : signIn,
+    onSignIn: signIn,
   } : null;
   const repository = useMemo(() => owner && account.client
     ? createProjectRepository(account.client, owner) : null, [account.client, owner]);
@@ -40,6 +52,7 @@ export default function Root() {
   });
   const [visitedEditor, setVisitedEditor] = useState(() => isEditorRoute(route));
   const showEditor = isEditorRoute(route);
+  const showAccount = route === 'account' || route === 'billing';
   useEffect(() => {
     if (window.location.hash === WORKSPACE_HASH || (!window.location.hash && hasOpenedPlan())) {
       window.history.replaceState(window.history.state, '', RECENT_HASH);
@@ -63,15 +76,11 @@ export default function Root() {
     priorOwner.current = owner;
   }, [owner]);
   useEffect(() => {
-    document.title =
-      route === 'recent'
-        ? `Recent plans · ${PRODUCT_NAME}`
-        : showEditor
-        ? `Editor · ${PRODUCT_NAME}`
-        : route === 'pricing'
-          ? `Pricing · ${PRODUCT_NAME}`
-          : `${PRODUCT_NAME} · Edit your current blueprint`;
-  }, [route, showEditor]);
+    const title = PAGE_TITLES[route];
+    document.title = title
+      ? `${title} · ${PRODUCT_NAME}`
+      : `${PRODUCT_NAME} · Edit your current blueprint`;
+  }, [route]);
   return (
     <>
       {account.error && (
@@ -80,7 +89,13 @@ export default function Root() {
           <button aria-label="Dismiss sign-in notice" onClick={account.clearError}><Icon name="close" /></button>
         </div>
       )}
-      {!showEditor && <Marketing page={route} account={accountNav} />}
+      {!showEditor && !showAccount && <Marketing page={route} account={accountNav} />}
+      {showAccount && (
+        <>
+          <SiteHeader page={route} account={accountNav} />
+          <AccountPage billing={route === 'billing'} account={account} onSignIn={signIn} onSignOut={signOut} />
+        </>
+      )}
       {visitedEditor && (
         <div className="editorRoot" hidden={!showEditor}>
           {showEditor && <SiteHeader page={route} account={accountNav} />}
