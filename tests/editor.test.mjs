@@ -16,6 +16,7 @@ await build({
     editor: path.join(base, 'App.jsx'),
     marketing: path.join(base, 'Marketing.jsx'),
     root: path.join(base, 'Root.jsx'),
+    account: path.join(base, 'Account.jsx'),
   },
   outdir: path.join(base, '.test-build'),
   outExtension: { '.js': '.mjs' },
@@ -149,6 +150,7 @@ afterEach(cleanup);
 const { default: Editor } = await import('../.test-build/editor.mjs');
 const { default: Marketing } = await import('../.test-build/marketing.mjs');
 const { default: Root } = await import('../.test-build/root.mjs');
+const { default: AccountPage } = await import('../.test-build/account.mjs');
 const click = (role, name) => {
   const dialog = screen.queryByRole('dialog');
   return fireEvent.click((dialog ? within(dialog) : screen).getByRole(role, { name, exact: true }));
@@ -808,4 +810,81 @@ test('when a newer account save exists, the editor can save local changes as a c
   assert.equal(rows.size, 2);
   assert.equal(rows.get(initial.id).project.name, 'Edited from a phone');
   assert.equal([...rows.values()].find(({ record }) => record.id !== initial.id).project.elements.length, 1);
+});
+
+test('account settings save a trimmed display name and allow retry after a failed save', async () => {
+  const requested = [];
+  const user = { id: 'account-test', email: 'morgan@example.com', user_metadata: { full_name: 'Morgan Test' } };
+  const account = {
+    user,
+    updateDisplayName: async (name) => {
+      requested.push(name);
+      if (requested.length === 1) throw new Error('Profile request failed');
+      user.user_metadata.planpatch_display_name = name;
+    },
+  };
+  let signedOut = false;
+  const onSignOut = () => { signedOut = true; };
+  const view = render(React.createElement(AccountPage, { account, onSignOut }));
+
+  const name = screen.getByLabelText('Display name');
+  const save = screen.getByRole('button', { name: 'Save changes' });
+  assert.equal(name.value, 'Morgan Test');
+  assert.equal(screen.getByLabelText('Email address').readOnly, true);
+  assert.equal(save.disabled, true);
+  fireEvent.change(name, { target: { value: '   ' } });
+  assert.equal(save.disabled, true);
+  fireEvent.change(name, { target: { value: '  Morgan Plans  ' } });
+  fireEvent.click(save);
+  await screen.findByRole('alert');
+  assert.equal(name.value, '  Morgan Plans  ');
+  fireEvent.click(save);
+  await screen.findByText('Profile saved.');
+  view.rerender(React.createElement(AccountPage, { account, onSignOut }));
+  assert.equal(name.value, 'Morgan Plans');
+  assert.equal(save.disabled, true);
+  assert.deepEqual(requested, ['Morgan Plans', 'Morgan Plans']);
+  click('button', 'Sign out');
+  assert.ok(signedOut);
+});
+
+test('the billing route requires sign-in and the sandbox portal is labeled', async () => {
+  const previous = window.location.href;
+  window.history.replaceState(null, '', '#/account/billing');
+  try {
+    render(React.createElement(Root));
+    await screen.findByRole('heading', { name: 'Billing', level: 1 });
+    assert.ok(screen.getByRole('heading', { name: 'Sign in to continue' }));
+    assert.equal(screen.queryByRole('link', { name: /billing portal/i }), null);
+    cleanup();
+  } finally {
+    window.history.replaceState(null, '', previous);
+  }
+
+  const account = { user: { id: 'account-test' } };
+  const view = render(React.createElement(AccountPage, { billing: true, account }));
+  const portal = screen.getByRole('link', { name: 'Open test billing portal' });
+  assert.match(portal.href, /^https:\/\/billing\.stripe\.com\/p\/login\/test_/);
+  assert.equal(portal.rel, 'noopener noreferrer');
+  assert.ok(screen.getByText('Test mode'));
+  assert.equal(screen.getByRole('link', { name: 'Saved plans' }).getAttribute('href'), '#/editor');
+
+  view.rerender(React.createElement(AccountPage, {
+    billing: true,
+    account,
+    portalUrl: 'https://billing.stripe.com.example.com/p/login/invalid',
+  }));
+  assert.equal(screen.queryByRole('link', { name: /billing portal/i }), null);
+  assert.ok(screen.getByText('Billing is currently unavailable.'));
+});
+
+test('signed-in navigation opens Account on the site and in the phone menu', () => {
+  render(React.createElement(Marketing, { page: 'home', account: { signedIn: true } }));
+  const header = screen.getByRole('banner');
+  const mobileMenu = header.querySelector('details');
+  mobileMenu.open = true;
+  const accountLinks = within(header).getAllByRole('link', { name: 'Account' });
+  assert.equal(accountLinks.length, 2);
+  assert.ok(accountLinks.every((link) => link.getAttribute('href') === '#/account'));
+  assert.equal(within(header).queryByRole('button', { name: 'Sign out' }), null);
 });
