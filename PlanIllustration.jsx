@@ -39,20 +39,20 @@ export default function PlanIllustration() {
   );
 }
 
-export function DoorPlan({ pocket = false }) {
+export function DoorPlan({ revised = false }) {
   return (
     <svg
       className="doorPlan"
       viewBox="0 0 600 360"
       role="img"
-      aria-label={pocket
-        ? 'Revised laundry plan. A pocket door slides into the wall, leaving the hall clear.'
+      aria-label={revised
+        ? 'Revised laundry plan. The old doorway is filled, the new door swings into the laundry room, and a window is added to the exterior wall.'
         : 'Original laundry plan. The swing door opens into the hall and blocks the passage.'}
     >
       <rect x="52" y="214" width="496" height="106" fill="#f5f1e9" />
       <g fill="none" stroke="#3c474a" strokeWidth="7" strokeLinecap="square">
-        <path d="M52 214V50h496v164H428M52 214h173M52 320h496" />
-        {!pocket && <path d="M319 214h109" />}
+        <path d="M52 214V50h200m141 0h155v164M52 320h496" />
+        <path d={revised ? 'M52 214h347m94 0h55' : 'M252 50h141M52 214h173m94 0h229'} />
       </g>
       <g fill="#f5f1e9" stroke="#626a6a" strokeWidth="2">
         <rect x="72" y="70" width="67" height="68" rx="4" />
@@ -61,18 +61,17 @@ export function DoorPlan({ pocket = false }) {
         <circle cx="184.5" cy="104" r="23" />
         <path d="M423 68h106v48H423Zm0 35h106m-54-35v48" />
       </g>
-      {pocket ? (
+      {revised && (
         <g>
-          <path d="M319 207h109v14H319" fill="#fffdf8" stroke="#3c474a" strokeWidth="2" />
-          <path d="M323 214h94" stroke="#a4431a" strokeWidth="5" strokeLinecap="round" />
-        </g>
-      ) : (
-        <g>
-          <path d="M225 214h94a94 94 0 0 1-94 94Z" fill="#f8e6d7" />
-          <path d="M319 214a94 94 0 0 1-94 94" fill="none" stroke="#a4431a" strokeWidth="2" />
-          <path d="M225 214v94" stroke="#a4431a" strokeWidth="5" />
+          <rect x="252" y="43" width="141" height="14" fill="#f8e6d7" stroke="#a4431a" strokeWidth="2" />
+          <path d="M252 50h141m-70-7v14" fill="none" stroke="#a4431a" strokeWidth="2" />
         </g>
       )}
+      <g transform={revised ? 'translate(399 214) scale(1 -1)' : 'translate(225 214)'}>
+        <path d="M0 0h94a94 94 0 0 1-94 94Z" fill="#f8e6d7" />
+        <path d="M94 0a94 94 0 0 1-94 94" fill="none" stroke="#a4431a" strokeWidth="2" />
+        <path d="M0 0v94" stroke="#a4431a" strokeWidth="5" />
+      </g>
       <g fill="#555b5b" fontSize="20" fontWeight="600" textAnchor="middle" letterSpacing="2">
         <text x="316" y="157">LAUNDRY</text>
         <text x="416" y="276">HALL</text>

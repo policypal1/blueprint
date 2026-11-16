@@ -104,20 +104,13 @@ function BlueprintDemo() {
   );
 }
 
-function SiteNav({ page, onNavigate }) {
+function SiteNav({ page, mobile = false, onNavigate }) {
   return (
     <nav className="siteNav" aria-label="Main navigation" onClick={onNavigate}>
-      <a
-        href={DEMO_HASH}
-        aria-current={page === 'demo' ? 'location' : undefined}
-        onClick={() => {
-          if (window.location.hash === DEMO_HASH) scrollToDemo();
-        }}
-      >
-        How it works
-      </a>
       <a href="#/pricing" aria-current={page === 'pricing' ? 'page' : undefined}>Pricing</a>
-      <EditorLink />
+      {mobile
+        ? <a href="#/editor" className="mobileEditorLink">Edit your blueprint</a>
+        : <EditorLink />}
     </nav>
   );
 }
@@ -132,7 +125,7 @@ function MobileMenu({ page }) {
       menu.current.querySelector('summary').focus();
     }}>
       <summary aria-label="Menu"><Icon name="menu" size={24} /></summary>
-      <SiteNav page={page} onNavigate={closeMenu} />
+      <SiteNav page={page} mobile onNavigate={closeMenu} />
     </details>
   );
 }
@@ -188,15 +181,15 @@ function HomeContent() {
       </section>
       <section className="homeSection" aria-labelledby="comparison-title">
         <h2 id="comparison-title">See what changed</h2>
-        <p className="comparisonIntro">A pocket door keeps the hallway clear.</p>
+        <p className="comparisonIntro">Close the old doorway, move the entry, and add a window.</p>
         <div className="comparisonGrid">
           <figure>
             <figcaption><strong>Original</strong><span>Swing door</span></figcaption>
             <DoorPlan />
           </figure>
           <figure>
-            <figcaption><strong>Revised</strong><span>Pocket door</span></figcaption>
-            <DoorPlan pocket />
+            <figcaption><strong>Revised</strong><span>New entry and window</span></figcaption>
+            <DoorPlan revised />
           </figure>
         </div>
       </section>

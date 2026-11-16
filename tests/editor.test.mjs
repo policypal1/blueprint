@@ -190,11 +190,13 @@ test('landing and pricing explain the product and lead to the editor', async () 
   const pricing = screen.getByRole('heading', { name: 'Pay per project' });
   const comparison = screen.getByRole('heading', { name: 'See what changed' });
   assert.ok(pricing.compareDocumentPosition(comparison) & Node.DOCUMENT_POSITION_FOLLOWING);
-  assert.ok(screen.getByRole('img', { name: /pocket door slides into the wall/ }));
-  assert.ok(document.querySelector('.mobileMenu .siteNav a.primary[href="#/editor"]'));
+  assert.ok(screen.getByRole('img', { name: /the old doorway is filled.*a window is added/i }));
+  assert.ok(document.querySelector('.mobileMenu .siteNav a.mobileEditorLink[href="#/editor"]'));
+  const desktopNav = within(document.querySelector('.siteHeader > nav'));
+  assert.equal(desktopNav.queryByRole('link', { name: 'How it works' }), null);
   assert.equal(
-    within(document.querySelector('.siteHeader > nav')).getByRole('link', { name: 'How it works' }).getAttribute('href'),
-    '#/how-it-works',
+    desktopNav.getByRole('link', { name: 'Pricing' }).getAttribute('href'),
+    '#/pricing',
   );
   assert.doesNotMatch(screen.getByRole('main').textContent, /\bbeta\b/i);
   cleanup();

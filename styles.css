@@ -255,9 +255,9 @@ p {
     list-style: none;
     border-radius: 7px;
     cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
   .mobileMenu summary::-webkit-details-marker { display: none; }
-  .mobileMenu[open] summary { background: var(--soft); color: var(--accent); }
   .mobileMenu .siteNav {
     position: absolute;
     inset: 100% 0 auto;
@@ -267,8 +267,15 @@ p {
     background: var(--paper);
     border-bottom: 1px solid var(--line);
   }
-  .mobileMenu .siteNav .button { justify-content: space-between; margin-top: 6px; }
+  .mobileMenu .mobileEditorLink { color: var(--accent); font-weight: 600; }
   .mobileMenu:not([open]) .siteNav { display: none; }
+}
+@media (max-width: 800px) and (prefers-reduced-motion: no-preference) {
+  .mobileMenu[open] .siteNav { animation: menu-unfold 180ms ease-out; }
+  @keyframes menu-unfold {
+    from { clip-path: inset(0 0 100%); opacity: 0.7; }
+    to { clip-path: inset(0); opacity: 1; }
+  }
 }
 .marketingHome {
   background: var(--paper);
