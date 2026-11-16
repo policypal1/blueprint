@@ -1,22 +1,17 @@
-# PlanPatch frontend beta
+# PlanPatch
 
-A refreshed version of `policypal1/blueprint`, based on commit `679effc`.
-This package contains normal React, JavaScript, CSS, HTML, and configuration files.
-There is no BAT file, generated installer, backend, payment collection, or password gate.
+PlanPatch edits existing blueprints on mobile and desktop.
 
 ## Start here
 
-1. Download backups of important drawings from your current app and keep a copy of your repository.
-2. Extract the ZIP and open the `PlanPatch` folder. For a local preview, run the commands below in the folder containing `package.json`.
-3. Use Node.js **22.12 or newer**:
+Run these commands from the repository root with Node.js **22.12 or newer**.
 
 ```bash
 npm ci
 npm run dev
 ```
 
-4. Open the localhost URL printed by Vite. **Edit your blueprint** takes you to Recent plans. Upload a PDF or image, paste a clipboard image, or open the editable Oak St. Remodel with **Try a sample plan**.
-5. Before deploying, run:
+Open the localhost URL printed by Vite. **Edit your blueprint** opens Recent plans. Upload a PDF or image, paste a clipboard image, or choose **Try a sample plan**. To check a release build, run the following commands.
 
 ```bash
 npm test
@@ -24,17 +19,25 @@ npm run build
 npm run preview
 ```
 
-For your existing Vercel project, use the Vite framework preset, `npm run build`, and output directory `dist`. Select Node 22 or 24. No environment variables are required for this beta. The included `vercel.json` sets basic browser security headers. This handoff does not push to GitHub or deploy your live site.
+For the existing Vercel project, use the Vite framework preset, `npm run build`, and output directory `dist`. Select Node 22 or 24. The browser editor works with both account environment variables unset.
 
-Opening `index.html` directly by double-clicking is not supported; Vite builds and serves this app.
+## Enable accounts
+
+1. Create a dedicated Supabase project for PlanPatch. In its SQL Editor, run [the account migration](supabase/migrations/20261116052511_planpatch_accounts.sql) once. It creates the `projects` table, a private `blueprints` bucket, and owner-only permissions for both. If you manage the database through the Supabase CLI, apply the same migration with `supabase db push` from the linked checkout.
+2. In Google Cloud, configure the Google Auth Platform consent screen for PlanPatch with the `openid`, `email`, and `profile` scopes. Create a **Web application** OAuth client. Add your live site origin and the callback URL shown in Supabase under **Authentication → Sign In / Providers → Google**. Save the Google Client ID and Client Secret in that Supabase provider and enable it. Add test users while the Google app is in Testing, and publish the consent screen before signing up customers. [Google sign-in setup](https://supabase.com/docs/guides/auth/social-sign-in/auth-google)
+3. In Supabase **Authentication → URL Configuration**, set **Site URL** to the live Vercel origin. Allow the exact URL with its trailing slash, for example `https://blueprint-blue-theta.vercel.app/`. For local testing, also allow `http://localhost:5173/`. [Redirect URL setup](https://supabase.com/docs/guides/auth/redirect-urls)
+4. In Vercel **Settings → Environment Variables**, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` from the Supabase project’s Connect panel. Redeploy with both variables. For local development use `.env.local`. Keep the Google Client Secret in Supabase. [Supabase API keys](https://supabase.com/docs/guides/api/api-keys)
+5. On the deployed site, sign in, upload a sample PDF, and click **Save to account**. Add a wall and wait for **Saved to your account**. Sign in from another browser with the same Google account and check that the image and wall reopen. Then sign in with a second Google account and check that the first account’s plan is absent.
+
+Drafts begin on the device. **Save to account** moves a draft after the cloud save succeeds, and future edits to that plan save automatically. If another device saved a newer version, use **Save a copy** to keep both drawings. Account plans can be deleted from the project menu. Payment collection is a separate integration.
 
 ## What changed
 
-- A short landing page with an interactive plan comparison and a link straight into the editable example.
-- A separate pricing page: proposed **$15 per project for 30 days**, or **$29/month** for regular use. Both buttons open the free beta. There is no checkout, credit meter, expiration enforcement, or hidden paywall.
+- A short landing page with a desktop and a phone demo, followed by the original and revised plans from the walkthrough.
+- The pricing page shows **$10 per project** and **$19/month**.
 - Charcoal toolbars, an orange action color, and warm drawing surfaces. The phone toolbar groups View, Edit, and Measure. Edit puts walls, doors, and fixtures within thumb reach. Desktop shows the full palette beside the drawing.
 - On a phone, choose **Edit → Wall** and tap each endpoint. **Cancel** clears the first endpoint before a wall is placed. On desktop, drag to draw a wall.
-- Returning to PlanPatch opens Recent plans. Open any plan saved in this browser, or upload a PDF or image as a separate plan.
+- Recent plans opens drawings saved in this browser or in your account. Upload a PDF or image to start a separate plan.
 - Password removal from the active application. `Root.jsx` routes the marketing pages and lazy-loads the editor.
 - Safer project switching and autosave, honest save-failure messages, portable JSON backups and restoration, and a reusable sample project.
 - Undo for property changes, persistent dimension rendering, better measurement input parsing, pointer capture, and corrected pointer coordinates when the viewport adds margins around the drawing.
@@ -54,22 +57,18 @@ Opening `index.html` directly by double-clicking is not supported; Vite builds a
 | `RecentPlans.jsx`      | Saved plan list and upload entry point              |
 | `editor-core.js`       | Validation, measurements, coordinates, PDF layout  |
 | `useProjectStore.js`   | Local IndexedDB saving and loading                 |
+| `useAccount.js`        | Sign-in and session handling                       |
+| `account-projects.js`  | Account plans and private image storage            |
 | `ui.jsx`               | Icons, brand and dialogs                           |
 | `Root.jsx`             | Page routing                                       |
 | `export-font.js`       | Embedding Inter in exported drawings               |
 | `sample-project.js`    | Editable demonstration project                     |
 | `vercel.json`          | Hosting security headers                           |
 
-## Older files in your repository
-
-The old `ProductApp.jsx`, `productServices.js`, `product.config.js`, `launch.css`, `editor-polish.js`, `editor-polish.css`, `auth.js`, `env.example`, `README-LAUNCH.md`, and `COPY-INSTRUCTIONS.txt` are not part of this build and are omitted from this ZIP. After replacing the current entry point, those old files are unused and can be removed. Do not reconnect the old mock account or payment screens. If you added an `api/auth` endpoint separately, remove that obsolete endpoint when publishing the public beta.
-
-## What this beta actually does
+## Plan files and backups
 
 PDFs and images become a raster background. You can mask details and draw new editable objects over it. Importing a PDF does **not** automatically turn its original walls into CAD objects. Advanced JSON import accepts explicitly structured editable geometry. PDF output is raster-based, not CAD/vector output. Dimensions use inches and feet.
 
-Projects stay in IndexedDB in the current browser and origin. Existing storage keys are retained. Clearing browser data, switching domains/devices, private browsing, or storage limits can affect access. Download backups regularly. Avoid editing from multiple tabs; cross-tab conflict handling is not implemented. There is no cloud sync, account recovery, team sharing, or server backup yet.
+Guest drafts stay in IndexedDB for the current browser and domain. Use **Download backup** under project settings to keep a portable copy.
 
-The security measures cover the static beta. They do not substitute for backend authorization, secure payments, or a security review. Read `ROADMAP.md` before introducing accounts or billing.
-
-See `TESTING.md` for what passed and the real-browser checks still required. This is not a promise of zero bugs or a production-readiness certification.
+Run `npm test` to check guest and account editor flows. Repeat the live two-account check in step 5 when the production login and database are connected.

@@ -104,10 +104,15 @@ function BlueprintDemo() {
   );
 }
 
-function SiteNav({ page, mobile = false, onNavigate }) {
+function SiteNav({ page, account, mobile = false, onNavigate }) {
   return (
     <nav className="siteNav" aria-label="Main navigation" onClick={onNavigate}>
       <a href="#/pricing" aria-current={page === 'pricing' ? 'page' : undefined}>Pricing</a>
+      {account && (
+        <button className="accountNavButton" disabled={account.busy} onClick={account.onAction}>
+          {account.signedIn ? 'Sign out' : 'Sign in'}
+        </button>
+      )}
       {mobile
         ? <a href="#/editor" className="mobileEditorLink">Edit your blueprint</a>
         : <EditorLink />}
@@ -115,7 +120,7 @@ function SiteNav({ page, mobile = false, onNavigate }) {
   );
 }
 
-function MobileMenu({ page }) {
+function MobileMenu({ page, account }) {
   const menu = useRef(null);
   const closeMenu = () => { menu.current.open = false; };
   return (
@@ -125,19 +130,19 @@ function MobileMenu({ page }) {
       menu.current.querySelector('summary').focus();
     }}>
       <summary aria-label="Menu"><Icon name="menu" size={24} /></summary>
-      <SiteNav page={page} mobile onNavigate={closeMenu} />
+      <SiteNav page={page} account={account} mobile onNavigate={closeMenu} />
     </details>
   );
 }
 
-export function SiteHeader({ page }) {
+export function SiteHeader({ page, account }) {
   return (
     <header className="siteHeader">
       <a href="#/" aria-label={`${PRODUCT_NAME} home`}>
         <Brand />
       </a>
-      <SiteNav page={page} />
-      <MobileMenu page={page} />
+      <SiteNav page={page} account={account} />
+      <MobileMenu page={page} account={account} />
     </header>
   );
 }
@@ -212,7 +217,7 @@ function HomeContent() {
   );
 }
 
-function PricingContent() {
+function PricingContent({ accountsEnabled }) {
   return (
     <>
       <h1>Pricing</h1>
@@ -223,7 +228,9 @@ function PricingContent() {
           {faqs.map(([question, answer]) => (
             <details key={question}>
               <summary>{question}<Icon name="chevron" size={20} /></summary>
-              <p>{answer}</p>
+              <p>{accountsEnabled && question === 'Where are my plans saved?'
+                ? 'Drafts stay on this device. Save a plan to your account to open it on another device.'
+                : answer}</p>
             </details>
           ))}
         </div>
@@ -232,7 +239,7 @@ function PricingContent() {
   );
 }
 
-export default function Marketing({ page }) {
+export default function Marketing({ page, account }) {
   const pricing = page === 'pricing';
 
   useEffect(() => {
@@ -253,9 +260,9 @@ export default function Marketing({ page }) {
       >
         Skip to content
       </a>
-      <SiteHeader page={page} />
+      <SiteHeader page={page} account={account} />
       <main id="main-content" className={pricing ? 'pricingPage' : undefined} tabIndex={-1}>
-        {pricing ? <PricingContent /> : <HomeContent />}
+        {pricing ? <PricingContent accountsEnabled={Boolean(account)} /> : <HomeContent />}
       </main>
       <footer className="siteFooter">
         <a href="#/" aria-label={`${PRODUCT_NAME} home`}>

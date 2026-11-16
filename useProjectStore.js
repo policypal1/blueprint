@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { validateProject } from './editor-core.js';
+import { useAccountProjects } from './useAccountProjects.js';
 
 const DB_NAME = 'blueprint-studio-db';
 const CURRENT_KEY = 'blueprint-studio-current-v1';
@@ -55,11 +56,14 @@ export function persistProjects(list) {
   writeQueue = operation;
   return operation;
 }
-export function useProjectStore(makeEmpty) {
+export function useProjectStore(makeEmpty, repository, showRecent) {
+  const cloud = useAccountProjects(repository, showRecent);
   const [project, setActiveState] = useState(makeEmpty);
   const [projects, setListState] = useState([]);
   const [hydrated, setHydrated] = useState(false);
   const [saveStatus, setSaveStatus] = useState('Opening projects…');
+  const [accountId, setAccountId] = useState(null);
+  const accountIdRef = useRef(null);
   const projectRef = useRef(project),
     listRef = useRef([]),
     ready = useRef(false),
@@ -74,9 +78,12 @@ export function useProjectStore(makeEmpty) {
     revision.current += 1;
     setSaveStatus('Saving…');
   };
-  const selectProject = (next) => {
+  const selectProject = (next, nextAccountId = null) => {
+    accountIdRef.current = nextAccountId;
+    setAccountId(nextAccountId);
     projectRef.current = next;
     setActiveState(next);
+    if (nextAccountId) return;
     try {
       localStorage.setItem(CURRENT_KEY, next.id);
     } catch {
@@ -84,8 +91,7 @@ export function useProjectStore(makeEmpty) {
     }
   };
 
-  const setProject = (fn) => {
-    const next = typeof fn === 'function' ? fn(projectRef.current) : fn;
+  const addLocalProject = (next) => {
     selectProject(next);
     setProjects(
       [...listRef.current.filter((p) => p.id !== next.id), next].sort(
@@ -93,16 +99,29 @@ export function useProjectStore(makeEmpty) {
       ),
     );
   };
+  const setProject = (fn) => {
+    const next = typeof fn === 'function' ? fn(projectRef.current) : fn;
+    const id = accountIdRef.current;
+    if (id) {
+      projectRef.current = next;
+      setActiveState(next);
+      cloud.edit(id, next);
+    } else {
+      addLocalProject(next);
+    }
+  };
   const flush = async () => {
-    if (!ready.current || failedLoad.current || revision.current === persistedRevision.current)
-      return;
+    if (revision.current === persistedRevision.current) return true;
+    if (!ready.current || failedLoad.current) return false;
     const thisRevision = revision.current;
     try {
       await persistProjects(listRef.current);
       persistedRevision.current = thisRevision;
       if (thisRevision === revision.current) setSaveStatus('Saved in this browser');
+      return true;
     } catch {
       setSaveStatus('Save failed · download a backup');
+      return false;
     }
   };
 
@@ -152,11 +171,15 @@ export function useProjectStore(makeEmpty) {
 
   useEffect(() => {
     const onHide = () => {
-      if (document.visibilityState === 'hidden') void flush();
+      if (document.visibilityState === 'hidden') {
+        void flush();
+        if (cloud.dirty()) void cloud.flush();
+      }
     };
     const onLeave = (e) => {
-      if (revision.current !== persistedRevision.current) {
+      if (revision.current !== persistedRevision.current || cloud.dirty()) {
         void flush();
+        if (cloud.dirty()) void cloud.flush();
         e.preventDefault();
         e.returnValue = '';
       }
@@ -169,5 +192,8 @@ export function useProjectStore(makeEmpty) {
       void flush();
     };
   }, []);
-  return { project, projects, setProject, selectProject, setProjects, hydrated, saveStatus, projectRef };
+  return {
+    project, projects, setProject, addLocalProject, selectProject, setProjects,
+    hydrated, saveStatus, projectRef, cloud, accountId, accountIdRef, flush,
+  };
 }

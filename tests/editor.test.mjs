@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
-import { indexedDB } from 'fake-indexeddb';
+import { IDBFactory, indexedDB } from 'fake-indexeddb';
 
 const base = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 await fs.mkdir(path.join(base, '.test-build'), { recursive: true });
@@ -678,4 +678,134 @@ test('leaving Recent plans during an import keeps the destination page and allow
   } finally {
     cleanup();
   }
+});
+
+function AccountEditor({ repository }) {
+  const [showRecent, setShowRecent] = React.useState(true);
+  React.useEffect(() => {
+    const navigate = () => setShowRecent(window.location.hash === '#/editor');
+    window.addEventListener('hashchange', navigate);
+    return () => window.removeEventListener('hashchange', navigate);
+  }, []);
+  return React.createElement(Editor, {
+    repository,
+    accountsEnabled: Boolean(repository),
+    showRecent,
+    onOpenWorkspace: () => {
+      window.location.hash = '#/editor/workspace';
+      setShowRecent(false);
+    },
+  });
+}
+
+test('account saves retry, autosave edits, reopen in another browser and stay out of guest storage', async () => {
+  const rows = new Map();
+  let firstWrite = true;
+  const repository = {
+    list: async () => Array.from(rows.values(), ({ record, project }) => ({
+      id: record.id, name: project.name, updatedAt: project.updatedAt,
+    })),
+    open: async (id) => structuredClone(rows.get(id)),
+    async save(project, record, _saved, writeId) {
+      const previous = rows.get(record.id);
+      if (previous?.record.writeId === writeId) return structuredClone(previous.record);
+      const next = { id: record.id, revision: record.revision + 1, writeId };
+      rows.set(record.id, { project: structuredClone(project), record: next });
+      if (firstWrite) {
+        firstWrite = false;
+        throw new Error('Connection dropped after save');
+      }
+      return structuredClone(next);
+    },
+    remove: async ({ id }) => { rows.delete(id); },
+  };
+  const originalDb = globalThis.indexedDB;
+  globalThis.indexedDB = new IDBFactory();
+  window.history.replaceState(null, '', '#/editor');
+  try {
+    render(React.createElement(AccountEditor, { repository }));
+    await waitSaved();
+    const upload = {
+      size: 100, name: 'Account garage.pdf', arrayBuffer: async () => new ArrayBuffer(4),
+    };
+    fireEvent.change(document.querySelector('input[type=file]'), { target: { files: [upload] } });
+    await screen.findByRole('dialog', { name: 'Choose a PDF page' });
+    click('button', 'Import page');
+    await screen.findByRole('main', { name: 'Drawing workspace' });
+    assert.ok(svg().querySelector('image'));
+
+    click('button', 'Save to account');
+    await screen.findByRole('alert');
+    assert.equal(rows.size, 1);
+    click('button', 'Save to account');
+    await screen.findByText('Saved to your account', { selector: '.saveStatus' });
+    assert.equal(rows.size, 1);
+    assert.equal([...rows.values()][0].record.revision, 1);
+    click('button', 'Wall');
+    draw(200, 200, 520, 200);
+    await waitFor(() => assert.equal([...rows.values()][0].project.elements.length, 1), { timeout: 3000 });
+    cleanup();
+
+    window.history.replaceState(null, '', '#/editor');
+    render(React.createElement(AccountEditor));
+    await waitSaved();
+    assert.equal(screen.queryByRole('button', { name: /Account garage/ }), null);
+    cleanup();
+
+    globalThis.indexedDB = new IDBFactory();
+    render(React.createElement(AccountEditor, { repository }));
+    const savedPlan = await screen.findByRole('button', { name: /Account garage/ });
+    await waitFor(() => assert.equal(savedPlan.disabled, false));
+    fireEvent.click(savedPlan);
+    await screen.findByRole('main', { name: 'Drawing workspace' });
+    assert.equal(count(), 1);
+    assert.ok(svg().querySelector('image'));
+    fireEvent.click(document.querySelector('.projectButton'));
+    click('button', 'Delete account plan');
+    click('button', 'Delete plan');
+    await screen.findByText('Open a plan and choose Save to account.');
+    assert.equal(rows.size, 0);
+  } finally {
+    cleanup();
+    globalThis.indexedDB = originalDb;
+  }
+});
+
+test('when a newer account save exists, the editor can save local changes as a copy', async () => {
+  const initial = {
+    name: 'Kitchen plan', id: 'first', elements: [], unitsPerInch: 4,
+    createdAt: Date.now(), updatedAt: Date.now(),
+  };
+  const rows = new Map([[initial.id, { project: initial, record: { id: initial.id, revision: 1 } }]]);
+  const repository = {
+    list: async () => Array.from(rows.values(), ({ record, project }) => ({
+      id: record.id, name: project.name, updatedAt: project.updatedAt,
+    })),
+    open: async (id) => structuredClone(rows.get(id)),
+    async save(project, record) {
+      if ((rows.get(record.id)?.record.revision ?? 0) !== record.revision)
+        throw Object.assign(new Error('Changed on another device'), { name: 'ProjectConflict' });
+      const next = { id: record.id, revision: record.revision + 1 };
+      rows.set(record.id, { project: structuredClone(project), record: next });
+      return next;
+    },
+  };
+  window.history.replaceState(null, '', '#/editor');
+  render(React.createElement(AccountEditor, { repository }));
+  const plan = await screen.findByRole('button', { name: /Kitchen plan/ });
+  await waitFor(() => assert.equal(plan.disabled, false));
+  fireEvent.click(plan);
+  await screen.findByRole('main', { name: 'Drawing workspace' });
+
+  rows.set(initial.id, {
+    project: { ...initial, name: 'Edited from a phone' }, record: { id: initial.id, revision: 2 },
+  });
+  click('button', 'Wall');
+  draw(200, 200, 600, 200);
+  const saveCopy = await screen.findByRole('button', { name: 'Save a copy' }, { timeout: 3000 });
+  fireEvent.click(saveCopy);
+  await screen.findByRole('button', { name: 'Kitchen plan (copy)' });
+  assert.equal(rows.size, 2);
+  assert.equal(rows.get(initial.id).project.name, 'Edited from a phone');
+  assert.equal([...rows.values()].find(({ record }) => record.id !== initial.id).project.elements.length, 1);
 });

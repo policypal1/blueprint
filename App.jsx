@@ -865,6 +865,7 @@ function regularizeImportedElements(elements, unitsPerInch = 4) {
 
 export function BlueprintApp({
   active = true, showRecent = false, sampleRequested = false, onSampleOpened, onOpenWorkspace,
+  repository, accountsEnabled = false, authBusy = false, onSignIn, onRegisterSave,
 }) {
   const svgRef = useRef(null);
   const fileRef = useRef(null);
@@ -875,8 +876,13 @@ export function BlueprintApp({
   const dragRef = useRef(null);
   const routeVersion = useRef(0);
   const importPending = useRef(false);
-  const { projects, setProjects, project, setProject, selectProject, hydrated, saveStatus, projectRef } =
-    useProjectStore(() => emptyProject('Untitled project'));
+  const {
+    projects, setProjects, project, setProject, addLocalProject, selectProject, hydrated,
+    saveStatus, projectRef, cloud, accountId, accountIdRef, flush,
+  } = useProjectStore(() => emptyProject('Untitled project'), repository, active && showRecent);
+  const [accountNotice, setAccountNotice] = useState('');
+  const accountOperation = useRef(false);
+  const accountDraft = cloud.current(accountId);
   const [ask, dialog, dismissDialog] = useDialog();
   const backupRef = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -957,6 +963,14 @@ export function BlueprintApp({
     setHelpOpen(false);
     dismissDialog();
   }, [active, showRecent]);
+
+  useEffect(() => {
+    onRegisterSave?.(repository ? cloud.flush : flush);
+    return () => {
+      routeVersion.current += 1;
+      onRegisterSave?.(null);
+    };
+  }, [repository, onRegisterSave]);
 
   const captureRoute = () => {
     const hash = window.location.hash;
@@ -1999,7 +2013,7 @@ export function BlueprintApp({
       confirmLabel: 'Create project',
     });
     if (name === null) return;
-    const cleanName = name.trim() || suggested;
+    const cleanName = name.trim().slice(0, 100) || suggested;
     const p = emptyProject(cleanName);
     chooseProject(p);
     onOpenWorkspace?.();
@@ -2013,17 +2027,15 @@ export function BlueprintApp({
       confirmLabel: 'Save name',
     });
     if (nextName === null || !nextName.trim()) return;
-    const cleanName = nextName.trim();
-    if (target.id === project.id) updateProject((p) => ({ ...p, name: cleanName }));
-    setProjects((list) =>
-      list.map((p) => (p.id === target.id ? { ...p, name: cleanName, updatedAt: Date.now() } : p)),
-    );
+    const cleanName = nextName.trim().slice(0, 100);
+    if (target === projectRef.current) updateProject((p) => ({ ...p, name: cleanName }));
   };
 
-  const chooseProject = (p, addToRecent = true) => {
+  const chooseProject = (p, addToRecent = true, savedId = null) => {
     resetPointerInput();
-    if (addToRecent) setProject(p);
-    else selectProject(p);
+    if (addToRecent) addLocalProject(p);
+    else selectProject(p, savedId);
+    setAccountNotice('');
     setSelectedId(null);
     setHistory([]);
     setFuture([]);
@@ -2063,7 +2075,87 @@ export function BlueprintApp({
       return;
     const next = projects.filter((p) => p.id !== id);
     setProjects(next);
-    if (projectRef.current.id === id) chooseProject(next[0] || emptyProject('Untitled project'), false);
+    if (!accountIdRef.current && projectRef.current.id === id)
+      chooseProject(next[0] || emptyProject('Untitled project'), false);
+  };
+
+  const openAccountPlan = async (id) => {
+    if (accountOperation.current || busy) return;
+    accountOperation.current = true;
+    const onSamePage = captureRoute();
+    setAccountNotice('');
+    setBusy(true);
+    try {
+      const saved = await cloud.open(id);
+      if (!onSamePage()) return;
+      chooseProject(saved, false, id);
+      onOpenWorkspace?.();
+    } catch {
+      if (onSamePage()) setAccountNotice('Could not open this plan. Try again.');
+    } finally {
+      accountOperation.current = false;
+      setBusy(false);
+    }
+  };
+
+  const saveToAccount = async (asCopy = false) => {
+    if (!repository) {
+      onSignIn?.();
+      return;
+    }
+    if (accountOperation.current || busy) return;
+    const local = projectRef.current;
+    const onSamePage = captureRoute();
+    accountOperation.current = true;
+    setBusy(true);
+    setAccountNotice('');
+    try {
+      const saved = await cloud.saveNew(local, asCopy ? accountId : null);
+      if (!saved) throw new Error('Account save failed');
+      if (!onSamePage() || projectRef.current.id !== local.id) return;
+      const latest = projectRef.current;
+      const next = latest === local ? saved.project : { ...latest, name: saved.project.name };
+      selectProject(next, saved.id);
+      if (next !== saved.project) cloud.edit(saved.id, next);
+      if (asCopy) {
+        cloud.dropDraft(accountId);
+      } else {
+        setProjects((list) => list.filter((plan) => plan.id !== local.id));
+        void flush();
+      }
+    } catch {
+      if (onSamePage()) setAccountNotice('Could not save to your account. Try again.');
+    } finally {
+      accountOperation.current = false;
+      setBusy(false);
+    }
+  };
+
+  const removeAccountPlan = async () => {
+    setProjectMenu(false);
+    if (accountOperation.current || !(await ask({
+      title: 'Delete this account plan?',
+      message: 'This removes the plan from your account on every device.',
+      type: 'confirm',
+      confirmLabel: 'Delete plan',
+      danger: true,
+    }))) return;
+    const id = accountIdRef.current;
+    if (!id || id !== accountId) return;
+    const onSamePage = captureRoute();
+    accountOperation.current = true;
+    setBusy(true);
+    setAccountNotice('');
+    try {
+      await cloud.remove(id);
+      if (accountIdRef.current === id) chooseProject(projects[0] || emptyProject('Untitled project'), false);
+      if (onSamePage()) window.location.hash = '#/editor';
+    } catch {
+      if (onSamePage()) setAccountNotice('Could not finish deleting this plan. Try again.');
+    } finally {
+      accountOperation.current = false;
+      setBusy(false);
+    }
   };
 
   const applyExactLength = (value) => {
@@ -2314,11 +2406,31 @@ export function BlueprintApp({
             chooseProject(plan, false);
             onOpenWorkspace?.();
           }}
+          account={repository ? {
+            plans: cloud.list, status: cloud.listStatus, notice: accountNotice,
+            onRefresh: cloud.refresh, onSelect: openAccountPlan,
+          } : null}
+          onSignIn={accountsEnabled && !repository ? onSignIn : null}
+          authBusy={authBusy}
         />
         {dialog}
       </>
     );
   }
+
+  const savedStatus = !accountDraft ? saveStatus
+    : accountDraft.writing ? 'Saving to your account…'
+    : accountDraft.error ? accountDraft.error.message
+    : accountDraft.project !== accountDraft.saved ? 'Unsaved changes' : 'Saved to your account';
+  const conflict = accountDraft?.error?.name === 'ProjectConflict';
+  const saveAction = accountDraft?.error
+    ? { label: conflict ? 'Save a copy' : 'Retry save', onClick: () => {
+      if (conflict) void saveToAccount(true);
+      else void cloud.restart(accountId);
+    } }
+    : !accountId && accountsEnabled
+      ? { label: repository ? 'Save to account' : 'Sign in to save', onClick: () => void saveToAccount() }
+      : null;
 
   return (
     <div className={`app${compact ? ' compactEditor' : ''}`}>
@@ -2336,12 +2448,18 @@ export function BlueprintApp({
             <span>{project.name}</span>
             <Icon name="chevron" size={15} />
           </button>
-          <span
-            className={`saveStatus ${saveStatus.includes('failed') || saveStatus.includes('unavailable') ? 'saveWarning' : ''}`}
-            role="status"
-          >
-            {saveStatus}
-          </span>
+          <div className="accountSaveRow">
+            <span className={`saveStatus${accountDraft?.error || /failed|unavailable/.test(saveStatus) ? ' saveWarning' : ''}`} role="status">
+              {conflict ? 'Newer changes on another device' : accountDraft?.error ? 'Account save failed' : savedStatus}
+            </span>
+            {saveAction && (
+              <button className="accountSaveButton" disabled={busy || authBusy || !hydrated}
+                onClick={saveAction.onClick}>
+                {saveAction.label}
+              </button>
+            )}
+          </div>
+          {accountNotice && <span className="saveStatus saveWarning" role="alert">{accountNotice}</span>}
           {projectMenu && (
             <>
               <button
@@ -2356,6 +2474,11 @@ export function BlueprintApp({
                 <button onClick={() => renameProject(project)}>
                   <Icon name="text" /> Rename current project
                 </button>
+                {accountId && (
+                  <button className="danger" onClick={removeAccountPlan}>
+                    <Icon name="trash" /> Delete account plan
+                  </button>
+                )}
                 <button onClick={() => loadSample()}>
                   <Icon name="file" /> Open sample project
                 </button>

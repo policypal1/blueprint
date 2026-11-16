@@ -238,6 +238,35 @@ p {
   min-height: 44px;
 }
 .siteNav > a:not(.button):is(:hover, [aria-current]) { color: var(--accent); }
+.accountNavButton {
+  justify-content: flex-start;
+  min-height: 44px;
+  padding-inline: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  white-space: nowrap;
+}
+.accountNavButton:hover { color: var(--accent); background: transparent; }
+.accountAlert {
+  position: fixed;
+  z-index: 80;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  max-width: min(380px, 90vw);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 26px #23282a20;
+  background: var(--paper);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.accountAlert button { min-width: 44px; min-height: 44px; padding: 0; flex: none; }
 .siteNav .button {
   padding-inline: 16px;
   font-size: 14px;
@@ -621,6 +650,12 @@ p {
 .recentActions button { min-height: 44px; }
 .recentSaveStatus { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
 .recentSaveStatus.saveWarning { color: var(--accent); }
+.recentGroup { margin: 28px 0; }
+.recentGroup h2, .devicePlansTitle { margin: 0 0 10px; font-size: 16px; }
+.accountListError { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.accountListError p { margin: 0; }
+.accountListError button { min-height: 44px; }
+.accountListSignIn { min-height: 44px; margin: 0 0 16px; color: var(--accent); }
 @media (max-width: 620px) {
   .recentBody {
     padding: 28px max(20px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
@@ -743,6 +778,19 @@ p {
   overflow-wrap: anywhere;
 }
 .saveWarning { color: var(--orange); }
+.accountSaveRow { display: flex; align-items: center; flex-wrap: wrap; column-gap: 8px; }
+.accountSaveButton {
+  min-height: 32px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--orange);
+  font-size: 12px;
+  justify-content: flex-start;
+  text-align: left;
+}
+.accountSaveButton:hover { background: var(--chromeLine); }
+.compactEditor .accountSaveButton { min-height: 44px; }
 .headerActions {
   display: flex;
   align-items: center;
