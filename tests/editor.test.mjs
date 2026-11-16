@@ -158,6 +158,9 @@ const click = (role, name) => {
   return fireEvent.click((dialog ? within(dialog) : screen).getByRole(role, { name, exact: true }));
 };
 const waitSaved = () => waitFor(() => assert.ok(screen.getByText('Saved in this browser')));
+const waitForUpload = () => waitFor(() =>
+  assert.equal(screen.getByRole('button', { name: 'Upload a plan', exact: true }).disabled, false),
+);
 const svg = () => document.querySelector('.planCanvas');
 const count = () =>
   Number(document.querySelector('.editorStatus span:last-child').textContent.match(/^\d+/)[0]);
@@ -580,15 +583,17 @@ test('reopening shows saved plans and uploading from the list creates a new plan
   window.history.replaceState(null, '', '#/editor/workspace');
   render(React.createElement(Root));
   await screen.findByRole('heading', { name: 'Recent plans' });
-  await waitSaved();
+  await waitForUpload();
   assert.ok(within(screen.getByRole('banner')).getByRole('link', { name: 'PlanPatch home' }));
   assert.equal(window.location.hash, '#/editor');
   assert.equal(screen.queryByRole('button', { name: 'Restore backup' }), null);
-  assert.ok(screen.getByRole('button', { name: 'Try a sample plan' }));
+  assert.equal(screen.queryByRole('button', { name: 'Try a sample plan' }), null);
+  assert.equal(screen.queryByRole('button', { name: 'New blank plan' }), null);
+  assert.equal(screen.queryByText(/Paste a blueprint image/), null);
 
-  click('button', 'New blank plan');
-  fireEvent.change(screen.getByLabelText('Project name'), { target: { value: 'Kitchen revision' } });
-  click('button', 'Create project');
+  fireEvent.change(document.querySelector('input[type=file]'), {
+    target: { files: [new File(['test image'], 'Kitchen revision.png', { type: 'image/png' })] },
+  });
   await screen.findByRole('main', { name: 'Drawing workspace' });
   assert.ok(within(screen.getByRole('banner')).getByRole('link', { name: 'PlanPatch home' }));
   click('button', 'Wall');
@@ -627,7 +632,7 @@ test('reopening shows saved plans and uploading from the list creates a new plan
   fireEvent.click(screen.getByRole('button', { name: /Kitchen revision/ }));
   await screen.findByRole('main', { name: 'Drawing workspace' });
   assert.equal(count(), 1);
-  assert.equal(svg().querySelector('image'), null);
+  assert.ok(svg().querySelector('image'));
   click('link', 'Recent plans');
   await screen.findByRole('heading', { name: 'Recent plans' });
   const image = new File(['test image'], 'image.png', { type: 'image/png' });
@@ -645,7 +650,7 @@ test('leaving Recent plans during an import keeps the destination page and allow
   render(React.createElement(Root));
   try {
     await screen.findByRole('heading', { name: 'Recent plans' });
-    await waitSaved();
+    await waitForUpload();
     let finishReading;
     const file = {
       size: 100,
@@ -693,7 +698,6 @@ function AccountEditor({ repository }) {
   }, []);
   return React.createElement(Editor, {
     repository,
-    accountsEnabled: Boolean(repository),
     showRecent,
     onOpenWorkspace: () => {
       window.location.hash = '#/editor/workspace';
@@ -702,8 +706,13 @@ function AccountEditor({ repository }) {
   });
 }
 
-test('account saves retry, autosave edits, reopen in another browser and stay out of guest storage', async () => {
-  const rows = new Map();
+test('recent plans lists device and account plans together, and older account plans still autosave and reopen', async () => {
+  const initial = {
+    id: 'account-garage', name: 'Account garage', elements: [],
+    unitsPerInch: 4, background: png, showBackground: true,
+    createdAt: 1700000000000, updatedAt: 1700000000000,
+  };
+  const rows = new Map([[initial.id, { project: initial, record: { id: initial.id, revision: 1 } }]]);
   let firstWrite = true;
   const repository = {
     list: async () => Array.from(rows.values(), ({ record, project }) => ({
@@ -728,31 +737,41 @@ test('account saves retry, autosave edits, reopen in another browser and stay ou
   window.history.replaceState(null, '', '#/editor');
   try {
     render(React.createElement(AccountEditor, { repository }));
-    await waitSaved();
-    const upload = {
-      size: 100, name: 'Account garage.pdf', arrayBuffer: async () => new ArrayBuffer(4),
-    };
-    fireEvent.change(document.querySelector('input[type=file]'), { target: { files: [upload] } });
-    await screen.findByRole('dialog', { name: 'Choose a PDF page' });
-    click('button', 'Import page');
+    await waitForUpload();
+    fireEvent.change(document.querySelector('input[type=file]'), {
+      target: { files: [new File(['test image'], 'Device garage.png', { type: 'image/png' })] },
+    });
     await screen.findByRole('main', { name: 'Drawing workspace' });
     assert.ok(svg().querySelector('image'));
+    await waitSaved();
+    assert.equal(screen.queryByRole('button', { name: 'Save to account' }), null);
+    assert.equal(rows.size, 1);
 
-    click('button', 'Save to account');
-    await screen.findByRole('alert');
-    assert.equal(rows.size, 1);
-    click('button', 'Save to account');
+    click('link', 'Recent plans');
+    await screen.findByRole('heading', { name: 'Recent plans' });
+    const list = screen.getByRole('list');
+    assert.deepEqual([...list.querySelectorAll('strong')].map((name) => name.textContent), [
+      'Device garage', 'Account garage',
+    ]);
+    assert.equal(screen.queryByText('Saved to your account'), null);
+    assert.equal(screen.queryByText('Saved in this browser'), null);
+    fireEvent.click(within(list).getByRole('button', { name: /Account garage/ }));
+    await screen.findByRole('main', { name: 'Drawing workspace' });
     await screen.findByText('Saved to your account', { selector: '.saveStatus' });
-    assert.equal(rows.size, 1);
-    assert.equal([...rows.values()][0].record.revision, 1);
     click('button', 'Wall');
     draw(200, 200, 520, 200);
-    await waitFor(() => assert.equal([...rows.values()][0].project.elements.length, 1), { timeout: 3000 });
+    const retry = await screen.findByRole('button', { name: 'Retry save' }, { timeout: 3000 });
+    const savedRecord = rows.get(initial.id).record;
+    fireEvent.click(retry);
+    await screen.findByText('Saved to your account', { selector: '.saveStatus' });
+    assert.equal(rows.get(initial.id).project.elements.length, 1);
+    assert.equal(savedRecord.revision, 2);
+    assert.deepEqual(rows.get(initial.id).record, savedRecord);
     cleanup();
 
     window.history.replaceState(null, '', '#/editor');
     render(React.createElement(AccountEditor));
-    await waitSaved();
+    await screen.findByRole('button', { name: /Device garage/ });
     assert.equal(screen.queryByRole('button', { name: /Account garage/ }), null);
     cleanup();
 
@@ -760,6 +779,7 @@ test('account saves retry, autosave edits, reopen in another browser and stay ou
     render(React.createElement(AccountEditor, { repository }));
     const savedPlan = await screen.findByRole('button', { name: /Account garage/ });
     await waitFor(() => assert.equal(savedPlan.disabled, false));
+    assert.equal(screen.queryByRole('button', { name: /Device garage/ }), null);
     fireEvent.click(savedPlan);
     await screen.findByRole('main', { name: 'Drawing workspace' });
     assert.equal(count(), 1);
@@ -767,7 +787,7 @@ test('account saves retry, autosave edits, reopen in another browser and stay ou
     fireEvent.click(document.querySelector('.projectButton'));
     click('button', 'Delete account plan');
     click('button', 'Delete plan');
-    await screen.findByText('Open a plan and choose Save to account.');
+    await screen.findByText('No plans yet');
     assert.equal(rows.size, 0);
   } finally {
     cleanup();
@@ -869,7 +889,11 @@ test('the billing route requires sign-in and the sandbox portal is labeled', asy
   assert.match(portal.href, /^https:\/\/billing\.stripe\.com\/p\/login\/test_/);
   assert.equal(portal.rel, 'noopener noreferrer');
   assert.ok(screen.getByText('Test mode'));
-  assert.equal(screen.getByRole('link', { name: 'Saved plans' }).getAttribute('href'), '#/editor');
+  const sections = within(screen.getByRole('navigation', { name: 'Account' }));
+  assert.deepEqual(sections.getAllByRole('link').map((link) => link.getAttribute('href')), [
+    '#/account', '#/account/security', '#/account/billing',
+  ]);
+  assert.equal(sections.getByRole('link', { name: 'Billing' }).getAttribute('aria-current'), 'page');
 
   view.rerender(React.createElement(AccountPage, {
     billing: true,
@@ -880,19 +904,27 @@ test('the billing route requires sign-in and the sandbox portal is labeled', asy
   assert.ok(screen.getByText('Billing is currently unavailable.'));
 });
 
-test('the account initial opens settings, billing and sign-out without a redundant workspace CTA', () => {
-  const user = { email: 'morgan@example.test', user_metadata: { planpatch_display_name: 'Morgan' } };
+test('the desktop header shows the account name, and the dropdown works in the editor', () => {
+  const user = { email: 'morgan@example.test', user_metadata: { planpatch_display_name: 'Morgan Lee' } };
   const onSignOut = () => { signedOut += 1; };
   let signedOut = 0;
-  render(React.createElement(SiteHeader, { page: 'workspace', account: { signedIn: true, user, onSignOut } }));
+  const account = { signedIn: true, user, onSignOut };
+  const view = render(React.createElement(SiteHeader, { page: 'account', account }));
   const header = screen.getByRole('banner');
+  const nav = within(header.querySelector('.siteHeaderActions > .siteNav'));
+  assert.ok(nav.getByRole('link', { name: 'Pricing' }));
+  assert.ok(nav.getByRole('link', { name: 'Edit your blueprint' }));
+  assert.equal(header.querySelector('.accountMenuName').textContent, 'Morgan Lee');
+
+  view.rerender(React.createElement(SiteHeader, { page: 'workspace', account }));
   const details = header.querySelector('.accountMenu');
-  assert.equal(details.querySelector('summary').getAttribute('aria-label'), 'Account menu');
+  assert.equal(details.querySelector('summary').getAttribute('aria-label'), 'Account menu for Morgan Lee');
   assert.equal(details.querySelector('summary .accountAvatar').textContent, 'M');
   assert.equal(within(header).queryByRole('link', { name: 'Edit your blueprint' }), null);
   fireEvent.click(details.querySelector('summary'));
   assert.equal(within(header).getByRole('link', { name: 'Profile settings' }).getAttribute('href'), '#/account');
   assert.equal(within(header).getByRole('link', { name: 'Billing & payment methods' }).getAttribute('href'), '#/account/billing');
+  assert.equal(within(header).queryByRole('link', { name: 'Saved plans' }), null);
   fireEvent.click(within(header).getByRole('button', { name: 'Sign out' }));
   assert.equal(signedOut, 1);
   assert.equal(details.open, false);
