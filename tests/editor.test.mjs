@@ -17,6 +17,7 @@ await build({
     marketing: path.join(base, 'Marketing.jsx'),
     root: path.join(base, 'Root.jsx'),
     account: path.join(base, 'Account.jsx'),
+    auth: path.join(base, 'Auth.jsx'),
   },
   outdir: path.join(base, '.test-build'),
   outExtension: { '.js': '.mjs' },
@@ -151,6 +152,7 @@ const { default: Editor } = await import('../.test-build/editor.mjs');
 const { default: Marketing } = await import('../.test-build/marketing.mjs');
 const { default: Root } = await import('../.test-build/root.mjs');
 const { default: AccountPage } = await import('../.test-build/account.mjs');
+const { SignInPage, ResetPasswordPage } = await import('../.test-build/auth.mjs');
 const click = (role, name) => {
   const dialog = screen.queryByRole('dialog');
   return fireEvent.click((dialog ? within(dialog) : screen).getByRole(role, { name, exact: true }));
@@ -887,4 +889,108 @@ test('signed-in navigation opens Account on the site and in the phone menu', () 
   assert.equal(accountLinks.length, 2);
   assert.ok(accountLinks.every((link) => link.getAttribute('href') === '#/account'));
   assert.equal(within(header).queryByRole('button', { name: 'Sign out' }), null);
+});
+
+test('public sign-in route shows account sign-in and retains guest editor access', async () => {
+  const previous = window.location.href;
+  window.history.replaceState(null, '', '#/sign-in');
+  try {
+    render(React.createElement(Root));
+    await screen.findByRole('heading', { name: 'Sign in to PlanPatch', level: 1 });
+    assert.ok(screen.getByText('Account sign-in is currently unavailable.'));
+    assert.ok(screen.getAllByRole('link', { name: 'Edit your blueprint' })
+      .some((link) => link.getAttribute('href') === '#/editor'));
+  } finally {
+    cleanup();
+    window.history.replaceState(null, '', previous);
+  }
+});
+
+test('sign-up requests verification and supports resending and password recovery', async () => {
+  const account = { client: {} };
+  const requested = [];
+  const onAuthenticate = async (...args) => {
+    requested.push(args);
+    return false;
+  };
+  render(React.createElement(SignInPage, { account, onAuthenticate, onGoogle: async () => {} }));
+  assert.ok(screen.getByRole('button', { name: 'Continue with Google' }).querySelector('svg'));
+
+  click('button', 'Create an account');
+  const email = screen.getByLabelText('Email address');
+  const password = screen.getByLabelText('Password');
+  fireEvent.change(email, { target: { value: 'sam@example.test' } });
+  assert.equal(password.autocomplete, 'new-password');
+  fireEvent.change(password, { target: { value: 'test-password-2026' } });
+  click('button', 'Create account');
+  await screen.findByText(/Check your inbox for a confirmation link/);
+  assert.equal(screen.getByLabelText('Password').value, '');
+  click('button', 'Resend confirmation');
+  click('button', 'Resend confirmation');
+  await screen.findByText(/Check your inbox for a confirmation link/);
+
+  click('button', 'Forgot password?');
+  assert.equal(screen.queryByLabelText('Password'), null);
+  click('button', 'Send reset link');
+  await screen.findByText(/If that email is registered/);
+  assert.deepEqual(requested, [
+    ['create', 'sam@example.test', 'test-password-2026'],
+    ['resend', 'sam@example.test', ''],
+    ['forgot', 'sam@example.test', ''],
+  ]);
+});
+
+test('the editor sign-in dialog retries credentials and completes a valid sign-in', async () => {
+  const account = { client: {} };
+  let attempts = 0, completed = 0;
+  const onAuthenticate = async (mode, email, password) => {
+    assert.deepEqual([mode, email, password], ['signIn', 'sam@example.test', 'test-password-2026']);
+    if (++attempts === 1) throw { code: 'invalid_credentials' };
+    return true;
+  };
+  render(React.createElement(SignInPage, {
+    account, onAuthenticate, onGoogle: async () => {},
+    onClose: () => {}, onAuthenticated: () => { completed += 1; },
+  }));
+
+  assert.ok(screen.getByRole('dialog', { name: 'Sign in to PlanPatch' }));
+  fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'sam@example.test' } });
+  fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'test-password-2026' } });
+  click('button', 'Sign in');
+  await screen.findByText('The email or password was incorrect.');
+  click('button', 'Sign in');
+  await waitFor(() => assert.equal(completed, 1));
+});
+
+test('password reset screens require a recovery session and matching passwords', async () => {
+  const updated = [];
+  const account = { user: { id: 'sandbox-user' }, completePasswordReset: async (value) => updated.push(value) };
+  const view = render(React.createElement(ResetPasswordPage, { account }));
+  assert.equal(screen.queryByRole('button', { name: 'Update password' }), null);
+  view.rerender(React.createElement(ResetPasswordPage, { account: { ...account, recovering: true } }));
+  fireEvent.change(screen.getByLabelText('New password', { exact: true }), { target: { value: 'new-horse-2026' } });
+  fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: 'wrong-horse-2026' } });
+  click('button', 'Update password');
+  await screen.findByText('The passwords don’t match.');
+  fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: 'new-horse-2026' } });
+  click('button', 'Update password');
+  await screen.findByText('Your password was updated.');
+  assert.deepEqual(updated, ['new-horse-2026']);
+});
+
+test('account security updates email through confirmation and offers a reset link', async () => {
+  const requests = [];
+  const account = {
+    user: { id: 'sandbox-user', email: 'sam@example.test' },
+    updateEmail: async (email) => requests.push(['updateEmail', email]),
+    requestPasswordReset: async (email) => requests.push(['resetPassword', email]),
+  };
+  render(React.createElement(AccountPage, { account, security: true }));
+  assert.ok(screen.getByRole('region', { name: 'Sign-in & security' }));
+  fireEvent.change(screen.getByLabelText('New email address'), { target: { value: 'new@example.test' } });
+  click('button', 'Send email change link');
+  await screen.findByText(/confirm the change/);
+  click('button', 'Send password reset link');
+  await screen.findByText(/Check your current email/);
+  assert.deepEqual(requests, [['updateEmail', 'new@example.test'], ['resetPassword', 'sam@example.test']]);
 });
