@@ -176,18 +176,23 @@ async function newProject(name) {
 
 test('landing and pricing explain the product and lead to the editor', async () => {
   render(React.createElement(Marketing, { page: 'home' }));
-  assert.ok(screen.getByRole('heading', { name: /Edit your current blueprint/ }));
+  const hero = screen.getByRole('region', { name: /Edit your current blueprint/ });
+  assert.ok(within(hero).getByRole('heading', { name: /Edit your current blueprint/ }));
   assert.ok(screen.getByText(/Paste a blueprint image or upload a PDF/));
   assert.equal(
-    screen.getByRole('link', { name: 'Edit your blueprint' }).getAttribute('href'),
+    within(hero).getByRole('link', { name: 'Edit your blueprint' }).getAttribute('href'),
     '#/editor',
   );
   assert.equal(document.querySelector('video').getAttribute('src'), '/planpatch-demo.mp4');
-  assert.ok(document.querySelector('.stickyEdit').hidden);
+  assert.equal(document.querySelector('.stickyEdit').getAttribute('aria-hidden'), 'true');
+  assert.ok(screen.getByRole('heading', { name: 'How it works' }));
+  const pricing = screen.getByRole('heading', { name: 'Pay per project' });
+  const comparison = screen.getByRole('heading', { name: 'See what changed' });
+  assert.ok(pricing.compareDocumentPosition(comparison) & Node.DOCUMENT_POSITION_FOLLOWING);
   cleanup();
   render(React.createElement(Marketing, { page: 'pricing' }));
-  assert.ok(screen.getByText('$15'));
-  assert.ok(screen.getByText('$29'));
+  assert.ok(screen.getByText('$10'));
+  assert.ok(screen.getByText('$19'));
   assert.ok(screen.getByText('The editor is free during beta.'));
   assert.equal(screen.getAllByRole('link', { name: 'Try the editor free' }).length, 2);
   assert.equal(

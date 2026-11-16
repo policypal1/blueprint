@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
 import PlanIllustration from './PlanIllustration.jsx';
-export const PRICING = { project: 15, monthly: 29 };
+export const PRICING = { project: 10, monthly: 19 };
 const EditorLink = ({ children, href = '#/editor', className = '', primary = true }) => (
   <a href={href} className={`button ${primary ? 'primary' : ''} ${className}`}>
     {children}
@@ -10,7 +10,17 @@ const EditorLink = ({ children, href = '#/editor', className = '', primary = tru
 );
 
 function BlueprintDemo() {
+  const [mobile, setMobile] = useState(
+    () => window.matchMedia?.('(max-width: 800px)').matches ?? false,
+  );
   const videoRef = useRef(null);
+
+  useEffect(() => {
+    const query = window.matchMedia?.('(max-width: 800px)');
+    const update = () => setMobile(query.matches);
+    query?.addEventListener('change', update);
+    return () => query?.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     if (!window.IntersectionObserver) return;
@@ -54,16 +64,17 @@ function BlueprintDemo() {
       motion?.removeEventListener('change', onMotionChange);
       if (!video.paused) video.pause();
     };
-  }, []);
+  }, [mobile]);
 
   return (
-    <section className="blueprintDemo" aria-labelledby="blueprint-demo-title">
-      <h2 id="blueprint-demo-title">See a blueprint edit</h2>
+    <section id="how-it-works" className="blueprintDemo" aria-labelledby="blueprint-demo-title">
+      <h2 id="blueprint-demo-title" tabIndex={-1}>How it works</h2>
       <video
+        key={String(mobile)}
         ref={videoRef}
-        src="/planpatch-demo.mp4"
-        poster="/planpatch-demo-poster.webp"
-        aria-label="Pasting a blueprint image, drawing a wall, placing a door, and downloading a PDF"
+        src={mobile ? '/planpatch-demo-mobile.mp4' : '/planpatch-demo.mp4'}
+        poster={mobile ? '/planpatch-demo-mobile-poster.webp' : '/planpatch-demo-poster.webp'}
+        aria-label={`${mobile ? 'Uploading' : 'Pasting'} a blueprint image, clearing an old wall and bed, adding a wall, door and fixture, and downloading a PDF`}
         muted
         playsInline
         controls
@@ -71,6 +82,29 @@ function BlueprintDemo() {
         preload="none"
       />
     </section>
+  );
+}
+
+function MobileMenu() {
+  const menu = useRef(null);
+  return (
+    <details className="mobileMenu" ref={menu} onKeyDown={(event) => {
+      if (event.key !== 'Escape') return;
+      menu.current.open = false;
+      menu.current.querySelector('summary').focus();
+    }}>
+      <summary aria-label="Menu"><Icon name="menu" size={24} /></summary>
+      <nav aria-label="Main navigation">
+        <a href="#how-it-works" onClick={(event) => {
+          event.preventDefault();
+          menu.current.open = false;
+          document.getElementById('blueprint-demo-title')?.focus({ preventScroll: true });
+          document.getElementById('how-it-works')?.scrollIntoView();
+        }}>How it works</a>
+        <a href="#/pricing">Pricing</a>
+        <a href="#/editor">Edit your blueprint</a>
+      </nav>
+    </details>
   );
 }
 
@@ -92,7 +126,7 @@ function HomeContent() {
       <section className="hero" aria-labelledby="blueprint-hero-title">
         <div className="heroBlueprint" aria-hidden="true"><PlanIllustration /></div>
         <div className="heroCopy">
-          <h1 id="blueprint-hero-title">Edit your current blueprint.</h1>
+          <h1 id="blueprint-hero-title">Edit your <span className="heroEmphasis">current blueprint</span>.</h1>
           <p>Paste a blueprint image or upload a PDF. Draw your changes right on top.</p>
           <div className="heroActions" ref={heroAction}>
             <EditorLink>Edit your blueprint</EditorLink>
@@ -115,8 +149,30 @@ function HomeContent() {
           ))}
         </div>
       </section>
-      <aside className="stickyEdit" aria-label="Blueprint editor shortcut" hidden={!showSticky}>
-        <EditorLink>Edit your blueprint</EditorLink>
+      <section className="homeSection projectPricing" aria-labelledby="project-pricing-title">
+        <h2 id="project-pricing-title">Pay per project</h2>
+        <p>Free during beta. No card required.</p>
+        <p>After beta, pay <strong>${PRICING.project} per project</strong> with no subscription required, or choose <strong>${PRICING.monthly}/month</strong>.</p>
+        <a className="detailsLink" href="#/pricing">See pricing</a>
+      </section>
+      <section className="homeSection planComparison" aria-labelledby="comparison-title">
+        <h2 id="comparison-title">See what changed</h2>
+        <p>The old wall and bed were cleared, then a new wall, door, and sink were added.</p>
+        <div className="comparisonGrid">
+          <figure>
+            <img src="/planpatch-original.webp" alt="Original plan with a bed and the old partition wall" width="800" height="500" loading="lazy" />
+            <figcaption>Original</figcaption>
+          </figure>
+          <figure>
+            <img src="/planpatch-revised.webp" alt="Revised plan showing the new partition, door, and sink" width="800" height="500" loading="lazy" />
+            <figcaption>Revised</figcaption>
+          </figure>
+        </div>
+      </section>
+      <aside className="stickyEdit" aria-label="Blueprint editor shortcut" aria-hidden={!showSticky} data-visible={showSticky}>
+        <a className="button primary" href="#/editor" tabIndex={showSticky ? undefined : -1}>
+          Edit your blueprint <Icon name="arrow" size={17} />
+        </a>
       </aside>
     </>
   );
@@ -142,7 +198,7 @@ export default function Marketing({ page }) {
         <a href="#/" aria-label={`${PRODUCT_NAME} home`}>
           <Brand />
         </a>
-        {pricing && <EditorLink className="navCta" primary={false}>Open editor</EditorLink>}
+        {pricing ? <EditorLink className="navCta" primary={false}>Open editor</EditorLink> : <MobileMenu />}
       </header>
       <main id="main-content" tabIndex="-1">
         {pricing ? (

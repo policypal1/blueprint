@@ -228,6 +228,30 @@ p {
   padding-inline: 12px;
   white-space: nowrap;
 }
+.mobileMenu { display: none; }
+@media (max-width: 800px) {
+  .mobileMenu { display: block; }
+  .mobileMenu summary {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    list-style: none;
+    cursor: pointer;
+  }
+  .mobileMenu summary::-webkit-details-marker { display: none; }
+  .marketingHome .siteHeader { position: relative; z-index: 2; }
+  .mobileMenu nav {
+    position: absolute;
+    inset: 100% 0 auto;
+    display: grid;
+    padding: 8px 5% 14px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+  }
+  .mobileMenu nav a { display: flex; align-items: center; min-height: 46px; }
+  .mobileMenu:not([open]) nav { display: none; }
+}
 .marketingHome {
   background: var(--paper);
   padding-bottom: calc(72px + env(safe-area-inset-bottom));
@@ -254,6 +278,15 @@ p {
   mix-blend-mode: multiply;
   pointer-events: none;
 }
+.hero::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: auto 0 0;
+  height: clamp(90px, 18vw, 210px);
+  background: linear-gradient(transparent, var(--paper));
+  pointer-events: none;
+}
 .planIllustration {
   display: block;
   width: 100%;
@@ -267,6 +300,12 @@ p {
   line-height: 1.05;
   letter-spacing: -0.055em;
   text-wrap: balance;
+}
+.heroEmphasis {
+  text-decoration: underline;
+  text-decoration-color: var(--orange);
+  text-decoration-thickness: 0.075em;
+  text-underline-offset: 0.12em;
 }
 .heroCopy > p {
   max-width: 44ch;
@@ -301,6 +340,11 @@ p {
   background: var(--chrome);
   border: 1px solid var(--line);
   border-radius: 10px;
+  object-fit: contain;
+  margin-inline: auto;
+}
+@media (max-width: 800px) {
+  .blueprintDemo video { aspect-ratio: 9 / 16; max-width: 450px; }
 }
 .stickyEdit {
   position: fixed;
@@ -311,6 +355,15 @@ p {
   padding: 10px max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   border-top: 1px solid var(--line);
   background: var(--paper);
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(100%);
+  transition: transform 240ms ease, opacity 180ms ease, visibility 240ms;
+}
+.stickyEdit[data-visible='true'] {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
 }
 .stickyEdit .button {
   width: min(100%, 370px);
@@ -321,6 +374,22 @@ p {
   max-width: 1280px;
   margin: auto;
   padding: 0 5% 36px;
+}
+.homeSection {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: clamp(36px, 6vw, 72px) 5%;
+  border-top: 1px solid var(--line);
+}
+.homeSection h2 { margin: 0 0 12px; font-size: clamp(25px, 4vw, 38px); }
+.homeSection p { max-width: 50ch; margin: 0 0 12px; color: var(--muted); line-height: 1.6; }
+.detailsLink { display: inline-flex; align-items: center; min-height: 44px; text-decoration: underline; }
+.comparisonGrid { display: grid; gap: 18px; margin-top: 25px; }
+.comparisonGrid figure { margin: 0; }
+.comparisonGrid img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; }
+.comparisonGrid figcaption { margin-top: 9px; font-weight: 600; }
+@media (min-width: 801px) {
+  .comparisonGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .workflowGrid {
   display: grid;

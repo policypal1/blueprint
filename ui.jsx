@@ -4,6 +4,7 @@ import brandMark from './favicon.svg';
 export const PRODUCT_NAME = 'PlanPatch';
 
 const paths = {
+  menu: 'M4 6h16M4 12h16M4 18h16',
   arrow: 'M5 12h14m-6-6 6 6-6 6',
   chevron: 'm8 10 4 4 4-4',
   close: 'm6 6 12 12M6 18 18 6',
