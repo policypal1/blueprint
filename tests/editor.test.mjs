@@ -149,7 +149,7 @@ const { render, fireEvent, screen, within, waitFor, act, cleanup } =
   await import('@testing-library/react');
 afterEach(cleanup);
 const { default: Editor } = await import('../.test-build/editor.mjs');
-const { default: Marketing } = await import('../.test-build/marketing.mjs');
+const { default: Marketing, SiteHeader } = await import('../.test-build/marketing.mjs');
 const { default: Root } = await import('../.test-build/root.mjs');
 const { default: AccountPage } = await import('../.test-build/account.mjs');
 const { SignInPage, ResetPasswordPage } = await import('../.test-build/auth.mjs');
@@ -197,7 +197,7 @@ test('landing and pricing explain the product and lead to the editor', async () 
   assert.ok(pricing.compareDocumentPosition(comparison) & Node.DOCUMENT_POSITION_FOLLOWING);
   assert.ok(screen.getByRole('img', { name: /the old doorway is filled.*a window is added/i }));
   assert.ok(document.querySelector('.mobileMenu .siteNav a.mobileEditorLink[href="#/editor"]'));
-  const desktopNav = within(document.querySelector('.siteHeader > nav'));
+  const desktopNav = within(document.querySelector('.siteHeaderActions > nav'));
   assert.equal(desktopNav.queryByRole('link', { name: 'How it works' }), null);
   assert.equal(
     desktopNav.getByRole('link', { name: 'Pricing' }).getAttribute('href'),
@@ -880,15 +880,22 @@ test('the billing route requires sign-in and the sandbox portal is labeled', asy
   assert.ok(screen.getByText('Billing is currently unavailable.'));
 });
 
-test('signed-in navigation opens Account on the site and in the phone menu', () => {
-  render(React.createElement(Marketing, { page: 'home', account: { signedIn: true } }));
+test('the account initial opens settings, billing and sign-out without a redundant workspace CTA', () => {
+  const user = { email: 'morgan@example.test', user_metadata: { planpatch_display_name: 'Morgan' } };
+  const onSignOut = () => { signedOut += 1; };
+  let signedOut = 0;
+  render(React.createElement(SiteHeader, { page: 'workspace', account: { signedIn: true, user, onSignOut } }));
   const header = screen.getByRole('banner');
-  const mobileMenu = header.querySelector('details');
-  mobileMenu.open = true;
-  const accountLinks = within(header).getAllByRole('link', { name: 'Account' });
-  assert.equal(accountLinks.length, 2);
-  assert.ok(accountLinks.every((link) => link.getAttribute('href') === '#/account'));
-  assert.equal(within(header).queryByRole('button', { name: 'Sign out' }), null);
+  const details = header.querySelector('.accountMenu');
+  assert.equal(details.querySelector('summary').getAttribute('aria-label'), 'Account menu');
+  assert.equal(details.querySelector('summary .accountAvatar').textContent, 'M');
+  assert.equal(within(header).queryByRole('link', { name: 'Edit your blueprint' }), null);
+  fireEvent.click(details.querySelector('summary'));
+  assert.equal(within(header).getByRole('link', { name: 'Profile settings' }).getAttribute('href'), '#/account');
+  assert.equal(within(header).getByRole('link', { name: 'Billing & payment methods' }).getAttribute('href'), '#/account/billing');
+  fireEvent.click(within(header).getByRole('button', { name: 'Sign out' }));
+  assert.equal(signedOut, 1);
+  assert.equal(details.open, false);
 });
 
 test('public sign-in route shows account sign-in and retains guest editor access', async () => {
@@ -993,4 +1000,27 @@ test('account security updates email through confirmation and offers a reset lin
   click('button', 'Send password reset link');
   await screen.findByText(/Check your current email/);
   assert.deepEqual(requests, [['updateEmail', 'new@example.test'], ['resetPassword', 'sam@example.test']]);
+});
+
+test('account deletion requires a typed confirmation from the account owner', async () => {
+  const requests = [];
+  const account = { user: { id: 'owner', email: 'morgan@example.test' } };
+  const access = {
+    data: {},
+    deleteAccount: async (confirmation) => { requests.push(confirmation); },
+    refresh: async () => {},
+  };
+  let deleted = 0;
+  render(React.createElement(AccountPage, { account, access, security: true, onDeleted: () => { deleted += 1; } }));
+  click('button', 'Delete account');
+  const confirmation = screen.getByLabelText('Type DELETE to confirm');
+  const action = screen.getByRole('button', { name: 'Permanently delete account' });
+  assert.equal(action.disabled, true);
+  fireEvent.change(confirmation, { target: { value: 'delete' } });
+  assert.equal(action.disabled, true);
+  fireEvent.change(confirmation, { target: { value: 'DELETE' } });
+  assert.equal(action.disabled, false);
+  fireEvent.click(action);
+  await waitFor(() => assert.equal(deleted, 1));
+  assert.deepEqual(requests, ['DELETE']);
 });
