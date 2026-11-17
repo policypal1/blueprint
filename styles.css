@@ -253,6 +253,7 @@ p {
   align-items: center;
   min-height: 44px;
 }
+.siteNav .navEditorLink { gap: 7px; white-space: nowrap; }
 .siteNav > a:not(.button):is(:hover, [aria-current]) { color: var(--accent); }
 .accountAlert {
   position: fixed;
@@ -301,7 +302,6 @@ p {
     background: var(--paper);
     border-bottom: 1px solid var(--line);
   }
-  .mobileMenu .mobileEditorLink { color: var(--accent); font-weight: 600; }
   .mobileMenu:not([open]) .siteNav { display: none; }
 }
 @media (max-width: 800px) and (prefers-reduced-motion: no-preference) {
@@ -934,6 +934,38 @@ html:has(.authConfirmation) { overflow: hidden; }
 .guideSteps li::marker { color: var(--accent); font-weight: 700; }
 .guideSteps h2 { margin: 0 0 6px; font-size: 20px; }
 .guideSteps p { max-width: 65ch; margin: 0; color: var(--muted); line-height: 1.55; }
+.resourcePage {
+  max-width: 830px;
+  margin-inline: auto;
+  padding: clamp(26px, 5vw, 62px) var(--site-gutter) clamp(36px, 7vw, 80px);
+}
+.resourcePage h1 { margin: 0 0 18px; font-size: clamp(30px, 5.5vw, 49px); line-height: 1.12; text-wrap: balance; }
+.resourcePage h2 { margin: 22px 0 7px; font-size: clamp(19px, 3.5vw, 24px); }
+.resourcePage p { color: var(--muted); }
+.resourceList { display: grid; gap: 10px; margin: 24px 0 0; padding: 0; list-style: none; }
+.resourceList a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: clamp(14px, 3vw, 22px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+.resourceList a:hover { border-color: var(--accent); }
+.resourceList strong, .resourceList a span span { display: block; }
+.resourceList a span span { margin-top: 3px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.resourceBack { display: inline-flex; align-items: center; min-height: 44px; margin: -8px 0 6px; font-size: 14px; }
+.articleSteps { padding-inline-start: 24px; }
+.articleSteps li { padding-inline-start: 5px; }
+.articleSteps li::marker { color: var(--accent); font-weight: 700; }
+.resourceAction { margin-block: 28px; }
+.resourceAction .button { min-height: 44px; }
+.resourceAction p { margin: 8px 0 0; font-size: 14px; }
+.relatedGuides { border-top: 1px solid var(--line); }
+.relatedGuides ul { margin: 0; padding: 0; list-style: none; }
+.relatedGuides a { display: inline-flex; align-items: center; min-height: 44px; }
 .policyPage {
   width: min(100%, 760px);
   min-height: 48vh;
@@ -1269,6 +1301,7 @@ html:has(.authConfirmation) { overflow: hidden; }
   margin-left: auto;
 }
 .headerActions > button { min-height: 44px; }
+.headerActions .editorGuideButton { width: auto; padding-inline: 10px; }
 .headerActions > button:not(.primary) {
   background: transparent;
   color: var(--chromeText);
@@ -1278,8 +1311,9 @@ html:has(.authConfirmation) { overflow: hidden; }
 .topbar :focus-visible { outline-color: var(--orange); }
 .projectMenu :focus-visible { outline-color: var(--accent); }
 .workspace {
+  position: relative;
   display: grid;
-  grid-template-columns: clamp(176px, 19vw, 224px) minmax(0, 1fr) clamp(192px, 21vw, 252px);
+  grid-template-columns: clamp(176px, 19vw, 218px) minmax(0, 1fr);
   flex: 1;
   min-height: 0;
 }
@@ -1294,9 +1328,24 @@ html:has(.authConfirmation) { overflow: hidden; }
   padding: 18px 12px;
 }
 .properties {
-  border-left: 1px solid var(--line);
-  padding: 18px 16px;
+  position: absolute;
+  z-index: 6;
+  inset: 12px 12px auto auto;
+  width: clamp(185px, 22vw, 248px);
+  max-height: calc(100% - 24px);
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 6px 20px #252a2b20;
 }
+.paletteActions {
+  display: grid;
+  gap: 6px;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.paletteActions .tool { padding-inline: 9px; }
 .section + .section { margin-top: 19px; }
 .sectionTitle {
   color: var(--ink);
@@ -1596,7 +1645,6 @@ html:has(.authConfirmation) { overflow: hidden; }
 .projectUtilities .hint {
   margin: 4px 0;
 }
-.planSettingsButton { min-height: 44px; margin-top: 16px; justify-content: flex-start; }
 .backgroundSettings { margin-bottom: 16px; }
 hr {
   border: 0;
@@ -1670,7 +1718,7 @@ hr {
   cursor: default;
 }
 .compactEditor .recentBack span,
-.compactEditor .helpButton { display: none; }
+.compactEditor .editorGuideButton span { display: none; }
 .compactEditor .topbar {
   padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
   gap: 8px;
@@ -1681,6 +1729,7 @@ hr {
   width: min(310px, calc(100vw - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right))));
 }
 .compactEditor .headerActions .iconButton { width: 44px; }
+.compactEditor .headerActions { gap: 5px; }
 .compactEditor .headerActions .primary { padding-inline: 9px; }
 .compactEditor .headerActions .primary > svg { display: none; }
 .compactEditor .workspace { grid-template-columns: minmax(0, 1fr); }
@@ -1910,24 +1959,40 @@ hr {
   line-height: 1.8;
 }
 .helpSteps {
-  padding-left: 20px;
-  font-size: 12px;
-  line-height: 1.8;
+  padding-inline-start: 22px;
+  font-size: 14px;
+  line-height: 1.5;
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 11px;
 }
-.helpSteps b {
-  font-weight: 600;
+.helpSteps b { font-weight: 600; }
+.helpSteps p { margin: 3px 0 0; color: var(--muted); }
+.editorGuide { width: min(470px, 100%); }
+.editorGuide > p { color: var(--muted); margin-bottom: 0; }
+.editorGuide .modalHeader { margin-bottom: 10px; }
+.editorGuide .modalActions button { min-height: 44px; }
+.guideStepIntro { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.guideStepIntro p { margin: 0; font-size: 13px; color: var(--muted); }
+.guideStepIcon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--soft);
+  color: var(--accent);
 }
+.guideShortcuts summary { min-height: 44px; padding-block: 10px; cursor: pointer; font-size: 14px; }
 .shortcutGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-  background: #f1f4ed;
-  padding: 15px;
-  font-size: 10px;
-  color: #668056;
+  background: var(--panel);
+  border-radius: 7px;
+  padding: 12px;
+  font-size: 12px;
+  color: var(--ink);
 }
 @media (max-width: 620px) {
   .importWorkflow { grid-template-columns: minmax(0, 1fr); }

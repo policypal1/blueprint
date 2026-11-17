@@ -50,7 +50,7 @@ try {
       `<title>${escapeText(page.title)}</title>`,
       meta('description', page.description),
       `<link rel="canonical" href="${escapeText(canonical)}">`,
-      meta('og:type', 'website', 'property'),
+      meta('og:type', page.article ? 'article' : 'website', 'property'),
       meta('og:site_name', SITE_NAME, 'property'),
       meta('og:title', page.title, 'property'),
       meta('og:description', page.description, 'property'),
@@ -63,6 +63,18 @@ try {
     if (route === 'home') head.push(jsonLd({
       '@context': 'https://schema.org', '@type': 'WebSite', name: SITE_NAME, url: site.href,
     }));
+    if (page.article) {
+      const organization = { '@type': 'Organization', name: SITE_NAME, url: site.href };
+      head.push(jsonLd({
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        headline: page.heading,
+        description: page.description,
+        mainEntityOfPage: canonical,
+        author: organization,
+        publisher: organization,
+      }));
+    }
 
     const html = template
       .replace(/<meta\s+name="description"[^>]*>/, '')

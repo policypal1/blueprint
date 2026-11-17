@@ -2,6 +2,8 @@ import React from 'react';
 import { AuthHeader, SignInPage } from './Auth.jsx';
 import Marketing, { SiteFooter, SiteHeader } from './Marketing.jsx';
 import { CustomerPolicyPage, POLICY_LINKS } from './Policies.jsx';
+import FloorPlanGuides from './FloorPlanGuides.jsx';
+import { publicPages } from './seo-pages.js';
 
 export default function PublicPage({ page, account, trialOffer }) {
   if (page === 'signIn') {
@@ -36,6 +38,15 @@ export default function PublicPage({ page, account, trialOffer }) {
       <div className="marketing">
         <SiteHeader page={page} account={account} />
         <CustomerPolicyPage page={page} />
+        <SiteFooter />
+      </div>
+    );
+  }
+  if (page === 'guides' || publicPages[page]?.article) {
+    return (
+      <div className="marketing">
+        <SiteHeader page={page} account={account} />
+        <FloorPlanGuides page={page} showTrial={trialOffer && !account?.signedIn} />
         <SiteFooter />
       </div>
     );

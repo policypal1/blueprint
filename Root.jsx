@@ -126,10 +126,10 @@ export default function Root() {
   const showAuthPage = route === 'signIn' || route === 'resetPassword' || editorNeedsSignIn;
   const showTrial = route === 'trial';
 
-  function openSignIn() {
+  function openSignIn(mode = 'create') {
     if (showTrial) {
       signInTarget.current = '#/trial';
-      setSignInDialog(true);
+      setSignInDialog(mode);
       return;
     }
     signInTarget.current = showAccount ? window.location.hash : '#/account';
@@ -268,15 +268,15 @@ export default function Root() {
       )}
       {(showEditor || visitedEditor) && editorAllowed && (
         <div className="editorRoot" hidden={!showEditor}>
-          {showEditor && <SiteHeader page={route} account={accountNav} />}
-          {showEditor && !policy?.monthly && timedAccessActive(policy?.trialEndsAt) && (
+          {route === 'recent' && <SiteHeader page={route} account={accountNav} />}
+          {route === 'recent' && !policy?.monthly && timedAccessActive(policy?.trialEndsAt) && (
             <TrialStatus expiresAt={policy.trialEndsAt} />
           )}
           <div className="editorSurface">
             <Suspense
               fallback={
                 <div className="loadingScreen">
-                  <Brand />
+                  {route === 'recent' && <Brand />}
                   <p>Opening your workspace…</p>
                 </div>
               }
@@ -291,6 +291,7 @@ export default function Root() {
                 lockedProjectIds={policy?.lockedProjectIds}
                 owner={owner}
                 showMobileTip
+                showFirstUseGuide
                 canDownload={policy?.paymentsRequired ? access.canDownload : undefined}
                 authBusy={account.busy}
                 onRegisterSave={registerSave}
@@ -310,7 +311,7 @@ export default function Root() {
         </div>
       )}
       {signInDialog && showTrial && (
-        <SignInPage {...signInProps} initialMode="create" onClose={() => setSignInDialog(false)} />
+        <SignInPage {...signInProps} initialMode={signInDialog} onClose={() => setSignInDialog(false)} />
       )}
     </>
   );

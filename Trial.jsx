@@ -51,7 +51,10 @@ export default function TrialPage({ account, access, offer, offerChecking, offer
       ) : !account.user ? (
         <>
           <p>Upload a blueprint, make your changes and export a PDF. No credit card needed.</p>
-          <button type="button" className="primary" onClick={onSignIn} disabled={!account.client}>Create account</button>
+          <div className="accountActions">
+            <button type="button" className="primary" onClick={() => onSignIn('create')} disabled={!account.client}>Create account</button>
+            <button type="button" onClick={() => onSignIn('signIn')} disabled={!account.client}>Sign in</button>
+          </div>
         </>
       ) : data?.canStartTrial ? (
         <form className="trialForm" onSubmit={begin}>

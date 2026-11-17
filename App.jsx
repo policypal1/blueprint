@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { jsPDF } from 'jspdf';
 import { Icon, Modal, PRODUCT_NAME, useDialog } from './ui.jsx';
 import { DOORS, FIXTURES, PhoneControls, ToolButton, ToolChoices, editorMode } from './EditorControls.jsx';
+import EditorGuide from './EditorGuide.jsx';
 import {
   parseLength,
   pdfLayout,
@@ -29,6 +30,7 @@ const H = 1000;
 const GRID = 20;
 const COMPACT_LAYOUT = '(max-width: 800px), (pointer: coarse) and (max-height: 520px)';
 const DESKTOP_TIP_KEY = 'editfloorplans-hide-desktop-tip';
+const FIRST_USE_GUIDE_KEY = 'editfloorplans-editor-guide';
 const DRAWING_ACCENT = '#a9441b';
 const TAP_SLOP = 10;
 const DRAG_SLOP = 4;
@@ -39,16 +41,9 @@ const CLIPBOARD_IMAGES = new Map([
 ]);
 const VIEW_TOOLS = [['select', 'Select'], ['pan', 'Pan']];
 const OTHER_DRAW_TOOLS = [['window', 'Window'], ['line', 'Line'], ['rect', 'Rectangle']];
-const DRAW_TOOLS = [['wall', 'Wall'], ...OTHER_DRAW_TOOLS];
-const MEASUREMENT_TOOLS = [
-  ['measure', 'Measure'],
-  ['dimension', 'Dimension'],
-  ['calibrate', 'Set scale'],
-  ['text', 'Text'],
-];
+const MEASUREMENT_TOOLS = [['measure', 'Distance'], ['calibrate', 'Set scale']];
 const PANEL_TITLES = {
   doors: 'Choose a door',
-  fixtures: 'Choose a fixture',
   properties: 'Object properties',
   settings: 'Plan settings',
   tools: 'More tools',
@@ -875,7 +870,7 @@ function hasHiddenDesktopTip() {
 export function BlueprintApp({
   active = true, showRecent = false, sampleRequested = false, onSampleOpened, onOpenWorkspace,
   repository, projectAccess, lockedProjectIds = [], owner, authBusy = false, onRegisterSave, canDownload,
-  showMobileTip = false,
+  showMobileTip = false, showFirstUseGuide = false,
 }) {
   const svgRef = useRef(null);
   const fileRef = useRef(null);
@@ -904,7 +899,8 @@ export function BlueprintApp({
   const [phoneMode, setPhoneMode] = useState('view');
   const [compact, setCompact] = useState(() => window.matchMedia?.(COMPACT_LAYOUT).matches ?? false);
   const [desktopTipDismissed, setDesktopTipDismissed] = useState(() => showMobileTip && hasHiddenDesktopTip());
-  const [helpOpen, setHelpOpen] = useState(false);
+  const [guideMode, setGuideMode] = useState(null);
+  const checkedFirstUseGuide = useRef(false);
   const [paper, setPaper] = useState('tabloid');
   const [printScale, setPrintScale] = useState('fit');
   const [tool, setTool] = useState(() => compact ? 'pan' : 'select');
@@ -929,6 +925,21 @@ export function BlueprintApp({
   const selected = project.elements.find((e) => e.id === selectedId) || null;
   const useWallTaps = compact && tool === 'wall';
   const awaitingWallEnd = useWallTaps && draft?.awaitingEnd;
+  const showDesktopTip = showMobileTip && active && hydrated && compact && !desktopTipDismissed;
+
+  useEffect(() => {
+    if (!showFirstUseGuide || checkedFirstUseGuide.current || !active || showPlans || !hydrated || busy
+      || showDesktopTip || dialog || editorPanel || exportMenu || importOpen || guideMode) return;
+    checkedFirstUseGuide.current = true;
+    const storageKey = owner ? `${FIRST_USE_GUIDE_KEY}:${owner}` : FIRST_USE_GUIDE_KEY;
+    try {
+      if (localStorage.getItem(storageKey) === '1') return;
+      localStorage.setItem(storageKey, '1');
+    } catch {
+      // Keep the walkthrough one-time for the mounted editor when storage is unavailable.
+    }
+    setGuideMode('walkthrough');
+  }, [active, busy, dialog, editorPanel, exportMenu, guideMode, hydrated, importOpen, owner, showDesktopTip, showFirstUseGuide, showPlans]);
 
   useEffect(() => {
     if (showMobileTip && !active) setDesktopTipDismissed(hasHiddenDesktopTip());
@@ -989,7 +1000,7 @@ export function BlueprintApp({
     setProjectMenu(false);
     setExportMenu(false);
     setImportOpen(false);
-    setHelpOpen(false);
+    setGuideMode(null);
     dismissDialog();
   }, [active, showPlans]);
 
@@ -1790,8 +1801,8 @@ export function BlueprintApp({
         pushHistory();
         updateProject((p) => ({ ...p, ...background }));
       }
-      setStatus(`Plan imported${pdf ? ` · page ${pageNumber}` : ''} · set scale next`);
-      changeTool('calibrate');
+      setStatus(`Plan imported${pdf ? ` · page ${pageNumber}` : ''}`);
+      changeTool(compact ? 'pan' : 'select');
     } catch (err) {
       if (!onSamePage()) return;
       setStatus('Import failed');
@@ -2090,7 +2101,7 @@ export function BlueprintApp({
     setProjectMenu(false);
     setExportMenu(false);
     setImportOpen(false);
-    setHelpOpen(false);
+    setGuideMode(null);
     setCalibration(null);
     setMeasurement(null);
     setTool(compact ? 'pan' : 'select');
@@ -2340,25 +2351,29 @@ export function BlueprintApp({
       <Section title="View">
         <ToolChoices choices={VIEW_TOOLS} tool={tool} setTool={changeTool} />
       </Section>
-      <Section title="Draw">
-        <ToolChoices choices={DRAW_TOOLS} tool={tool} setTool={changeTool} />
+      <Section title="Edit">
+        <ToolButton tool={tool} id="wall" setTool={changeTool} label="Wall" />
+        <button className={`tool${tool.startsWith('door-') ? ' active' : ''}`}
+          aria-haspopup="dialog" onClick={() => setEditorPanel('doors')}>
+          <Icon name="door" size={17} /> Door
+        </button>
+        <ToolButton tool={tool} id="clean" setTool={changeTool} label="Clean up" />
+        <ToolButton tool={tool} id="text" setTool={changeTool} label="Text" />
       </Section>
-      <Section title="Doors">
-        <ToolChoices choices={DOORS} tool={tool} setTool={changeTool} />
-      </Section>
-      <Section title="Fixtures">
-        <ToolChoices choices={FIXTURES} tool={tool} setTool={changeTool} />
-      </Section>
-      <Section title="Measure & mark">
+      <Section title="Measure">
         <ToolChoices choices={MEASUREMENT_TOOLS} tool={tool} setTool={changeTool} />
         {calibration?.stage === 2 && (
           <button className="wide primary" onClick={finishCalibration}>Set real distance</button>
         )}
       </Section>
-      <Section title="Clean up">
-        <ToolButton tool={tool} id="clean" setTool={changeTool} label="Clean area" />
-        {eraserControl}
-      </Section>
+      <div className="paletteActions">
+        <button className="tool" aria-haspopup="dialog" onClick={() => setEditorPanel('tools')}>
+          <Icon name="more" size={17} /> More tools
+        </button>
+        <button className="tool" aria-haspopup="dialog" onClick={() => setEditorPanel('settings')}>
+          <Icon name="settings" size={17} /> Plan settings
+        </button>
+      </div>
     </>
   );
 
@@ -2470,8 +2485,7 @@ export function BlueprintApp({
     </>
   );
 
-  const desktopTip = showMobileTip && active && hydrated && compact && !desktopTipDismissed
-    && !dialog && !helpOpen && !importOpen && !editorPanel && (
+  const desktopTip = showDesktopTip && !dialog && !guideMode && !importOpen && !editorPanel && !exportMenu && (
       <Modal title="Best on desktop" className="mobileEditorTip" onClose={() => dismissDesktopTip(false)}>
         <p>A desktop gives you more room to draw and measure. You can keep editing on your phone.</p>
         <div className="modalActions">
@@ -2521,8 +2535,8 @@ export function BlueprintApp({
   return (
     <div className={`app${compact ? ' compactEditor' : ''}`}>
       <div className="topbar" role="group" aria-label="Project controls">
-        <a className="recentBack" href="#/editor" aria-label="Recent plans">
-          <Icon name="back" /> <span>Recent plans</span>
+        <a className="recentBack" href="#/editor" aria-label="Back to plans" title="Back to plans">
+          <Icon name="back" /> <span>Back to plans</span>
         </a>
         <div className="projectTitleWrap">
           <button
@@ -2566,23 +2580,18 @@ export function BlueprintApp({
                   </button>
                 )}
                 {!projectAccess && <button onClick={() => loadSample()}><Icon name="file" /> Open sample project</button>}
-                {compact && !originalLocked && (
-                  <button onClick={() => { setProjectMenu(false); fileRef.current?.click(); }}>
-                    <Icon name="upload" /> Upload a plan
+                {!originalLocked && (
+                  <button aria-label="Import plan" onClick={() => { setProjectMenu(false); fileRef.current?.click(); }}>
+                    <Icon name="upload" /> {project.background ? 'Replace blueprint' : 'Upload a plan'}
                   </button>
                 )}
                 <button disabled={!canCreateProject} onClick={() => { setProjectMenu(false); backupRef.current?.click(); }}>
                   <Icon name="folder" /> Restore backup
                 </button>
                 {compact && (
-                  <>
-                    <button disabled={!future.length} onClick={() => { redo(); setProjectMenu(false); }}>
-                      <Icon name="redo" /> Redo
-                    </button>
-                    <button onClick={() => { setProjectMenu(false); setHelpOpen(true); }}>
-                      <Icon name="help" /> Editor help
-                    </button>
-                  </>
+                  <button disabled={!future.length} onClick={() => { redo(); setProjectMenu(false); }}>
+                    <Icon name="redo" /> Redo
+                  </button>
                 )}
                 <div className="projectMenuDivider" />
                 {!projectAccess && projects.map((p) => (
@@ -2622,16 +2631,14 @@ export function BlueprintApp({
               <Icon name="redo" />
             </button>
           )}
-          {!compact && !originalLocked && (
-            <button
-              aria-label="Import plan"
-              disabled={busy || !hydrated}
-              onClick={() => fileRef.current?.click()}
-            >
-              <Icon name="upload" />
-              <span>Upload a plan</span>
-            </button>
-          )}
+          <button
+            className="iconButton editorGuideButton"
+            aria-label="Editor guide"
+            title="Editor guide"
+            onClick={() => setGuideMode('controls')}
+          >
+            <Icon name="help" /> <span>Guide</span>
+          </button>
           <button
             aria-label="Export"
             className="primary"
@@ -2640,13 +2647,6 @@ export function BlueprintApp({
           >
             <Icon name="download" />
             <span>{exporting ? 'Exporting…' : 'Export'}</span>
-          </button>
-          <button
-            className="iconButton helpButton"
-            aria-label="Editor help"
-            onClick={() => setHelpOpen(true)}
-          >
-            <Icon name="help" />
           </button>
         </div>
       </div>
@@ -2672,9 +2672,6 @@ export function BlueprintApp({
                 onClick={() => fileRef.current?.click()}
               >
                 Upload a plan <Icon name="arrow" />
-              </button>
-              <button className="textButton" disabled={!hydrated} onClick={() => loadSample()}>
-                Try a sample plan
               </button>
               <small>PDF, PNG, JPG or WebP · 25 MB max</small>
             </div>
@@ -2839,17 +2836,10 @@ export function BlueprintApp({
           </div>
         </main>
 
-        {!compact && (
-          <aside className="sidebar properties" aria-label="Object and plan settings">
+        {!compact && selected && (
+          <aside className="sidebar properties" aria-label="Object properties">
             <h3>Object properties</h3>
             {objectProperties}
-            <button
-              className="wide planSettingsButton"
-              aria-haspopup="dialog"
-              onClick={() => setEditorPanel('settings')}
-            >
-              <Icon name="settings" /> Plan settings
-            </button>
           </aside>
         )}
       </div>
@@ -2883,15 +2873,16 @@ export function BlueprintApp({
           {editorPanel === 'doors' && (
             <div className="sheetTools"><ToolChoices choices={DOORS} tool={tool} setTool={changeTool} /></div>
           )}
-          {editorPanel === 'fixtures' && (
-            <div className="sheetTools"><ToolChoices choices={FIXTURES} tool={tool} setTool={changeTool} /></div>
-          )}
           {editorPanel === 'properties' && objectProperties}
           {editorPanel === 'settings' && planSettings}
           {editorPanel === 'tools' && (
             <>
               <Section title="Draw">
-                <ToolChoices choices={[...OTHER_DRAW_TOOLS, ['text', 'Text']]} tool={tool} setTool={changeTool} />
+                <ToolChoices choices={OTHER_DRAW_TOOLS} tool={tool} setTool={changeTool} />
+                <ToolButton tool={tool} id="dimension" setTool={changeTool} label="Dimension" />
+              </Section>
+              <Section title="Fixtures">
+                <ToolChoices choices={FIXTURES} tool={tool} setTool={changeTool} />
               </Section>
               <Section title="Clean up">{eraserControl}</Section>
             </>
@@ -2900,36 +2891,7 @@ export function BlueprintApp({
       )}
       {dialog}
       {desktopTip}
-      {helpOpen && (
-        <Modal title="A quick guide" onClose={() => setHelpOpen(false)}>
-          <ol className="helpSteps">
-            <li>
-              <b>Import your plan.</b> Choose an image or a page from a PDF.
-            </li>
-            <li>
-              <b>Set scale.</b> Click two points with a known distance.
-            </li>
-            <li>
-              <b>Make the revision.</b> Clean old details, then draw walls and place fixtures.
-            </li>
-            <li>
-              <b>Export and back up.</b> Download a PDF/PNG to share and a JSON backup to keep
-              editing.
-            </li>
-          </ol>
-          <p className="modalLead">Draw over uploaded plans to show your changes.</p>
-          <div className="shortcutGrid">
-            <span>V · Select</span>
-            <span>H · Pan</span>
-            <span>W · Wall</span>
-            <span>M · Measure</span>
-            <span>R · Rotate object</span>
-            <span>Esc · Cancel</span>
-            <span>Ctrl/Cmd + Z · Undo</span>
-            <span>Ctrl/Cmd + C/V · Copy/paste</span>
-          </div>
-        </Modal>
-      )}
+      {guideMode && <EditorGuide compact={compact} initialMode={guideMode} onClose={() => setGuideMode(null)} />}
       {exportMenu && (
         <Modal
           title="Export plan"

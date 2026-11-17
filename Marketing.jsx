@@ -110,16 +110,14 @@ function BlueprintDemo({ heading = 'How it works' }) {
   );
 }
 
-function SiteNav({ page, account, mobile = false, onNavigate }) {
+function SiteNav({ page, account, onNavigate }) {
   return (
     <nav className="siteNav" aria-label="Main navigation" onClick={onNavigate}>
       <a href={publicPages.pricing.path} aria-current={page === 'pricing' ? 'page' : undefined}>Pricing</a>
       {account && !account.signedIn && (
         <a href={publicPages.signIn.path} aria-current={page === 'signIn' ? 'page' : undefined}>Sign in</a>
       )}
-      {mobile
-        ? <a href="/#/editor" className="mobileEditorLink">Edit your blueprint</a>
-        : <EditorLink />}
+      <a href="/#/editor" className="navEditorLink">Edit your blueprint <Icon name="arrow" size={16} /></a>
     </nav>
   );
 }
@@ -134,7 +132,7 @@ function MobileMenu({ page, account }) {
       menu.current.querySelector('summary').focus();
     }}>
       <summary aria-label="Menu"><Icon name="menu" size={24} /></summary>
-      <SiteNav page={page} account={account} mobile onNavigate={closeMenu} />
+      <SiteNav page={page} account={account} onNavigate={closeMenu} />
     </details>
   );
 }
@@ -247,11 +245,11 @@ function GuideContent() {
         </li>
         <li>
           <h2>Mark up the layout</h2>
-          <p>Draw or mask walls, add doors and fixtures, and label the changes. Set the drawing scale using a known distance before measuring.</p>
+          <p>Draw or mask walls, add doors and fixtures, and label the changes. <a className="accountTextLink" href={publicPages.measureGuide.path}>Set the scale before measuring</a>.</p>
         </li>
         <li>
           <h2>Export a revised plan</h2>
-          <p>Download a PDF or PNG for review. For a scaled PDF, confirm the sheet size and print at actual size.</p>
+          <p>Download a PDF or PNG for review. <a className="accountTextLink" href={publicPages.printGuide.path}>Print a scaled PDF at actual size</a>.</p>
         </li>
       </ol>
     </>
@@ -297,6 +295,7 @@ export function SiteFooter() {
       <a href="/" aria-label={`${PRODUCT_NAME} home`}><Brand /></a>
       <nav aria-label="Footer">
         <a href={publicPages.guide.path}>How it works</a>
+        <a href={publicPages.guides.path}>Floor plan guides</a>
         <a href={publicPages.pricing.path}>Pricing</a>
         {Object.entries(POLICY_LINKS).map(([page, label]) => (
           <a key={page} href={publicPages[page].path}>{label}</a>

@@ -58,13 +58,13 @@ const CONTROLS = {
   edit: [
     ['wall', 'Wall'],
     ['doors', 'Door', 'door'],
-    ['fixtures', 'Fixture', 'shower'],
     ['clean', 'Clean up'],
+    ['text', 'Text'],
     ['tools', 'More', 'more'],
   ],
-  measure: [['measure', 'Distance'], ['dimension', 'Dimension'], ['calibrate', 'Set scale']],
+  measure: [['measure', 'Distance'], ['calibrate', 'Set scale']],
 };
-const PANELS = ['doors', 'fixtures', 'tools', 'settings'];
+const PANELS = ['doors', 'tools', 'settings'];
 
 export function PhoneControls({
   mode,
@@ -96,8 +96,7 @@ export function PhoneControls({
       <div className="phoneToolRow" role="group" aria-label={`${mode} controls`}>
         {CONTROLS[mode].map(([id, label, icon = id]) => {
           const opensPanel = PANELS.includes(id);
-          const inCategory = (id === 'doors' && tool.startsWith('door-')) ||
-            (id === 'fixtures' && FIXTURES.some(([fixture]) => fixture === tool));
+          const inCategory = id === 'doors' && tool.startsWith('door-');
           return (
             <button
               key={id}
