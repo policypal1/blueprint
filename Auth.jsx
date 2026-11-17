@@ -37,6 +37,7 @@ function AuthLayout({ title, onClose, children }) {
 
 export function SignInPage({
   account, onAuthenticate, onGoogle, onAuthenticated, onClose, initialMode = 'signIn',
+  editorEntry = false, trialOffer = false,
 }) {
   const [mode, setMode] = useState(initialMode);
   const [email, setEmail] = useState('');
@@ -47,6 +48,8 @@ export function SignInPage({
   const [pending, setPending] = useState('');
   const copy = AUTH_MODES[mode];
   const credentialForm = mode === 'signIn' || mode === 'create';
+  const waiting = account.loading || Boolean(pending);
+  const title = editorEntry && mode === 'signIn' ? 'Sign in to use the editor' : copy.title;
 
   function selectMode(next) {
     setMode(next);
@@ -59,7 +62,7 @@ export function SignInPage({
 
   async function submit(event) {
     event.preventDefault();
-    if (pending) return;
+    if (waiting) return;
     setPending('email');
     setError('');
     setNotice('');
@@ -87,7 +90,7 @@ export function SignInPage({
   }
 
   async function startGoogle() {
-    if (pending) return;
+    if (waiting) return;
     setPending('google');
     setError('');
     setNotice('');
@@ -101,23 +104,23 @@ export function SignInPage({
   }
 
   return (
-    <AuthLayout title={copy.title} onClose={onClose && (() => { if (!pending) onClose(); })}>
-      {account.loading ? <p role="status">Opening sign-in…</p> : account.client ? (
+    <AuthLayout title={title} onClose={onClose && (() => { if (!pending) onClose(); })}>
+      {account.loading || account.client ? (
         <>
           {credentialForm && (
             <>
-              <button className="googleSignIn" type="button" onClick={startGoogle} disabled={Boolean(pending)}>
+              <button className="googleSignIn" type="button" onClick={startGoogle} disabled={waiting}>
                 <GoogleMark />
                 {pending === 'google' ? 'Opening Google…' : 'Continue with Google'}
               </button>
               <div className="authDivider"><span>or use email</span></div>
             </>
           )}
-          <form className="profileSettings authForm" method="post" onSubmit={submit}>
+          <form className="profileSettings authForm" method="post" aria-busy={account.loading || undefined} onSubmit={submit}>
             <label>
               Email address
               <input type="email" name="email" autoComplete="username" required data-dialog-focus
-                value={email} disabled={Boolean(pending)} onChange={(event) => setEmail(event.target.value)} />
+                value={email} disabled={waiting} onChange={(event) => setEmail(event.target.value)} />
             </label>
             {credentialForm && (
               <label>
@@ -125,28 +128,30 @@ export function SignInPage({
                 <input type="password" name="password" required
                   minLength={mode === 'create' ? MIN_PASSWORD_LENGTH : undefined}
                   autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
-                  value={password} disabled={Boolean(pending)}
+                  value={password} disabled={waiting}
                   onChange={(event) => setPassword(event.target.value)} />
               </label>
             )}
             {mode === 'create' && <p>Use at least {MIN_PASSWORD_LENGTH} characters.</p>}
             {mode === 'signIn' && (
-              <button className="authTextButton authForgot" type="button" disabled={Boolean(pending)}
+              <button className="authTextButton authForgot" type="button" disabled={waiting}
                 onClick={() => selectMode('forgot')}>Forgot password?</button>
             )}
             {error && <p className="accountError" role="alert">{error}</p>}
             {notice && <p role="status">{notice}</p>}
-            <button className="primary authSubmit" type="submit" disabled={Boolean(pending)}>
+            <button className="primary authSubmit" type="submit" disabled={waiting}>
               {pending === 'email' ? 'Please wait…' : copy.submit}
             </button>
           </form>
           {showResend && (
-            <button className="authTextButton" type="button" disabled={Boolean(pending)}
+            <button className="authTextButton" type="button" disabled={waiting}
               onClick={() => selectMode('resend')}>Resend confirmation</button>
           )}
           <div className="authAlternate">
-            {mode === 'signIn' && <span>New to {PRODUCT_NAME}?</span>}
-            <button className="authTextButton" type="button" disabled={Boolean(pending)}
+            {mode === 'signIn' && (
+              <span>{trialOffer && editorEntry ? '3-day free trial. No credit card needed.' : `New to ${PRODUCT_NAME}?`}</span>
+            )}
+            <button className="authTextButton" type="button" disabled={waiting}
               onClick={() => selectMode(mode === 'signIn' ? 'create' : 'signIn')}>
               {mode === 'signIn' ? 'Create an account' : 'Back to sign in'}
             </button>

@@ -59,7 +59,7 @@ try {
       meta('og:image:alt', 'An imported floor plan displayed in the editor', 'property'),
       meta('twitter:card', 'summary_large_image'),
     ];
-    if (preview) head.push(meta('robots', 'noindex, follow'));
+    if (preview || page.noindex) head.push(meta('robots', 'noindex, follow'));
     if (route === 'home') head.push(jsonLd({
       '@context': 'https://schema.org', '@type': 'WebSite', name: SITE_NAME, url: site.href,
     }));

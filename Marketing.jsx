@@ -91,8 +91,9 @@ function BlueprintDemo({ heading = 'How it works' }) {
   }, [mobile]);
 
   return (
-    <section id="how-it-works" className="blueprintDemo" aria-labelledby="blueprint-demo-title">
-      <h2 id="blueprint-demo-title" tabIndex={-1}>{heading}</h2>
+    <section id="how-it-works" className="blueprintDemo"
+      aria-labelledby={heading ? 'blueprint-demo-title' : 'guide-title'}>
+      {heading && <h2 id="blueprint-demo-title" tabIndex={-1}>{heading}</h2>}
       <video
         key={String(mobile)}
         ref={videoRef}
@@ -114,7 +115,7 @@ function SiteNav({ page, account, mobile = false, onNavigate }) {
     <nav className="siteNav" aria-label="Main navigation" onClick={onNavigate}>
       <a href={publicPages.pricing.path} aria-current={page === 'pricing' ? 'page' : undefined}>Pricing</a>
       {account && !account.signedIn && (
-        <a href="/#/sign-in" aria-current={page === 'signIn' ? 'page' : undefined}>Sign in</a>
+        <a href={publicPages.signIn.path} aria-current={page === 'signIn' ? 'page' : undefined}>Sign in</a>
       )}
       {mobile
         ? <a href="/#/editor" className="mobileEditorLink">Edit your blueprint</a>
@@ -234,16 +235,11 @@ function HomeContent({ trialOffer, signedIn }) {
   );
 }
 
-function GuideContent({ trialOffer, signedIn }) {
+function GuideContent() {
   return (
     <>
-      <header className="guideIntro">
-        <h1>How to edit a floor plan PDF</h1>
-        <p>Start with your existing drawing and mark up the changes you want to share.</p>
-        <EditorLink trial={trialOffer && !signedIn} />
-        {trialOffer && !signedIn && <p className="trialQualifier">No credit card needed.</p>}
-      </header>
-      <BlueprintDemo heading="Watch a floor plan revision" />
+      <h1 className="guideTitle" id="guide-title">How to edit a floor plan PDF</h1>
+      <BlueprintDemo heading={null} />
       <ol className="guideSteps">
         <li>
           <h2>Upload the original drawing</h2>
@@ -258,7 +254,6 @@ function GuideContent({ trialOffer, signedIn }) {
           <p>Download a PDF or PNG for review. For a scaled PDF, confirm the sheet size and print at actual size.</p>
         </li>
       </ol>
-      <a className="detailsLink" href={publicPages.pricing.path}>Compare the project and monthly plans <Icon name="arrow" size={17} /></a>
     </>
   );
 }
@@ -337,7 +332,7 @@ export default function Marketing({ page, account, trialOffer = false }) {
       <SiteHeader page={page} account={account} />
       <main id="main-content" className={pricing ? 'pricingPage' : guide ? 'guidePage' : undefined} tabIndex={-1}>
         {pricing && <PricingContent trialOffer={trialOffer} signedIn={account?.signedIn} />}
-        {guide && <GuideContent trialOffer={trialOffer} signedIn={account?.signedIn} />}
+        {guide && <GuideContent />}
         {!guide && !pricing && <HomeContent trialOffer={trialOffer} signedIn={account?.signedIn} />}
       </main>
       <SiteFooter />

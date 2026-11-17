@@ -28,6 +28,7 @@ const W = 1600;
 const H = 1000;
 const GRID = 20;
 const COMPACT_LAYOUT = '(max-width: 800px), (pointer: coarse) and (max-height: 520px)';
+const DESKTOP_TIP_KEY = 'editfloorplans-hide-desktop-tip';
 const DRAWING_ACCENT = '#a9441b';
 const TAP_SLOP = 10;
 const DRAG_SLOP = 4;
@@ -863,9 +864,18 @@ function regularizeImportedElements(elements, unitsPerInch = 4) {
   });
 }
 
+function hasHiddenDesktopTip() {
+  try {
+    return localStorage.getItem(DESKTOP_TIP_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export function BlueprintApp({
   active = true, showRecent = false, sampleRequested = false, onSampleOpened, onOpenWorkspace,
   repository, projectAccess, lockedProjectIds = [], owner, authBusy = false, onRegisterSave, canDownload,
+  showMobileTip = false,
 }) {
   const svgRef = useRef(null);
   const fileRef = useRef(null);
@@ -893,6 +903,7 @@ export function BlueprintApp({
   const [editorPanel, setEditorPanel] = useState(null);
   const [phoneMode, setPhoneMode] = useState('view');
   const [compact, setCompact] = useState(() => window.matchMedia?.(COMPACT_LAYOUT).matches ?? false);
+  const [desktopTipDismissed, setDesktopTipDismissed] = useState(() => showMobileTip && hasHiddenDesktopTip());
   const [helpOpen, setHelpOpen] = useState(false);
   const [paper, setPaper] = useState('tabloid');
   const [printScale, setPrintScale] = useState('fit');
@@ -918,6 +929,21 @@ export function BlueprintApp({
   const selected = project.elements.find((e) => e.id === selectedId) || null;
   const useWallTaps = compact && tool === 'wall';
   const awaitingWallEnd = useWallTaps && draft?.awaitingEnd;
+
+  useEffect(() => {
+    if (showMobileTip && !active) setDesktopTipDismissed(hasHiddenDesktopTip());
+  }, [active, showMobileTip]);
+
+  function dismissDesktopTip(remember) {
+    setDesktopTipDismissed(true);
+    if (remember) {
+      try {
+        localStorage.setItem(DESKTOP_TIP_KEY, '1');
+      } catch {
+        // Dismiss for this visit if browser storage is unavailable.
+      }
+    }
+  }
 
   useEffect(() => {
     const media = window.matchMedia?.(COMPACT_LAYOUT);
@@ -1188,7 +1214,7 @@ export function BlueprintApp({
       }
     };
     const onPaste = (event) => {
-      if (!active || !showPlans || !canCreateProject || busy || !hydrated || dialog) return;
+      if (!active || !showPlans || !canCreateProject || busy || !hydrated || document.querySelector('[role=dialog]')) return;
       const clipboard = event.clipboardData;
       const file = Array.from(clipboard?.files ?? []).find((item) =>
         CLIPBOARD_IMAGES.has(item.type),
@@ -2444,6 +2470,17 @@ export function BlueprintApp({
     </>
   );
 
+  const desktopTip = showMobileTip && active && hydrated && compact && !desktopTipDismissed
+    && !dialog && !helpOpen && !importOpen && !editorPanel && (
+      <Modal title="Best on desktop" className="mobileEditorTip" onClose={() => dismissDesktopTip(false)}>
+        <p>A desktop gives you more room to draw and measure. You can keep editing on your phone.</p>
+        <div className="modalActions">
+          <button onClick={() => dismissDesktopTip(true)}>Don’t show again</button>
+          <button className="primary" data-dialog-focus onClick={() => dismissDesktopTip(false)}>Close</button>
+        </div>
+      </Modal>
+    );
+
   if (showPlans) {
     return (
       <>
@@ -2464,6 +2501,7 @@ export function BlueprintApp({
           } : null}
         />
         {dialog}
+        {desktopTip}
       </>
     );
   }
@@ -2861,6 +2899,7 @@ export function BlueprintApp({
         </Modal>
       )}
       {dialog}
+      {desktopTip}
       {helpOpen && (
         <Modal title="A quick guide" onClose={() => setHelpOpen(false)}>
           <ol className="helpSteps">

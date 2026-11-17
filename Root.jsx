@@ -17,6 +17,7 @@ const Editor = lazy(() => import('./App.jsx'));
 const RECENT_HASH = '#/editor';
 const WORKSPACE_HASH = '#/editor/workspace';
 const SIGN_IN_HASH = '#/sign-in';
+const EDITOR_SIGN_IN_URL = '/sign-in?next=editor';
 const PAGE_TITLES = {
   recent: 'Recent plans',
   workspace: 'Editor',
@@ -47,24 +48,17 @@ function readRoute() {
 function isEditorRoute(route) {
   return ['recent', 'workspace', 'sample'].includes(route);
 }
-function EditorAccess({ account, access, offer, onSignIn }) {
+function editorSignInLocation() {
+  return publicPageAt(window.location.pathname) === 'signIn'
+    && new URLSearchParams(window.location.search).get('next') === 'editor';
+}
+function EditorAccess({ account, access, offer }) {
   if (account.loading || (account.user && access.loading)) {
     return <main className="accessPage" role="status">Checking editor access…</main>;
   }
 
   let title, message, action;
-  if (!account.user) {
-    title = 'Sign in to open the editor';
-    message = account.client
-      ? `Use your ${PRODUCT_NAME} account to open and manage your saved plans.`
-      : 'Account sign-in is currently unavailable.';
-    action = account.client && (
-      <div className="accountActions">
-        {offer && <a className="button primary" href="#/trial">Start free trial</a>}
-        <button className={offer ? '' : 'primary'} onClick={onSignIn}>Sign in</button>
-      </div>
-    );
-  } else if (access.data?.deleting) {
+  if (access.data?.deleting) {
     title = 'Account deletion in progress';
     message = 'Open security settings to finish deleting your account.';
     action = <a className="button primary" href="#/account/security">Open security settings</a>;
@@ -113,18 +107,20 @@ export default function Root() {
   const showEditor = isEditorRoute(route);
   const policy = access.data;
   const requireSignIn = Boolean(import.meta.env?.PROD || account.enabled);
+  const editorNeedsSignIn = showEditor && requireSignIn && !owner;
+  const editorSignIn = editorNeedsSignIn || (route === 'signIn' && editorSignInLocation());
   const fullAccess = fullEditorAccess(policy);
   const editorAllowed = !requireSignIn || Boolean(owner && canOpenEditor(policy));
   const projectAccess = policy?.paymentsRequired && !fullAccess
     ? { credits: policy.projectCredits, ids: policy.projectIds, refresh: access.refresh }
     : null;
   const showAccount = ['account', 'security', 'billing'].includes(route);
-  const showAuthPage = route === 'signIn' || route === 'resetPassword';
+  const showAuthPage = route === 'signIn' || route === 'resetPassword' || editorNeedsSignIn;
   const showTrial = route === 'trial';
 
   function openSignIn() {
-    if (showEditor || showTrial) {
-      signInTarget.current = showTrial ? '#/trial' : route === 'workspace' ? WORKSPACE_HASH : RECENT_HASH;
+    if (showTrial) {
+      signInTarget.current = '#/trial';
       setSignInDialog(true);
       return;
     }
@@ -133,8 +129,9 @@ export default function Root() {
   }
 
   const finishSignIn = useCallback(() => {
-    if (window.location.hash === SIGN_IN_HASH) {
-      window.history.replaceState(window.history.state, '', signInTarget.current);
+    if (readRoute() === 'signIn') {
+      const target = editorSignInLocation() ? RECENT_HASH : signInTarget.current;
+      window.history.replaceState(window.history.state, '', `/${target}`);
       window.dispatchEvent(new Event('hashchange'));
     }
     setSignInDialog(false);
@@ -151,8 +148,8 @@ export default function Root() {
   const signInProps = {
     account,
     onAuthenticate: (mode, email, password) =>
-      account.authenticate(mode, email, password, beforeLeaving.current, signInTarget.current),
-    onGoogle: () => account.signInWithGoogle(beforeLeaving.current, signInTarget.current),
+      account.authenticate(mode, email, password, beforeLeaving.current, editorSignIn ? RECENT_HASH : signInTarget.current),
+    onGoogle: () => account.signInWithGoogle(beforeLeaving.current, editorSignIn ? RECENT_HASH : signInTarget.current),
     onAuthenticated: finishSignIn,
   };
   const accountNav = account.enabled ? {
@@ -178,8 +175,19 @@ export default function Root() {
       if (next !== 'demo') window.scrollTo(0, 0);
     };
     window.addEventListener('hashchange', navigate);
-    return () => window.removeEventListener('hashchange', navigate);
+    window.addEventListener('popstate', navigate);
+    return () => {
+      window.removeEventListener('hashchange', navigate);
+      window.removeEventListener('popstate', navigate);
+    };
   }, []);
+  useEffect(() => {
+    if (editorNeedsSignIn && !account.loading) {
+      window.history.replaceState(window.history.state, '', EDITOR_SIGN_IN_URL);
+      setRoute('signIn');
+      window.scrollTo(0, 0);
+    }
+  }, [editorNeedsSignIn, account.loading]);
   useEffect(() => {
     const lostAccount = priorOwner.current && priorOwner.current !== owner;
     if (lostAccount && window.location.hash === WORKSPACE_HASH) {
@@ -226,8 +234,10 @@ export default function Root() {
       )}
       {showAuthPage && (
         <>
-          <SiteHeader page={route} account={accountNav} />
-          {route === 'signIn' ? <SignInPage {...signInProps} /> : <ResetPasswordPage account={account} />}
+          <SiteHeader page={route === 'resetPassword' ? route : 'signIn'} account={accountNav} />
+          {route === 'resetPassword' ? <ResetPasswordPage account={account} /> : (
+            <SignInPage {...signInProps} editorEntry={editorSignIn} trialOffer={trialOffer} />
+          )}
         </>
       )}
       {showAccount && (
@@ -238,13 +248,13 @@ export default function Root() {
             onSignOut={signOut} onDeleted={finishDeletion} />
         </>
       )}
-      {(showEditor || (visitedEditor && editorAllowed)) && (
+      {((showEditor && !editorNeedsSignIn) || (visitedEditor && editorAllowed)) && (
         <div className="editorRoot" hidden={!showEditor}>
           {showEditor && <SiteHeader page={route} account={accountNav} />}
           {showEditor && editorAllowed && !policy?.monthly && timedAccessActive(policy?.trialEndsAt) && (
             <TrialStatus expiresAt={policy.trialEndsAt} />
           )}
-          {!editorAllowed ? <EditorAccess account={account} access={access} offer={trialOffer} onSignIn={openSignIn} /> : (
+          {!editorAllowed ? <EditorAccess account={account} access={access} offer={trialOffer} /> : (
           <div className="editorSurface">
             <Suspense
               fallback={
@@ -263,6 +273,7 @@ export default function Root() {
                 projectAccess={projectAccess}
                 lockedProjectIds={policy?.lockedProjectIds}
                 owner={owner}
+                showMobileTip
                 canDownload={policy?.paymentsRequired ? access.canDownload : undefined}
                 authBusy={account.busy}
                 onRegisterSave={registerSave}
@@ -282,8 +293,8 @@ export default function Root() {
           )}
         </div>
       )}
-      {signInDialog && (showEditor || showTrial) && (
-        <SignInPage {...signInProps} initialMode={showTrial ? 'create' : 'signIn'} onClose={() => setSignInDialog(false)} />
+      {signInDialog && showTrial && (
+        <SignInPage {...signInProps} initialMode="create" onClose={() => setSignInDialog(false)} />
       )}
     </>
   );

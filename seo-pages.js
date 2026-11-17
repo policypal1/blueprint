@@ -20,6 +20,12 @@ export const publicPages = {
     description: 'Compare a single $10 USD blueprint project credit with the $19 USD monthly floor plan editor. See how credits, exports and renewals work.',
     sitemap: true,
   },
+  signIn: {
+    path: '/sign-in',
+    title: `Sign in | ${SITE_NAME}`,
+    description: 'Sign in or create an account to edit and export your floor plans.',
+    noindex: true,
+  },
   terms: {
     path: '/terms',
     title: `Terms of Service | ${SITE_NAME}`,

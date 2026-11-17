@@ -99,6 +99,19 @@ textarea:focus {
   background: var(--orangeHover);
   border-color: var(--orangeHover);
 }
+@media (min-width: 801px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  :is(.siteNav, .heroActions, .pricingTrial, .authForm) .primary {
+    transition: background 150ms, border-color 150ms, transform 150ms, box-shadow 150ms;
+  }
+  :is(.siteNav, .heroActions, .pricingTrial, .authForm) .primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px #572d151c;
+  }
+  :is(.siteNav, .heroActions, .pricingTrial, .authForm) .primary:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: none;
+  }
+}
 .primarySoft {
   background: var(--soft);
   color: var(--ink);
@@ -862,15 +875,14 @@ p {
   margin-inline: auto;
   padding: clamp(28px, 5vw, 55px) max(20px, 5%) clamp(40px, 7vw, 70px);
 }
-.guideIntro {
+.guideTitle {
   max-width: 660px;
-  margin: 0 auto 36px;
+  margin: 0 auto clamp(18px, 3vw, 30px);
+  font-size: clamp(32px, 6vw, 54px);
   text-align: center;
+  text-wrap: balance;
 }
-.guideIntro h1 { margin: 0; font-size: clamp(32px, 6vw, 54px); text-wrap: balance; }
-.guideIntro p { margin: 14px auto 20px; max-width: 48ch; color: var(--muted); line-height: 1.55; }
-.guideIntro .button { min-height: 48px; }
-.guidePage .blueprintDemo { padding-inline: 0; }
+.guidePage .blueprintDemo { padding: 0 0 clamp(24px, 4vw, 38px); }
 .guideSteps { display: grid; gap: 16px; margin: 0 0 24px; padding-inline-start: 25px; }
 .guideSteps li { padding: 12px 0 14px 8px; border-top: 1px solid var(--line); }
 .guideSteps li::marker { color: var(--accent); font-weight: 700; }
@@ -1769,6 +1781,10 @@ hr {
 .modalActions button {
   font-size: 13px;
 }
+.mobileEditorTip { width: min(400px, 100%); }
+.mobileEditorTip .modalHeader { margin-bottom: 8px; }
+.mobileEditorTip > p { margin: 0; color: var(--muted); }
+.mobileEditorTip .modalActions button { min-height: 44px; }
 .importModal {
   width: min(670px, 100%);
 }
