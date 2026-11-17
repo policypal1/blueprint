@@ -911,6 +911,24 @@ test('trial starts only after accepting terms, and expired access cannot downloa
   }
 });
 
+test('trial availability distinguishes a failed check from an off switch and allows a signed-in signup check', () => {
+  let retries = 0;
+  const onCheckOffer = () => { retries += 1; };
+  const account = { client: {} };
+  const props = { account, access: {}, offer: false, offerError: true, onCheckOffer };
+  const view = render(React.createElement(TrialPage, props));
+  assert.match(screen.getByRole('alert').textContent, /Could not check trial availability/);
+  click('button', 'Check again');
+  assert.equal(retries, 1);
+  view.rerender(React.createElement(TrialPage, { ...props, offerError: false }));
+  assert.ok(screen.getByText('Free trials are currently unavailable.'));
+  view.rerender(React.createElement(TrialPage, {
+    ...props, account: { ...account, user: { id: 'test-trial-user' } },
+    access: { data: { canStartTrial: true } },
+  }));
+  assert.ok(screen.getByRole('button', { name: 'Start free trial' }));
+});
+
 test('account settings save a trimmed display name and allow retry after a failed save', async () => {
   const requested = [];
   const user = { id: 'account-test', email: 'morgan@example.com', user_metadata: { full_name: 'Morgan Test' } };
