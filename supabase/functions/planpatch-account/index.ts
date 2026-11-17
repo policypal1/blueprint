@@ -19,7 +19,7 @@ const secretKey = supabaseKey('SUPABASE_SECRET_KEYS', 'SUPABASE_SERVICE_ROLE_KEY
 const options = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } };
 const admin = createClient(url, secretKey, options);
 const test = connectStripe('STRIPE_TEST_SECRET_KEY', 'test');
-const siteOrigin = Deno.env.get('PLANPATCH_SITE_ORIGIN') || 'https://blueprint-blue-theta.vercel.app';
+const siteOrigin = Deno.env.get('PLANPATCH_SITE_ORIGIN') || 'https://www.editfloorplans.com';
 
 Deno.serve(accountHandler({
   admin,

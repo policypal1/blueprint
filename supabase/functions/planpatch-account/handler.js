@@ -3,6 +3,7 @@ import { createCheckout, fulfillVerifiedEvent } from './billing.js';
 const ACCOUNT = 'planpatch_accounts';
 const ACCOUNT_FIELDS = 'stripe_customer_id,stripe_test_customer_id,deletion_started_at';
 const PAGE = 100;
+const DEV_ORIGIN = 'http://localhost:5173';
 
 function checked({ data, error }) {
   if (error) throw error;
@@ -67,7 +68,13 @@ async function getStripeCustomer(admin, stripe, column, userId, account, client)
 
 export function accountHandler({ admin, test, clientFor, siteOrigin, webhookSecret, cryptoProvider }) {
   const origin = new URL(siteOrigin).origin;
-  const allowed = new Set([origin, 'http://localhost:5173']);
+  const allowed = new Set([
+    origin,
+    'https://www.editfloorplans.com',
+    'https://editfloorplans.com',
+    'https://blueprint-blue-theta.vercel.app',
+    DEV_ORIGIN,
+  ]);
   const webhookConfigured = Boolean(webhookSecret?.startsWith('whsec_'));
   const checkoutReady = Boolean(test && webhookConfigured);
 
@@ -148,15 +155,16 @@ export function accountHandler({ admin, test, clientFor, siteOrigin, webhookSecr
         if (!account || account.deletion_started_at) return reply(409, { error: 'Account deletion is in progress.' });
         const customer = await getStripeCustomer(admin, test, 'stripe_test_customer_id', userId, account, client);
         if (!customer) return reply(409, { error: 'Account deletion is in progress.' });
+        const returnOrigin = requestOrigin && requestOrigin !== DEV_ORIGIN ? requestOrigin : origin;
         if (body.action === 'checkout') {
           if (body.plan === 'monthly') {
             const access = checked(await client.rpc('planpatch_sandbox_access').maybeSingle());
             if (access?.monthly) return reply(409, { error: 'Your monthly test subscription is already active.' });
           }
-          const url = await createCheckout(test, { plan: body.plan, customer, owner: userId, origin, attempt: body.attempt });
+          const url = await createCheckout(test, { plan: body.plan, customer, owner: userId, origin: returnOrigin, attempt: body.attempt });
           return url ? reply(200, { url }) : reply(400, { error: 'Restart checkout from EditFloorPlans.com.' });
         }
-        const portal = await test.billingPortal.sessions.create({ customer, return_url: origin + '/#/account/billing' });
+        const portal = await test.billingPortal.sessions.create({ customer, return_url: returnOrigin + '/#/account/billing' });
         return reply(200, { url: portal.url });
       }
 
