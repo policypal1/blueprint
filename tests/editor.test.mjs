@@ -190,7 +190,7 @@ test('landing and pricing explain the product and lead to the editor', async () 
   const hero = screen.getByRole('region', { name: /Edit your existing floor plan/ });
   assert.ok(within(hero).getByRole('heading', { name: /Edit your existing floor plan/ }));
   assert.ok(screen.getByText(/Upload a PDF or image, mark up walls/));
-  assert.equal(within(hero).getByRole('link', { name: 'See how it works' }).getAttribute('href'), '/how-to-edit-a-floor-plan-pdf');
+  assert.equal(within(hero).getAllByRole('link').length, 1);
   assert.equal(
     within(hero).getByRole('link', { name: 'Edit your blueprint' }).getAttribute('href'),
     '/#/editor',
@@ -1002,7 +1002,9 @@ test('trial landing prominently offers the account-based trial and links to all 
   render(React.createElement(Marketing, { page: 'home', trialOffer: true }));
   const hero = within(screen.getByRole('region', { name: /Edit your existing floor plan/ }));
   assert.equal(hero.getByRole('link', { name: 'Start 3-day free trial' }).getAttribute('href'), '/#/trial');
-  assert.ok(hero.getByText(/No credit card needed/));
+  assert.ok(hero.getByText('No credit card needed', { exact: true }).classList.contains('trialNoCard'));
+  assert.equal(hero.queryByText(/ends automatically/i), null);
+  assert.equal(hero.getAllByRole('link').length, 1);
   const footer = within(screen.getByRole('navigation', { name: 'Footer' }));
   assert.deepEqual(footer.getAllByRole('link').map((link) => link.getAttribute('href')), [
     '/how-to-edit-a-floor-plan-pdf', '/floor-plan-guides', '/pricing', '/terms', '/privacy', '/refunds-and-cancellation', '/support',
