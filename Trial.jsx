@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { fullEditorAccess, timedAccessActive } from './access.js';
 import { PolicyAgreement } from './Policies.jsx';
+import { Icon } from './ui.jsx';
 
 export default function TrialPage({ account, access, offer, offerChecking, offerError, onCheckOffer, onSignIn }) {
   const [accepted, setAccepted] = useState(false);
@@ -9,6 +10,9 @@ export default function TrialPage({ account, access, offer, offerChecking, offer
   const data = access.data;
   const active = timedAccessActive(data?.trialEndsAt);
   const available = offer || data?.canStartTrial;
+  const starting = available && !data?.trialEndsAt && (!account.user || data?.canStartTrial);
+  const title = active ? 'Your trial is active' : data?.trialEndsAt ? 'Your trial has ended'
+    : starting ? 'Try the editor free for 3 days' : 'Free trial';
 
   async function begin(event) {
     event.preventDefault();
@@ -25,8 +29,12 @@ export default function TrialPage({ account, access, offer, offerChecking, offer
   }
 
   return (
-    <main className="policyPage trialPage">
-      <h1>{available || data?.trialEndsAt ? 'Your 3-day free trial' : 'Free trial'}</h1>
+    <main className="trialPage">
+      <section className="trialCard" aria-labelledby="trial-title">
+      <h1 id="trial-title">{title}</h1>
+      {starting && (
+        <p className="trialOfferLine"><strong className="trialNoCard">No credit card needed</strong></p>
+      )}
       {account.loading || (account.user && (access.loading && !data)) ? (
         <p role="status">Checking trial access…</p>
       ) : active ? (
@@ -36,7 +44,7 @@ export default function TrialPage({ account, access, offer, offerChecking, offer
         </>
       ) : data?.trialEndsAt ? (
         <>
-          <p>Your trial has ended. Choose a project credit or monthly access to edit and download your plans.</p>
+          <p>Choose a project credit or monthly access to edit and download your plans.</p>
           <a className="button primary" href="#/account/billing">Choose a plan</a>
         </>
       ) : !available && offerChecking ? (
@@ -50,21 +58,27 @@ export default function TrialPage({ account, access, offer, offerChecking, offer
         <><p>Free trials are currently unavailable.</p><a className="button" href="#/editor">Open editor</a></>
       ) : !account.user ? (
         <>
-          <p>Upload a blueprint, make your changes and export a PDF. No credit card needed.</p>
-          <div className="accountActions">
-            <button type="button" className="primary" onClick={() => onSignIn('create')} disabled={!account.client}>Create account</button>
-            <button type="button" onClick={() => onSignIn('signIn')} disabled={!account.client}>Sign in</button>
+          <p>Upload a blueprint, make your changes, and export a revised plan. Create an account to get started.</p>
+          <div className="trialActions">
+            <button type="button" className="primary" onClick={() => onSignIn('create')} disabled={!account.client}>
+              Start free trial <Icon name="arrow" size={17} />
+            </button>
+            <button type="button" className="authTextButton" onClick={() => onSignIn('signIn')} disabled={!account.client}>Sign in</button>
           </div>
+          <nav className="trialPolicyLinks" aria-label="Trial policies">
+            <a href="/terms">Terms</a>
+            <a href="/privacy">Privacy</a>
+          </nav>
         </>
       ) : data?.canStartTrial ? (
         <form className="trialForm" onSubmit={begin}>
-          <p>Your 72 hours begin when you start. The trial ends automatically without a charge.</p>
+          <p>Your 72 hours begin when you start. The trial ends automatically.</p>
           <label className="policyAgreement">
             <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
             <span><PolicyAgreement /></span>
           </label>
           <button className="primary" type="submit" disabled={!accepted || pending}>
-            {pending ? 'Starting…' : 'Start free trial'}
+            {pending ? 'Starting…' : 'Start free trial'} <Icon name="arrow" size={17} />
           </button>
         </form>
       ) : fullEditorAccess(data) ? (
@@ -78,6 +92,7 @@ export default function TrialPage({ account, access, offer, offerChecking, offer
       {notice && (
         <p className="accountError" role="alert">{notice} <a className="accountTextLink" href="/support">Contact support</a></p>
       )}
+      </section>
     </main>
   );
 }

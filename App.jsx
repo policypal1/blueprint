@@ -44,6 +44,7 @@ const OTHER_DRAW_TOOLS = [['window', 'Window'], ['line', 'Line'], ['rect', 'Rect
 const MEASUREMENT_TOOLS = [['measure', 'Distance'], ['calibrate', 'Set scale']];
 const PANEL_TITLES = {
   doors: 'Choose a door',
+  cleanup: 'Clean up',
   properties: 'Object properties',
   settings: 'Plan settings',
   tools: 'More tools',
@@ -54,8 +55,8 @@ const TOOL_HINTS = {
   wall: 'Drag to draw a wall.',
   line: 'Drag to draw a line.',
   rect: 'Drag to draw a rectangle.',
-  clean: 'Drag over the area to clean.',
-  erase: 'Brush over the background to erase it.',
+  clean: 'Drag a rectangle around the area to clear.',
+  erase: 'Brush over the original or an object to erase it.',
   dimension: 'Drag between two points to add a dimension.',
   measure: 'Drag between two points to measure.',
   text: 'Tap or click to place a label.',
@@ -681,6 +682,8 @@ function elementBounds(el, units) {
   }
   if (el.type === 'rect' || el.type === 'clean')
     return { x: el.x, y: el.y, width: el.width, height: el.height };
+  if (el.type === 'ellipse')
+    return { x: el.x - el.rx, y: el.y - el.ry, width: el.rx * 2, height: el.ry * 2 };
   if (el.type === 'door') {
     const w = (el.widthInches || 30) * units;
     return { x: el.x - w * 0.15, y: el.y - w * 1.15, width: w * 1.35, height: w * 1.35 };
@@ -716,12 +719,71 @@ function elementBounds(el, units) {
   return { x: -99999, y: -99999, width: 0, height: 0 };
 }
 
+function segmentDistance(a, b, c, d) {
+  const abX = b.x - a.x, abY = b.y - a.y;
+  const cdX = d.x - c.x, cdY = d.y - c.y;
+  const denominator = abX * cdY - abY * cdX;
+  if (denominator) {
+    const x = c.x - a.x, y = c.y - a.y;
+    const alongAB = (x * cdY - y * cdX) / denominator;
+    const alongCD = (x * abY - y * abX) / denominator;
+    if (alongAB >= 0 && alongAB <= 1 && alongCD >= 0 && alongCD <= 1) return 0;
+  }
+  return Math.min(
+    dist(a, closestPointOnSegment(a, c, d)), dist(b, closestPointOnSegment(b, c, d)),
+    dist(c, closestPointOnSegment(c, a, b)), dist(d, closestPointOnSegment(d, a, b)),
+  );
+}
+
+function brushHitsObject(el, from, to, radius, units) {
+  if (el.type === 'clean' || el.type === 'erase') return false;
+  if (el.type === 'wall' || el.type === 'line' || el.type === 'dimension') {
+    const width = el.type === 'wall' ? Math.max(3, (el.thicknessInches || 4.5) * units) : (el.strokeWidth || 2);
+    if (segmentDistance(from, to, el.a, el.b) <= radius + width / 2) return true;
+    return el.type === 'dimension' && [el.a, el.b].some(({ x, y }) =>
+      segmentDistance(from, to, { x, y: y - 10 }, { x, y: y + 10 }) <= radius + 1);
+  }
+
+  if (el.rotation && ['door', 'window', 'symbol', 'text'].includes(el.type)) {
+    const radians = -el.rotation * Math.PI / 180;
+    const cos = Math.cos(radians), sin = Math.sin(radians);
+    const unrotate = ({ x, y }) => ({
+      x: el.x + (x - el.x) * cos - (y - el.y) * sin,
+      y: el.y + (x - el.x) * sin + (y - el.y) * cos,
+    });
+    from = unrotate(from);
+    to = unrotate(to);
+  }
+
+  const bounds = elementBounds(el, units);
+  const left = bounds.x, right = bounds.x + bounds.width;
+  const top = bounds.y, bottom = bounds.y + bounds.height;
+  const reach = radius + (el.strokeWidth || 2) / 2;
+  if (Math.max(from.x, to.x) + reach < left || Math.min(from.x, to.x) - reach > right
+    || Math.max(from.y, to.y) + reach < top || Math.min(from.y, to.y) - reach > bottom) return false;
+
+  if (el.type === 'ellipse') {
+    const outline = Array.from({ length: 24 }, (_, i) => {
+      const angle = i * 2 * Math.PI / 24;
+      return { x: el.x + el.rx * Math.cos(angle), y: el.y + el.ry * Math.sin(angle) };
+    });
+    return outline.some((point, index) => segmentDistance(from, to, point, outline[(index + 1) % outline.length]) <= reach);
+  }
+  if (el.type !== 'rect' && [from, to].some(({ x, y }) => x >= left && x <= right && y >= top && y <= bottom)) return true;
+  const corners = [{ x: left, y: top }, { x: right, y: top }, { x: right, y: bottom }, { x: left, y: bottom }];
+  return corners.some((point, index) => segmentDistance(from, to, point, corners[(index + 1) % corners.length]) <= reach);
+}
+
 function cleanElementsInRect(elements, rect, units) {
   const out = [];
   for (const el of elements) {
     if (el.type === 'wall' || el.type === 'line' || el.type === 'dimension') {
       const pieces = segmentOutsideRect(el.a, el.b, rect);
       if (!pieces.length) continue;
+      if (pieces.length === 1 && pieces[0][0] === el.a && pieces[0][1] === el.b) {
+        out.push(el);
+        continue;
+      }
       pieces.forEach((piece, i) =>
         out.push({ ...el, id: i === 0 ? el.id : uid(), a: piece[0], b: piece[1] }),
       );
@@ -900,6 +962,7 @@ export function BlueprintApp({
   const [compact, setCompact] = useState(() => window.matchMedia?.(COMPACT_LAYOUT).matches ?? false);
   const [desktopTipDismissed, setDesktopTipDismissed] = useState(() => showMobileTip && hasHiddenDesktopTip());
   const [guideMode, setGuideMode] = useState(null);
+  const [walkthroughStep, setWalkthroughStep] = useState(0);
   const checkedFirstUseGuide = useRef(false);
   const [paper, setPaper] = useState('tabloid');
   const [printScale, setPrintScale] = useState('fit');
@@ -920,9 +983,11 @@ export function BlueprintApp({
   const [importReplace, setImportReplace] = useState(true);
   const [importError, setImportError] = useState('');
   const [eraseSize, setEraseSize] = useState(28);
+  const [brushPoint, setBrushPoint] = useState(null);
   const [measurement, setMeasurement] = useState(null);
 
   const selected = project.elements.find((e) => e.id === selectedId) || null;
+  const backgroundEdits = project.elements.filter((el) => el.type === 'clean' || el.type === 'erase');
   const useWallTaps = compact && tool === 'wall';
   const awaitingWallEnd = useWallTaps && draft?.awaitingEnd;
   const showDesktopTip = showMobileTip && active && hydrated && compact && !desktopTipDismissed;
@@ -938,6 +1003,7 @@ export function BlueprintApp({
     } catch {
       // Keep the walkthrough one-time for the mounted editor when storage is unavailable.
     }
+    setWalkthroughStep(0);
     setGuideMode('walkthrough');
   }, [active, busy, dialog, editorPanel, exportMenu, guideMode, hydrated, importOpen, owner, showDesktopTip, showFirstUseGuide, showPlans]);
 
@@ -974,11 +1040,15 @@ export function BlueprintApp({
   };
 
   const finishDrag = (commit) => {
-    const before = dragRef.current?.before;
+    const drag = dragRef.current;
+    const before = drag?.before;
     dragRef.current = null;
     const current = projectRef.current;
     if (!before || before.id !== current.id || before === current) return;
-    if (commit) pushHistory(before);
+    if (commit) {
+      pushHistory(before);
+      if (drag.kind === 'erase') setStatus('Erased · Undo to restore');
+    }
     else setProject(before);
   };
 
@@ -988,6 +1058,7 @@ export function BlueprintApp({
     pinch.current = null;
     wallTap.current = null;
     setDraft(null);
+    setBrushPoint(null);
   };
 
   useEffect(() => {
@@ -1041,6 +1112,13 @@ export function BlueprintApp({
     setPhoneMode(editorMode(next));
     setEditorPanel(null);
   };
+
+  function tryWalkthroughTool(action) {
+    setGuideMode('practice');
+    if (action === 'export') setExportMenu(true);
+    else if (['doors', 'cleanup', 'tools'].includes(action)) setEditorPanel(action);
+    else changeTool(action);
+  }
 
   const addElement = (el) => {
     if (projectRef.current.elements.length >= MAX_ELEMENTS) {
@@ -1253,6 +1331,28 @@ export function BlueprintApp({
     return clientToWorkspace(evt.clientX, evt.clientY, rect);
   };
 
+  const extendBrush = (drag, point) => {
+    const from = drag.last || point;
+    if (drag.last && dist(from, point) < 1.5) return;
+    drag.last = point;
+    const current = projectRef.current;
+    const elements = current.elements.filter((el) => !brushHitsObject(el, from, point, drag.size / 2, current.unitsPerInch));
+    let changed = elements.length !== current.elements.length;
+    if (drag.maskId && drag.maxPoints > 0) {
+      const index = elements.findIndex((el) => el.id === drag.maskId);
+      if (index < 0 && elements.length < MAX_ELEMENTS) {
+        const points = drag.maxPoints > 1 && from !== point ? [from, point] : [point];
+        elements.push({ id: drag.maskId, type: 'erase', points, size: drag.size });
+        changed = true;
+      } else if (index >= 0 && elements[index].points.length < drag.maxPoints) {
+        const stroke = elements[index];
+        elements[index] = { ...stroke, points: [...stroke.points, point] };
+        changed = true;
+      }
+    }
+    if (changed) updateProject((p) => ({ ...p, elements }));
+  };
+
   const handlePointerDown = (e) => {
     if (e.button !== 0 || busy || exporting || !hydrated) return;
     e.preventDefault();
@@ -1294,6 +1394,18 @@ export function BlueprintApp({
 
     const raw = clientToWorld(e);
     if (!isProjectNumber(raw.x) || !isProjectNumber(raw.y)) return;
+    if (tool === 'erase') {
+      const before = projectRef.current;
+      const maskId = before.background && before.showBackground ? uid() : null;
+      const drag = {
+        kind: 'erase', pointerId: e.pointerId, before, maskId, size: eraseSize, last: null,
+        maxPoints: maskId ? Math.min(10000, MAX_BRUSH_POINTS - countBrushPoints(before.elements)) : 0,
+      };
+      dragRef.current = drag;
+      setBrushPoint(raw);
+      extendBrush(drag, raw);
+      return;
+    }
     const linePrecision = tool === 'line' && e.shiftKey;
     const point =
       linePrecision || tool === 'measure' || tool === 'dimension'
@@ -1317,23 +1429,6 @@ export function BlueprintApp({
 
     if (tool === 'clean') {
       setDraft({ type: 'clean', a: raw, b: raw });
-      return;
-    }
-
-    if (tool === 'erase') {
-      const before = projectRef.current;
-      const maxPoints = Math.min(10000, MAX_BRUSH_POINTS - countBrushPoints(before.elements));
-      if (before.elements.length >= MAX_ELEMENTS || maxPoints <= 0) {
-        setStatus('Project brush limit reached');
-        return;
-      }
-      const path = [{ ...raw }];
-      const id = uid();
-      dragRef.current = { kind: 'erase', pointerId: e.pointerId, id, before, maxPoints };
-      updateProject((p) => ({
-        ...p,
-        elements: [...p.elements, { id, type: 'erase', points: path, size: eraseSize }],
-      }));
       return;
     }
 
@@ -1453,6 +1548,13 @@ export function BlueprintApp({
       return;
     }
     if (drag && drag.pointerId !== e.pointerId) return;
+    if (tool === 'erase') {
+      const point = clientToWorld(e);
+      if (!isProjectNumber(point.x) || !isProjectNumber(point.y)) return;
+      if (drag || e.pointerType !== 'touch') setBrushPoint(point);
+      if (drag?.kind === 'erase') extendBrush(drag, point);
+      return;
+    }
     if (!draft && !drag && calibration?.stage !== 1) return;
     if (drag?.origin && drag.before === projectRef.current &&
         Math.hypot(e.clientX - drag.origin.x, e.clientY - drag.origin.y) < DRAG_SLOP) return;
@@ -1507,16 +1609,6 @@ export function BlueprintApp({
     if (draft?.type === 'clean') setDraft((d) => ({ ...d, b: raw }));
     if (calibration?.stage === 1) setCalibration((c) => ({ ...c, b: raw }));
 
-    if (drag?.kind === 'erase') {
-      const stroke = projectRef.current.elements.find((el) => el.id === drag.id);
-      if (stroke && stroke.points.length < drag.maxPoints && dist(stroke.points.at(-1), raw) > 2)
-        updateProject((p) => ({
-          ...p,
-          elements: p.elements.map((el) =>
-            el.id === drag.id ? { ...el, points: [...el.points, raw] } : el,
-          ),
-        }));
-    }
     if (drag?.kind === 'move') {
       const dx = raw.x - drag.start.x,
         dy = raw.y - drag.start.y;
@@ -1577,14 +1669,15 @@ export function BlueprintApp({
 
   const cleanBackgroundRect = (rect) => {
     const current = projectRef.current;
-    const cleaned = cleanElementsInRect(current.elements, rect, current.unitsPerInch);
-    if (cleaned.length >= MAX_ELEMENTS) {
+    const elements = cleanElementsInRect(current.elements, rect, current.unitsPerInch);
+    if (current.background && current.showBackground) elements.push({ id: uid(), type: 'clean', ...rect });
+    if (elements.length > MAX_ELEMENTS) {
       setStatus('Project object limit reached');
       return;
     }
+    if (elements.length === current.elements.length && elements.every((el, i) => el === current.elements[i])) return;
     pushHistory(current);
-    // A reversible white mask preserves the original background resolution.
-    updateProject((p) => ({ ...p, elements: [...cleaned, { id: uid(), type: 'clean', ...rect }] }));
+    updateProject((p) => ({ ...p, elements }));
     setSelectedId(null);
     setStatus('Area cleaned · Undo to restore');
   };
@@ -1660,6 +1753,7 @@ export function BlueprintApp({
       if (width > 3 && height > 3) cleanBackgroundRect({ x, y, width, height });
     }
     setDraft(null);
+    if (compact) setBrushPoint(null);
     finishDrag(true);
   };
 
@@ -2327,25 +2421,6 @@ export function BlueprintApp({
   const wallLengthInches =
     selected?.type === 'wall' ? dist(selected.a, selected.b) / project.unitsPerInch : null;
 
-  const eraserControl = (
-    <>
-      <ToolButton tool={tool} id="erase" setTool={changeTool} label="Erase background" />
-      {tool === 'erase' && (
-        <label className="brushControl">
-          <span>Brush size <strong>{eraseSize}px</strong></span>
-          <input
-            type="range"
-            min="8"
-            max="120"
-            step="2"
-            value={eraseSize}
-            onChange={(e) => setEraseSize(Number(e.target.value))}
-          />
-        </label>
-      )}
-    </>
-  );
-
   const toolPalette = (
     <>
       <Section title="View">
@@ -2357,7 +2432,10 @@ export function BlueprintApp({
           aria-haspopup="dialog" onClick={() => setEditorPanel('doors')}>
           <Icon name="door" size={17} /> Door
         </button>
-        <ToolButton tool={tool} id="clean" setTool={changeTool} label="Clean up" />
+        <button className={`tool${['clean', 'erase'].includes(tool) ? ' active' : ''}`}
+          aria-haspopup="dialog" onClick={() => setEditorPanel('cleanup')}>
+          <Icon name="clean" size={17} /> Clean up
+        </button>
         <ToolButton tool={tool} id="text" setTool={changeTool} label="Text" />
       </Section>
       <Section title="Measure">
@@ -2387,7 +2465,7 @@ export function BlueprintApp({
       wallLengthInches={wallLengthInches}
       applyExactLength={applyExactLength}
     />
-  ) : <p className="emptyState">Select an object on the plan to edit it.</p>;
+  ) : <p className="propertiesHint">Use Select, then click an object on the plan.</p>;
 
   const planSettings = (
     <>
@@ -2633,11 +2711,11 @@ export function BlueprintApp({
           )}
           <button
             className="iconButton editorGuideButton"
-            aria-label="Editor guide"
-            title="Editor guide"
-            onClick={() => setGuideMode('controls')}
+            aria-label={guideMode === 'practice' ? 'Resume walkthrough' : 'Editor guide'}
+            title={guideMode === 'practice' ? 'Resume walkthrough' : 'Editor guide'}
+            onClick={() => setGuideMode(guideMode === 'practice' ? 'walkthrough' : 'controls')}
           >
-            <Icon name="help" /> <span>Guide</span>
+            <Icon name="help" /> <span>{guideMode === 'practice' ? 'Resume guide' : 'Guide'}</span>
           </button>
           <button
             aria-label="Export"
@@ -2661,19 +2739,14 @@ export function BlueprintApp({
           </div>
           {!originalLocked && !project.background && !project.elements.length && !busy && ['select', 'pan'].includes(tool) && (
             <div className="canvasWelcome">
-              <span className="welcomeIcon">
-                <Icon name="upload" size={24} />
-              </span>
               <h2>Start with a plan</h2>
-              <p>Open a PDF or a photo of the drawing.</p>
               <button
                 className="primary"
                 disabled={!hydrated}
                 onClick={() => fileRef.current?.click()}
               >
-                Upload a plan <Icon name="arrow" />
+                Upload
               </button>
-              <small>PDF, PNG, JPG or WebP · 25 MB max</small>
             </div>
           )}
           {busy && (
@@ -2694,6 +2767,7 @@ export function BlueprintApp({
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerCancel}
+              onPointerLeave={() => setBrushPoint(null)}
             >
               <defs>
                 <pattern id="smallGrid" width={GRID} height={GRID} patternUnits="userSpaceOnUse">
@@ -2713,6 +2787,12 @@ export function BlueprintApp({
                     strokeWidth="1.5"
                   />
                 </pattern>
+                {backgroundEdits.length > 0 && (
+                  <mask id="blueprintBackgroundMask" x={0} y={0} width={W} height={H} maskUnits="userSpaceOnUse">
+                    <rect width={W} height={H} fill="white" />
+                    {backgroundEdits.map((el) => <BackgroundEdit key={el.id} el={el} />)}
+                  </mask>
+                )}
               </defs>
               <rect width={W} height={H} fill="#fff" />
               {showGrid && !exporting && (
@@ -2727,20 +2807,9 @@ export function BlueprintApp({
                   height={H}
                   preserveAspectRatio="xMidYMid meet"
                   opacity={project.backgroundOpacity}
+                  mask={backgroundEdits.length ? 'url(#blueprintBackgroundMask)' : undefined}
                 />
               )}
-              {project.elements
-                .filter((e) => e.type === 'clean' || e.type === 'erase')
-                .map((el) => (
-                  <Element
-                    key={el.id}
-                    el={el}
-                    project={project}
-                    selected={!exporting && selectedId === el.id}
-                    onDown={startMove}
-                    onResizeDown={startResize}
-                  />
-                ))}
               {project.elements
                 .filter((e) => ['wall', 'line', 'rect', 'dimension', 'ellipse'].includes(e.type))
                 .map((el) => (
@@ -2793,6 +2862,10 @@ export function BlueprintApp({
                 <MeasureOverlay measurement={measurement} project={project} />
               )}
               {!exporting && draft && <Draft draft={draft} project={project} zoom={zoom} />}
+              {!exporting && tool === 'erase' && brushPoint && (
+                <circle data-editor-only pointerEvents="none" cx={brushPoint.x} cy={brushPoint.y} r={eraseSize / 2}
+                  fill="none" stroke={DRAWING_ACCENT} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+              )}
               {!exporting && calibration && (
                 <g pointerEvents="none">
                   <line
@@ -2836,7 +2909,7 @@ export function BlueprintApp({
           </div>
         </main>
 
-        {!compact && selected && (
+        {!compact && (
           <aside className="sidebar properties" aria-label="Object properties">
             <h3>Object properties</h3>
             {objectProperties}
@@ -2860,7 +2933,7 @@ export function BlueprintApp({
       <footer className="editorStatus">
         <span role="status">{status}</span>
         <span>
-          {project.elements.length} objects ·{' '}
+          {project.elements.length - backgroundEdits.length} objects ·{' '}
           {project.calibrated ? 'Calibrated' : 'Set scale for measurements'}
         </span>
       </footer>
@@ -2873,6 +2946,20 @@ export function BlueprintApp({
           {editorPanel === 'doors' && (
             <div className="sheetTools"><ToolChoices choices={DOORS} tool={tool} setTool={changeTool} /></div>
           )}
+          {editorPanel === 'cleanup' && (
+            <>
+              <div className="sheetTools">
+                <ToolButton tool={tool} id="clean" setTool={changeTool} label="Rectangle" />
+                <ToolButton tool={tool} id="erase" setTool={changeTool} label="Brush eraser" />
+              </div>
+              <p className="cleanupHint">Draw a rectangle to clear an area, or brush over the original drawing and any objects you want to remove.</p>
+              <label className="brushControl">
+                <span>Brush size <strong>{eraseSize}px</strong></span>
+                <input type="range" aria-label="Brush size" min="8" max="120" step="2" value={eraseSize}
+                  onChange={(e) => setEraseSize(Number(e.target.value))} />
+              </label>
+            </>
+          )}
           {editorPanel === 'properties' && objectProperties}
           {editorPanel === 'settings' && planSettings}
           {editorPanel === 'tools' && (
@@ -2884,14 +2971,19 @@ export function BlueprintApp({
               <Section title="Fixtures">
                 <ToolChoices choices={FIXTURES} tool={tool} setTool={changeTool} />
               </Section>
-              <Section title="Clean up">{eraserControl}</Section>
             </>
           )}
         </Modal>
       )}
       {dialog}
       {desktopTip}
-      {guideMode && <EditorGuide compact={compact} initialMode={guideMode} onClose={() => setGuideMode(null)} />}
+      {guideMode && guideMode !== 'practice' && (
+        <EditorGuide compact={compact} mode={guideMode} step={walkthroughStep}
+          onStep={setWalkthroughStep}
+          onReplay={() => { setWalkthroughStep(0); setGuideMode('walkthrough'); }}
+          onTry={tryWalkthroughTool}
+          onClose={() => setGuideMode(null)} />
+      )}
       {exportMenu && (
         <Modal
           title="Export plan"
@@ -2929,14 +3021,6 @@ export function BlueprintApp({
               }}
             >
               <Icon name="download" /> Download PDF
-            </button>
-            <button
-              onClick={() => {
-                setExportMenu(false);
-                backupProject();
-              }}
-            >
-              Project backup
             </button>
             <button
               onClick={() => {
@@ -3025,44 +3109,19 @@ function Section({ title, children }) {
     </div>
   );
 }
+function BackgroundEdit({ el }) {
+  if (el.type === 'clean')
+    return <rect x={el.x} y={el.y} width={el.width} height={el.height} fill="black" />;
+  const size = el.size || 36;
+  if (el.points.length === 1)
+    return <circle cx={el.points[0].x} cy={el.points[0].y} r={size / 2} fill="black" />;
+  const d = el.points.map((p, i) => `${i ? 'L' : 'M'} ${p.x} ${p.y}`).join(' ');
+  return <path d={d} fill="none" stroke="black" strokeWidth={size} strokeLinecap="round" strokeLinejoin="round" />;
+}
+
 function Element({ el, project, selected, onDown, onResizeDown }) {
   const common = { onPointerDown: (e) => onDown(e, el), style: { cursor: 'pointer' } };
   const outline = selected ? DRAWING_ACCENT : '#111';
-  if (el.type === 'clean')
-    return (
-      <rect
-        x={el.x}
-        y={el.y}
-        width={el.width}
-        height={el.height}
-        fill="#fff"
-        pointerEvents="none"
-      />
-    );
-  if (el.type === 'erase') {
-    if (el.points.length === 1)
-      return (
-        <circle
-          {...common}
-          cx={el.points[0].x}
-          cy={el.points[0].y}
-          r={(el.size || 36) / 2}
-          fill="#fff"
-        />
-      );
-    const d = el.points.map((p, i) => `${i ? 'L' : 'M'} ${p.x} ${p.y}`).join(' ');
-    return (
-      <path
-        {...common}
-        d={d}
-        fill="none"
-        stroke="#fff"
-        strokeWidth={el.size || 36}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    );
-  }
   if (el.type === 'wall') {
     const width = Math.max(3, (el.thicknessInches || 4.5) * project.unitsPerInch);
     return (
@@ -3815,13 +3874,6 @@ function Properties({
               onCommit={(v) => set('thicknessInches', v)}
             />
           </label>
-          <div className="metric">
-            <span>Current length</span>
-            <strong>{inchesLabel(wallLengthInches)}</strong>
-          </div>
-          <div className="hint compactHint">
-            Enter inches or feet and inches to set the wall length.
-          </div>
         </>
       )}
       {['door', 'window'].includes(selected.type) && (

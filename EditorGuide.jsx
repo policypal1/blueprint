@@ -1,70 +1,93 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Icon, Modal } from './ui.jsx';
 
 function walkthroughSteps(compact) {
   return [
     {
-      title: 'Move around your plan',
-      icon: 'pan',
+      title: 'Move around your plan', icon: 'pan', action: 'pan', label: 'Try Pan',
       text: compact
-        ? 'In View, drag to move the plan and pinch to zoom. Use Select to tap an object you added.'
-        : 'Use Pan to drag the plan and the zoom controls to move in closer. Choose Select to edit an object you added.',
+        ? 'In View, drag to move the drawing and pinch to zoom. Tap Fit in the zoom bar to see the whole sheet again.'
+        : 'Use Pan to drag the drawing. Use the zoom controls to move in closer or choose Fit to see the whole sheet.',
     },
     {
-      title: 'Make a change',
-      icon: 'wall',
+      title: 'Select and edit an object', icon: 'select', action: 'select', label: 'Try Select',
       text: compact
-        ? 'Tap Edit, then Wall. Tap the start and end of the wall. Use Door, Clean up, or Text to make other changes.'
-        : 'Choose Wall and drag from one end of the new wall to the other. Use Door, Clean up, or Text to make other changes.',
+        ? 'Open View, choose Select, and tap an object. Tap Properties to change its size, rotation, or other settings.'
+        : 'Choose Select and click an object you added. The Properties panel on the right shows its settings, such as wall length, door type, or text.',
     },
     {
-      title: 'Measure and export',
-      icon: 'measure',
-      text: 'Use Set scale with two points a known distance apart before you measure. Choose Export to download your revised plan as a PDF or PNG.',
+      title: 'Draw a wall', icon: 'wall', action: 'wall', label: 'Try Wall',
+      text: compact
+        ? 'Choose Edit, then Wall. Tap one end, then tap the other end. Use Cancel to clear the first point.'
+        : 'Choose Wall and drag from one end to the other. Hold Shift while drawing when you need a free angle. Select the wall to enter an exact length.',
+    },
+    {
+      title: 'Place a door', icon: 'door', action: 'doors', label: 'Choose a door',
+      text: 'Choose Door and pick a swing or opening style. Set it on the plan near a wall. Select the door to adjust its width, type, or rotation.',
+    },
+    {
+      title: 'Add a label', icon: 'text', action: 'text', label: 'Try Text',
+      text: 'Choose Text, place a label on the plan, and enter a note. Use it to describe a change, such as where an opening should move.',
+    },
+    {
+      title: 'Clean up a drawing', icon: 'clean', action: 'cleanup', label: 'Open Clean up',
+      text: 'Choose Rectangle for a larger patch or Brush eraser for smaller areas. The brush removes editable objects it touches and clears the imported drawing beneath it. Undo restores the last pass.',
+    },
+    {
+      title: 'Find windows and fixtures', icon: 'more', action: 'tools', label: 'Open More tools',
+      text: `Open ${compact ? 'Edit → More' : 'More tools'} to add windows, fixtures, lines, rectangles, or dimension labels. Select an object after placing it to adjust its properties.`,
+    },
+    {
+      title: 'Set the scale', icon: 'calibrate', action: 'calibrate', label: 'Try Set scale',
+      text: 'Choose two points a known distance apart, then choose Set real distance. Enter the measurement with units, such as 10 ft. Check another known span before relying on the scale.',
+    },
+    {
+      title: 'Measure a distance', icon: 'measure', action: 'measure', label: 'Try Distance',
+      text: 'After setting the scale, choose Distance and drag between two points. To leave a measurement on the drawing, choose Dimension under More tools.',
+    },
+    {
+      title: 'Export your plan', icon: 'download', action: 'export', label: 'Open Export',
+      text: 'Choose Download PDF or PNG image. Use PDF print settings for a fixed scale. Back to plans takes you to your drawings, account, and billing.',
     },
   ];
 }
 
-export default function EditorGuide({ compact, initialMode, onClose }) {
-  const [walking, setWalking] = useState(initialMode === 'walkthrough');
-  const [step, setStep] = useState(0);
+export default function EditorGuide({ compact, mode, step, onStep, onReplay, onTry, onClose }) {
   const steps = walkthroughSteps(compact);
-
-  if (walking) {
+  if (mode === 'walkthrough') {
     const current = steps[step];
     const last = step === steps.length - 1;
+    const actions = (
+      <div className="modalActions">
+        <button type="button" onClick={step ? () => onStep(step - 1) : onClose}>{step ? 'Back' : 'Skip'}</button>
+        <button type="button" onClick={() => onTry(current.action)}>{current.label}</button>
+        <button type="button" className="primary" data-dialog-focus onClick={last ? onClose : () => onStep(step + 1)}>
+          {last ? 'Finish' : 'Next'}
+        </button>
+      </div>
+    );
     return (
-      <Modal title={current.title} onClose={onClose} className="editorGuide">
-        <div className="guideStepIntro">
-          <span className="guideStepIcon"><Icon name={current.icon} size={25} /></span>
-          <p>Step {step + 1} of {steps.length}</p>
-        </div>
-        <p>{current.text}</p>
-        <div className="modalActions">
-          <button type="button" onClick={step ? () => setStep(step - 1) : onClose}>
-            {step ? 'Back' : 'Skip'}
-          </button>
-          <button type="button" className="primary" data-dialog-focus
-            onClick={last ? onClose : () => setStep(step + 1)}>
-            {last ? 'Start editing' : 'Next'}
-          </button>
+      <Modal title="Editor walkthrough" onClose={onClose} className="editorGuide" footer={actions}>
+        <div key={step} className="walkthroughStep" aria-live="polite">
+          <div className="guideStepIntro">
+            <span className="guideStepIcon"><Icon name={current.icon} size={24} /></span>
+            <p>Step {step + 1} of {steps.length}</p>
+          </div>
+          <h3>{current.title}</h3>
+          <p>{current.text}</p>
         </div>
       </Modal>
     );
   }
 
   return (
-    <Modal title="Editor guide" onClose={onClose} className="editorGuide">
+    <Modal title="Editor guide" onClose={onClose} className="editorGuide" footer={(
+      <div className="modalActions">
+        <button type="button" className="primary" data-dialog-focus onClick={onReplay}>Replay walkthrough</button>
+      </div>
+    )}>
       <ol className="helpSteps">
         {steps.map(({ title, text }) => <li key={title}><b>{title}</b><p>{text}</p></li>)}
-        <li>
-          <b>Find more tools</b>
-          <p>Open {compact ? 'Edit → More' : 'More tools'} for windows, lines, rectangles, fixtures, printed dimensions, and the eraser brush.</p>
-        </li>
-        <li>
-          <b>Return to your plans</b>
-          <p>Use Back to plans to switch drawings or open your account and billing.</p>
-        </li>
       </ol>
       {!compact && (
         <details className="guideShortcuts">
@@ -73,7 +96,8 @@ export default function EditorGuide({ compact, initialMode, onClose }) {
             <span>V · Select</span>
             <span>H · Pan</span>
             <span>W · Wall</span>
-            <span>M · Measure</span>
+            <span>M · Distance</span>
+            <span>E · Brush eraser</span>
             <span>R · Rotate selected object</span>
             <span>Esc · Cancel</span>
             <span>Ctrl/Cmd + Z · Undo</span>
@@ -81,9 +105,6 @@ export default function EditorGuide({ compact, initialMode, onClose }) {
           </div>
         </details>
       )}
-      <div className="modalActions">
-        <button type="button" data-dialog-focus onClick={() => setWalking(true)}>Replay walkthrough</button>
-      </div>
     </Modal>
   );
 }

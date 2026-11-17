@@ -199,7 +199,7 @@ function HomeContent({ trialOffer, signedIn }) {
           <p>Upload a PDF or image, mark up walls, doors and fixtures, and export a revised plan.</p>
           <div className="heroActions" ref={heroAction}>
             <EditorLink trial={showTrial} />
-            {showTrial && <p className="trialQualifier">No credit card needed. Ends automatically.</p>}
+            {showTrial && <p className="trialQualifier"><strong className="trialNoCard">No credit card needed</strong>. Ends automatically.</p>}
             <a className="heroGuideLink" href={publicPages.guide.path}>See how it works</a>
           </div>
         </div>
@@ -263,7 +263,7 @@ function PricingContent({ trialOffer, signedIn }) {
       {trialOffer && !signedIn && (
         <div className="pricingTrial">
           <EditorLink trial />
-          <p className="trialQualifier">No credit card needed. Ends automatically.</p>
+          <p className="trialQualifier"><strong className="trialNoCard">No credit card needed</strong>. Ends automatically.</p>
         </div>
       )}
       <PriceOptions />

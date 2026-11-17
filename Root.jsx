@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AccountPage from './Account.jsx';
 import { AuthHeader, ResetPasswordPage, SignInPage } from './Auth.jsx';
-import { DEMO_HASH, SiteFooter, SiteHeader } from './Marketing.jsx';
+import { DEMO_HASH, SiteHeader } from './Marketing.jsx';
 import PublicPage from './PublicPage.jsx';
 import TrialPage from './Trial.jsx';
 import TrialStatus from './TrialStatus.jsx';
@@ -241,7 +241,6 @@ export default function Root() {
           <TrialPage account={account} access={access} offer={trialOffer}
             offerChecking={trialStatus.checking} offerError={trialStatus.error}
             onCheckOffer={trialStatus.refresh} onSignIn={openSignIn} />
-          <SiteFooter />
         </>
       )}
       {showAuthPage && (

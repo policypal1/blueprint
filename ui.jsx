@@ -80,7 +80,7 @@ export function Brand({ compact = false }) {
     </span>
   );
 }
-export function Modal({ title, onClose, children, className = '' }) {
+export function Modal({ title, onClose, children, className = '', footer }) {
   const ref = useRef(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -135,7 +135,7 @@ export function Modal({ title, onClose, children, className = '' }) {
     >
       <section
         ref={ref}
-        className={`dialog ${className}`}
+        className={`dialog ${className}${footer ? ' dialogWithFooter' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -146,7 +146,8 @@ export function Modal({ title, onClose, children, className = '' }) {
             <Icon name="close" />
           </button>
         </div>
-        {children}
+        {footer ? <div className="modalContent" key={title} tabIndex={0}>{children}</div> : children}
+        {footer}
       </section>
     </div>
   );

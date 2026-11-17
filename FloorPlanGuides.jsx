@@ -43,7 +43,7 @@ function RemodelGuide() {
         </li>
         <li>
           <h2>Mark the proposed layout</h2>
-          <p>Use <strong>Clean up</strong> to cover old details on the imported drawing. Draw a new wall with <strong>Wall</strong>, select a swing under <strong>Door</strong>, and add a short note with <strong>Text</strong>. Open <strong>More tools</strong> for windows and fixtures.</p>
+          <p>Open <strong>Clean up</strong> and choose the rectangle or brush eraser to clear old details. Draw a new wall with <strong>Wall</strong>, select a swing under <strong>Door</strong>, and add a short note with <strong>Text</strong>. Open <strong>More tools</strong> for windows and fixtures.</p>
         </li>
         <li>
           <h2>Label and share the revision</h2>

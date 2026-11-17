@@ -976,10 +976,36 @@ html:has(.authConfirmation) { overflow: hidden; }
 .policyPage h1:focus { outline: none; }
 .policyPage h2 { margin: 28px 0 8px; font-size: 21px; }
 .policyPage p { max-width: 65ch; line-height: 1.65; }
-.trialPage { max-width: 620px; }
-.trialForm { display: grid; justify-items: start; gap: 12px; }
+.trialPage {
+  min-height: calc(100dvh - 72px);
+  padding: clamp(24px, 7vw, 84px) var(--site-gutter) 52px;
+}
+.trialCard {
+  width: min(100%, 560px);
+  margin-inline: auto;
+  padding: clamp(23px, 5.5vw, 46px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  box-shadow: 0 14px 42px #252a2b0c;
+}
+.trialCard h1 {
+  margin: 0 0 15px;
+  font-size: clamp(30px, 5.6vw, 48px);
+  line-height: 1.09;
+  text-wrap: balance;
+}
+.trialCard p { color: var(--muted); }
+.trialCard .trialOfferLine { margin-bottom: 22px; color: var(--ink); font-size: 16px; }
+.trialNoCard { text-decoration: underline; text-decoration-color: var(--orange); text-decoration-thickness: 3px; text-underline-offset: 4px; }
+.trialActions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; }
+.trialActions .primary, .trialForm .primary { gap: 10px; padding-inline: 17px; }
+.trialForm { display: grid; justify-items: start; gap: 15px; }
 .trialForm p { margin: 0; }
 .trialPage .button, .trialPage button { min-height: 44px; }
+.trialPolicyLinks { display: flex; gap: 14px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+.trialPolicyLinks a { display: inline-flex; align-items: center; min-height: 44px; text-decoration: underline; text-underline-offset: 3px; }
+.trialCard > [role='alert']:last-child { margin: 14px 0 0; color: var(--danger); }
 .policyAgreement { display: flex; align-items: flex-start; gap: 9px; padding-block: 10px; font-size: 14px; line-height: 1.5; }
 .policyAgreement input { flex: none; inline-size: 17px; block-size: 17px; margin: 2px 0 0; accent-color: var(--accent); }
 .authPolicyLinks { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; }
@@ -1313,7 +1339,7 @@ html:has(.authConfirmation) { overflow: hidden; }
 .workspace {
   position: relative;
   display: grid;
-  grid-template-columns: clamp(176px, 19vw, 218px) minmax(0, 1fr);
+  grid-template-columns: clamp(176px, 19vw, 218px) minmax(0, 1fr) clamp(176px, 19vw, 238px);
   flex: 1;
   min-height: 0;
 }
@@ -1328,15 +1354,9 @@ html:has(.authConfirmation) { overflow: hidden; }
   padding: 18px 12px;
 }
 .properties {
-  position: absolute;
-  z-index: 6;
-  inset: 12px 12px auto auto;
-  width: clamp(185px, 22vw, 248px);
-  max-height: calc(100% - 24px);
-  padding: 15px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  box-shadow: 0 6px 20px #252a2b20;
+  padding: 18px 15px;
+  border-left: 1px solid var(--line);
+  min-width: 0;
 }
 .paletteActions {
   display: grid;
@@ -1399,6 +1419,7 @@ html:has(.authConfirmation) { overflow: hidden; }
 }
 .brushControl > span { display: flex; justify-content: space-between; }
 .brushControl input { width: 100%; accent-color: var(--accent); }
+.cleanupHint { margin: 15px 0; color: var(--muted); font-size: 14px; }
 .canvasArea {
   position: relative;
   min-width: 0;
@@ -1462,32 +1483,12 @@ html:has(.authConfirmation) { overflow: hidden; }
   padding: 24px 16px;
   text-align: center;
 }
-.welcomeIcon {
-  padding: 9px;
-  display: flex;
-  margin-bottom: 12px;
-  border-radius: 7px;
-  color: var(--accent);
-  background: var(--soft);
-}
 .canvasWelcome h2 {
-  margin: 0 0 6px;
+  margin: 0 0 18px;
   font-size: clamp(20px, 3vw, 25px);
   letter-spacing: -0.025em;
 }
-.canvasWelcome p {
-  margin: 0 0 15px;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.5;
-}
-.canvasWelcome button { min-height: 44px; flex-shrink: 0; }
-.canvasWelcome .textButton { margin-top: 4px; font-size: 13px; }
-.canvasWelcome small {
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 12px;
-}
+.canvasWelcome button { min-height: 44px; min-width: 104px; flex-shrink: 0; }
 .canvasBusy {
   position: absolute;
   inset: 0;
@@ -1533,10 +1534,8 @@ html:has(.authConfirmation) { overflow: hidden; }
   letter-spacing: -0.2px;
   font-weight: 600;
 }
-.emptyState {
-  padding: 15px 12px;
-  border: 1px dashed var(--line);
-  border-radius: 4px;
+.propertiesHint {
+  margin: 0;
   font-size: 13px;
   line-height: 1.6;
   color: var(--muted);
@@ -1843,6 +1842,15 @@ hr {
   border: 0;
   background: transparent;
 }
+.dialogWithFooter { display: flex; flex-direction: column; overflow: hidden; }
+.dialogWithFooter .modalHeader { position: static; flex: none; }
+.dialogWithFooter .modalContent {
+  min-height: 0;
+  padding: 2px 4px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.dialogWithFooter > .modalActions { flex: none; }
 .sheetTools > button { min-height: 48px; padding-inline: 10px; font-size: 14px; }
 .toolDialog button { min-height: 44px; }
 .printSettings {
@@ -1860,7 +1868,7 @@ hr {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .exportActions button { min-height: 44px; }
-.exportActions .primary { grid-column: 1 / -1; font-size: 14px; }
+.exportActions .primary { font-size: 14px; }
 .modalLead {
   font-size: 12px;
   color: var(--muted);
@@ -1969,9 +1977,12 @@ hr {
 .helpSteps b { font-weight: 600; }
 .helpSteps p { margin: 3px 0 0; color: var(--muted); }
 .editorGuide { width: min(470px, 100%); }
-.editorGuide > p { color: var(--muted); margin-bottom: 0; }
 .editorGuide .modalHeader { margin-bottom: 10px; }
+.editorGuide .helpSteps { margin-top: 4px; }
+.editorGuide > .modalActions { margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--line); }
 .editorGuide .modalActions button { min-height: 44px; }
+.walkthroughStep h3 { margin: 0 0 7px; font-size: 22px; }
+.walkthroughStep > p { margin: 0 0 7px; color: var(--muted); }
 .guideStepIntro { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .guideStepIntro p { margin: 0; font-size: 13px; color: var(--muted); }
 .guideStepIcon {
@@ -2023,7 +2034,6 @@ hr {
   .compactEditor .canvasArea { padding-top: 29px; }
   .compactEditor :is(.phoneToolRow, .phoneModes) { padding-inline-start: 8px; }
   .compactEditor .canvasWelcome { padding-block: 12px; }
-  .compactEditor .welcomeIcon { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *,
