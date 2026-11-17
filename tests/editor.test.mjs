@@ -230,6 +230,9 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
   render(React.createElement(Editor));
   await waitSaved();
   assert.equal(count(), 0);
+  assert.ok(screen.getByRole('heading', { name: 'Start with a plan' }));
+  assert.ok(screen.getByRole('button', { name: 'Upload', exact: true }));
+  assert.equal(screen.queryByText('Open a PDF or a photo of the drawing.'), null);
   fireEvent.click(document.querySelector('.projectButton'));
   click('button', 'Open sample project');
   assert.equal(count(), 20);
@@ -441,11 +444,15 @@ test('phone editor reaches the core drawing tools and keeps pinch gestures in Vi
     click('button', 'More');
     const tools = within(screen.getByRole('dialog', { name: 'More tools' }));
     assert.ok(tools.getByRole('button', { name: 'Window' }));
-    assert.ok(tools.getByRole('button', { name: 'Erase background' }));
     assert.equal(tools.queryByRole('button', { name: 'Wall' }), null);
     click('button', 'Window');
     tap(310, 200);
     assert.equal(count(), 4);
+    click('button', 'Clean up');
+    const cleanupDialog = within(screen.getByRole('dialog', { name: 'Clean up' }));
+    assert.ok(cleanupDialog.getByRole('button', { name: 'Rectangle' }));
+    assert.ok(cleanupDialog.getByRole('button', { name: 'Brush eraser' }));
+    click('button', 'Close dialog');
     click('button', 'Measure');
     assert.ok(screen.getByRole('button', { name: 'Distance' }));
 
@@ -488,26 +495,34 @@ test('the desktop tip returns on a new mobile editor visit unless opted out', as
 test('the walkthrough opens once and the complete editor guide stays available', async () => {
   const owner = 'walkthrough-test-user';
   const editor = (props) => React.createElement(Editor, { owner, showFirstUseGuide: true, ...props });
-  const firstStep = { name: 'Move around your plan' };
+  const walkthrough = { name: 'Editor walkthrough' };
   try {
     const view = render(editor({ showRecent: true }));
     await waitForUpload();
-    assert.equal(screen.queryByRole('dialog', firstStep), null);
+    assert.equal(screen.queryByRole('dialog', walkthrough), null);
     view.rerender(editor({ showRecent: false }));
-    await screen.findByRole('dialog', firstStep);
-    click('button', 'Next');
-    assert.ok(screen.getByRole('dialog', { name: 'Make a change' }));
-    click('button', 'Next');
-    assert.ok(screen.getByRole('dialog', { name: 'Measure and export' }));
-    click('button', 'Start editing');
+    await screen.findByRole('dialog', walkthrough);
+    assert.ok(screen.getByText('Step 1 of 10'));
+    click('button', 'Try Pan');
+    assert.equal(screen.queryByRole('dialog', walkthrough), null);
+    assert.equal(screen.getByRole('button', { name: 'Pan', exact: true }).getAttribute('aria-pressed'), 'true');
+    click('button', 'Resume walkthrough');
+    assert.ok(screen.getByText('Step 1 of 10'));
+    for (let step = 2; step <= 10; step++) {
+      click('button', 'Next');
+      assert.ok(screen.getByText(`Step ${step} of 10`));
+    }
+    assert.ok(within(screen.getByRole('dialog', walkthrough)).getByRole('heading', { name: 'Export your plan' }));
+    click('button', 'Finish');
     view.unmount();
     render(editor({ showRecent: false }));
     await waitSaved();
-    assert.equal(screen.queryByRole('dialog', firstStep), null);
+    assert.equal(screen.queryByRole('dialog', walkthrough), null);
     click('button', 'Editor guide');
     assert.ok(screen.getByRole('dialog', { name: 'Editor guide' }));
     click('button', 'Replay walkthrough');
-    assert.ok(screen.getByRole('dialog', firstStep));
+    assert.ok(screen.getByRole('dialog', walkthrough));
+    assert.ok(screen.getByText('Step 1 of 10'));
   } finally {
     localStorage.removeItem(`editfloorplans-editor-guide:${owner}`);
   }
@@ -536,8 +551,8 @@ test('selecting, cancelling a move, and cancelling an erase preserve redo', asyn
     fireEvent.pointerCancel(svg(), { pointerId: 7 });
     assert.equal(wall().getAttribute('y1'), '200');
 
-    click('button', 'More tools');
-    click('button', 'Erase background');
+    click('button', 'Clean up');
+    click('button', 'Brush eraser');
     fireEvent.pointerDown(svg(), start);
     fireEvent.pointerMove(svg(), { ...start, clientX: 450 });
     fireEvent.pointerCancel(svg(), { pointerId: 7 });
@@ -557,6 +572,44 @@ test('selecting, cancelling a move, and cancelling an erase preserve redo', asyn
   } finally {
     cleanup();
   }
+});
+
+test('the brush deletes touched walls and masks the imported sheet, and undo restores both', async () => {
+  render(React.createElement(Editor));
+  await waitSaved();
+  await newProject('Brush cleanup');
+  fireEvent.change(document.querySelector('input[type=file]'), {
+    target: { files: [new File(['floor plan'], 'brush-plan.png', { type: 'image/png' })] },
+  });
+  await waitFor(() => assert.ok(svg().querySelector('image')));
+  click('button', 'Wall');
+  draw(200, 200, 800, 200);
+  draw(200, 500, 800, 500);
+  assert.equal(count(), 2);
+
+  click('button', 'Clean up');
+  fireEvent.change(screen.getByRole('slider', { name: 'Brush size' }), { target: { value: '20' } });
+  click('button', 'Brush eraser');
+  draw(500, 80, 500, 300);
+  assert.equal(count(), 1);
+  assert.equal(svg().querySelector('line[stroke="#000"]').getAttribute('y1'), '500');
+  const background = () => svg().querySelector('image');
+  const stroke = () => svg().querySelector('mask path');
+  assert.equal(background().getAttribute('mask'), 'url(#blueprintBackgroundMask)');
+  assert.equal(stroke().getAttribute('stroke'), 'black');
+  assert.equal(stroke().getAttribute('stroke-width'), '20');
+
+  click('button', 'Undo');
+  assert.equal(count(), 2);
+  assert.equal(background().getAttribute('mask'), null);
+  click('button', 'Redo');
+  assert.equal(count(), 1);
+  assert.ok(stroke());
+  click('button', 'Export');
+  click('button', 'PNG image');
+  await waitFor(() => assert.ok(downloads.some((item) => item.name === 'brush-cleanup.png')));
+  const exportedSVG = [...urlBlobs.values()].filter((blob) => blob.type.startsWith('image/svg+xml')).at(-1);
+  assert.match(await exportedSVG.text(), /mask="url\(#blueprintBackgroundMask\)"/);
 });
 
 test('reload shortcuts leave selected objects alone and plain R rotates them', async () => {
@@ -603,7 +656,14 @@ test('all door and fixture choices place objects and copy, delete, and undo stay
   click('button', 'Undo');
   assert.equal(count(), choices.length + 1);
   click('button', 'Export');
-  click('button', 'Project backup');
+  const exports = within(screen.getByRole('dialog', { name: 'Export plan' }));
+  assert.ok(exports.getByRole('button', { name: 'Download PDF' }));
+  assert.ok(exports.getByRole('button', { name: 'PNG image' }));
+  assert.equal(exports.queryByRole('button', { name: 'Project backup' }), null);
+  click('button', 'Close dialog');
+  click('button', 'Plan settings');
+  fireEvent.click(screen.getByText('Project actions', { exact: true }));
+  click('button', 'Download backup');
   const { project } = JSON.parse(await downloads.at(-1).blob.text());
   assert.equal(new Set(project.elements.map((el) => el.id)).size, choices.length + 1);
   assert.equal(project.elements.filter((el) => el.type === 'door').length, doors.length);
@@ -995,6 +1055,8 @@ test('trial starts only after accepting terms, and expired access cannot downloa
       offer: true, account, access: { data: { canStartTrial: true }, startTrial: async () => started.push(true) },
     }));
     const start = screen.getByRole('button', { name: 'Start free trial' });
+    assert.ok(screen.getByRole('heading', { name: 'Try the editor free for 3 days', level: 1 }));
+    assert.ok(screen.getByText('No credit card needed', { exact: true }).classList.contains('trialNoCard'));
     assert.equal(start.disabled, true);
     assert.equal(document.querySelector('input[autocomplete=cc-number]'), null);
     fireEvent.click(screen.getByRole('checkbox'));
