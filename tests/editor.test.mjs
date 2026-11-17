@@ -452,6 +452,35 @@ test('phone editor reaches the core drawing tools and keeps pinch gestures in Vi
   }
 });
 
+test('the desktop tip returns on a new mobile editor visit unless opted out', async () => {
+  const previousMedia = window.matchMedia;
+  const key = 'editfloorplans-hide-desktop-tip';
+  window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
+  const editor = (props) => React.createElement(Editor, { showMobileTip: true, showRecent: true, ...props });
+  const tip = { name: 'Best on desktop' };
+  try {
+    const view = render(editor());
+    await screen.findByRole('dialog', tip);
+    click('button', 'Close');
+    view.rerender(editor({ showRecent: false }));
+    assert.equal(screen.queryByRole('dialog', tip), null);
+    assert.equal(localStorage.getItem(key), null);
+
+    view.rerender(editor({ active: false }));
+    view.rerender(editor({ active: true }));
+    await screen.findByRole('dialog', tip);
+    click('button', 'Don’t show again');
+    view.unmount();
+    render(editor());
+    await waitForUpload();
+    assert.equal(screen.queryByRole('dialog', tip), null);
+    assert.equal(localStorage.getItem(key), '1');
+  } finally {
+    window.matchMedia = previousMedia;
+    localStorage.removeItem(key);
+  }
+});
+
 test('selecting, cancelling a move, and cancelling an erase preserve redo', async () => {
   render(React.createElement(Editor));
   try {
@@ -883,6 +912,18 @@ test('trial landing prominently offers the account-based trial and links to all 
   ]);
 });
 
+test('the PDF editing guide shows the video followed by three steps', () => {
+  render(React.createElement(Marketing, { page: 'guide', trialOffer: true }));
+  const main = screen.getByRole('main');
+  const heading = within(main).getByRole('heading', { name: 'How to edit a floor plan PDF', level: 1 });
+  assert.ok(heading.nextElementSibling.querySelector('video[controls]'));
+  assert.deepEqual(within(main).getAllByRole('heading', { level: 2 }).map((item) => item.textContent), [
+    'Upload the original drawing', 'Mark up the layout', 'Export a revised plan',
+  ]);
+  assert.ok(within(main).getByText(/up to 25 MB/));
+  assert.equal(within(main).queryByRole('link'), null);
+});
+
 test('trial starts only after accepting terms, and expired access cannot download under the subscription', async () => {
   const old = window.location.href;
   const started = [];
@@ -1025,15 +1066,18 @@ test('the desktop header shows the account name, and the dropdown works in the e
   assert.equal(details.open, false);
 });
 
-test('public sign-in route shows account sign-in and retains guest editor access', async () => {
+test('the sign-in path and legacy bookmark both open the account page', async () => {
   const previous = window.location.href;
-  window.history.replaceState(null, '', '#/sign-in');
   try {
-    render(React.createElement(Root));
-    await screen.findByRole('heading', { name: 'Sign in to EditFloorPlans.com', level: 1 });
-    assert.ok(screen.getByText('Account sign-in is currently unavailable.'));
-    assert.ok(screen.getAllByRole('link', { name: 'Edit your blueprint' })
-      .some((link) => link.getAttribute('href') === '/#/editor'));
+    for (const path of ['/sign-in', '/#/sign-in']) {
+      window.history.replaceState(null, '', path);
+      const view = render(React.createElement(Root));
+      await screen.findByRole('heading', { name: 'Sign in to EditFloorPlans.com', level: 1 });
+      assert.ok(screen.getByText('Account sign-in is currently unavailable.'));
+      assert.ok(screen.getAllByRole('link', { name: 'Edit your blueprint' })
+        .some((link) => link.getAttribute('href') === '/#/editor'));
+      view.unmount();
+    }
   } finally {
     cleanup();
     window.history.replaceState(null, '', previous);
@@ -1074,7 +1118,7 @@ test('sign-up requests verification and supports resending and password recovery
   ]);
 });
 
-test('the editor sign-in dialog retries credentials and completes a valid sign-in', async () => {
+test('the full editor sign-in page retries credentials and completes a valid sign-in', async () => {
   const account = { client: {} };
   let attempts = 0, completed = 0;
   const onAuthenticate = async (mode, email, password) => {
@@ -1084,10 +1128,12 @@ test('the editor sign-in dialog retries credentials and completes a valid sign-i
   };
   render(React.createElement(SignInPage, {
     account, onAuthenticate, onGoogle: async () => {},
-    onClose: () => {}, onAuthenticated: () => { completed += 1; },
+    editorEntry: true, trialOffer: true, onAuthenticated: () => { completed += 1; },
   }));
 
-  assert.ok(screen.getByRole('dialog', { name: 'Sign in to EditFloorPlans.com' }));
+  assert.ok(screen.getByRole('heading', { level: 1, name: 'Sign in to use the editor' }));
+  assert.ok(screen.getByText('3-day free trial. No credit card needed.'));
+  assert.equal(screen.queryByRole('dialog'), null);
   fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'sam@example.test' } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'test-password-2026' } });
   click('button', 'Sign in');
