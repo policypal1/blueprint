@@ -203,7 +203,7 @@ test('landing and pricing explain the product and lead to the editor', async () 
   const comparison = screen.getByRole('heading', { name: 'See what changed' });
   assert.ok(comparison.compareDocumentPosition(pricing) & Node.DOCUMENT_POSITION_FOLLOWING);
   assert.ok(screen.getByRole('img', { name: /the old doorway is filled.*a window is added/i }));
-  assert.ok(document.querySelector('.mobileMenu .siteNav a.mobileEditorLink[href="/#/editor"]'));
+  assert.ok(document.querySelector('.mobileMenu .siteNav a.navEditorLink[href="/#/editor"]'));
   const desktopNav = within(document.querySelector('.siteHeaderActions > nav'));
   assert.equal(desktopNav.queryByRole('link', { name: 'How it works' }), null);
   assert.equal(
@@ -230,7 +230,8 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
   render(React.createElement(Editor));
   await waitSaved();
   assert.equal(count(), 0);
-  click('button', 'Try a sample plan');
+  fireEvent.click(document.querySelector('.projectButton'));
+  click('button', 'Open sample project');
   assert.equal(count(), 20);
   // Make a new project and draw from a blank canvas using actual React event handlers.
   await newProject('Regression A');
@@ -253,12 +254,14 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
   click('button', 'Undo');
   assert.equal(svg().querySelector('line[stroke="#000"]').getAttribute('stroke-width'), '18');
   // A persistent dimension appears in the output geometry.
+  click('button', 'More tools');
   click('button', 'Dimension');
   draw(200, 150, 600, 150);
   assert.equal(count(), 2);
   assert.ok(svg().textContent.includes(`8' 4"`));
   // Switch before the debounced disk write; recent edits must remain.
   await newProject('Regression B');
+  click('button', 'More tools');
   click('button', 'Line');
   draw(400, 400, 800, 400);
   assert.equal(count(), 1);
@@ -285,7 +288,7 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
   await screen.findByRole('dialog', { name: 'Could not restore project' });
   click('button', 'Continue');
   assert.equal(count(), 2);
-  await waitFor(() => assert.equal(screen.getByRole('button', { name: 'Import plan' }).disabled, false));
+  await waitFor(() => assert.equal(document.querySelector('.projectButton').disabled, false));
   // Restoring creates a new project rather than overwriting the original.
   fireEvent.change(inputs[1], {
     target: { files: [{ size: 100, text: async () => JSON.stringify(backup) }] },
@@ -309,6 +312,7 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
   assert.deepEqual(pages, [2]);
   assert.equal(count(), 2);
   // Exact scale requires a known distance, then changes the printed measurements.
+  click('button', 'Set scale');
   fireEvent.pointerDown(svg(), { button: 0, clientX: 200, clientY: 200, pointerId: 5 });
   fireEvent.pointerUp(svg(), { pointerId: 5 });
   fireEvent.pointerDown(svg(), { button: 0, clientX: 600, clientY: 200, pointerId: 5 });
@@ -396,7 +400,7 @@ test('phone editor reaches the core drawing tools and keeps pinch gestures in Vi
     assert.ok(screen.getByRole('dialog', { name: 'Object properties' }));
     click('button', 'Close dialog');
 
-    click('button', 'Fixture');
+    click('button', 'More');
     click('button', 'Shower');
     fireEvent.pointerDown(svg(), { button: 0, clientX: 500, clientY: 380, pointerId: 1 });
     fireEvent.pointerUp(svg(), { pointerId: 1 });
@@ -481,6 +485,34 @@ test('the desktop tip returns on a new mobile editor visit unless opted out', as
   }
 });
 
+test('the walkthrough opens once and the complete editor guide stays available', async () => {
+  const owner = 'walkthrough-test-user';
+  const editor = (props) => React.createElement(Editor, { owner, showFirstUseGuide: true, ...props });
+  const firstStep = { name: 'Move around your plan' };
+  try {
+    const view = render(editor({ showRecent: true }));
+    await waitForUpload();
+    assert.equal(screen.queryByRole('dialog', firstStep), null);
+    view.rerender(editor({ showRecent: false }));
+    await screen.findByRole('dialog', firstStep);
+    click('button', 'Next');
+    assert.ok(screen.getByRole('dialog', { name: 'Make a change' }));
+    click('button', 'Next');
+    assert.ok(screen.getByRole('dialog', { name: 'Measure and export' }));
+    click('button', 'Start editing');
+    view.unmount();
+    render(editor({ showRecent: false }));
+    await waitSaved();
+    assert.equal(screen.queryByRole('dialog', firstStep), null);
+    click('button', 'Editor guide');
+    assert.ok(screen.getByRole('dialog', { name: 'Editor guide' }));
+    click('button', 'Replay walkthrough');
+    assert.ok(screen.getByRole('dialog', firstStep));
+  } finally {
+    localStorage.removeItem(`editfloorplans-editor-guide:${owner}`);
+  }
+});
+
 test('selecting, cancelling a move, and cancelling an erase preserve redo', async () => {
   render(React.createElement(Editor));
   try {
@@ -504,6 +536,7 @@ test('selecting, cancelling a move, and cancelling an erase preserve redo', asyn
     fireEvent.pointerCancel(svg(), { pointerId: 7 });
     assert.equal(wall().getAttribute('y1'), '200');
 
+    click('button', 'More tools');
     click('button', 'Erase background');
     fireEvent.pointerDown(svg(), start);
     fireEvent.pointerMove(svg(), { ...start, clientX: 450 });
@@ -531,6 +564,7 @@ test('reload shortcuts leave selected objects alone and plain R rotates them', a
   try {
     await waitSaved();
     await newProject('Keyboard controls');
+    click('button', 'More tools');
     click('button', 'Sink');
     tap(400, 300);
     const rotation = () => screen.getByLabelText('Rotation (degrees)').value;
@@ -556,6 +590,7 @@ test('all door and fixture choices place objects and copy, delete, and undo stay
   const fixtures = ['Toilet', 'Sink', 'Shower', 'Bathtub', 'Bed', 'Water heater', 'Washer / dryer', 'Counter', 'Stove'];
   const choices = [...doors, ...fixtures];
   for (const [index, choice] of choices.entries()) {
+    click('button', index < doors.length ? 'Door' : 'More tools');
     click('button', choice);
     tap(180 + (index % 5) * 250, 200 + Math.floor(index / 5) * 260);
     assert.equal(count(), index + 1, choice);
@@ -612,7 +647,9 @@ test('out-of-range measurements cannot make a project fail to reopen', async () 
   }
 });
 
-test('reopening shows saved plans and uploading from the list creates a new plan', async () => {
+test('reopening shows saved plans and uploading from the list creates a new plan', async (t) => {
+  localStorage.setItem('editfloorplans-editor-guide', '1');
+  t.after(() => localStorage.removeItem('editfloorplans-editor-guide'));
   window.history.replaceState(null, '', '#/editor/workspace');
   render(React.createElement(Root));
   await screen.findByRole('heading', { name: 'Recent plans' });
@@ -628,13 +665,13 @@ test('reopening shows saved plans and uploading from the list creates a new plan
     target: { files: [new File(['test image'], 'Kitchen revision.png', { type: 'image/png' })] },
   });
   await screen.findByRole('main', { name: 'Drawing workspace' });
-  assert.ok(within(screen.getByRole('banner')).getByRole('link', { name: 'EditFloorPlans.com home' }));
+  assert.equal(screen.queryByRole('banner'), null);
   click('button', 'Wall');
   draw(200, 200, 600, 200);
   assert.equal(count(), 1);
   await waitSaved();
 
-  click('link', 'Recent plans');
+  click('link', 'Back to plans');
   await screen.findByRole('heading', { name: 'Recent plans' });
   assert.ok(screen.getByRole('button', { name: /Kitchen revision/ }));
   const upload = () => fireEvent.change(document.querySelector('input[type=file]'), {
@@ -666,7 +703,7 @@ test('reopening shows saved plans and uploading from the list creates a new plan
   await screen.findByRole('main', { name: 'Drawing workspace' });
   assert.equal(count(), 1);
   assert.ok(svg().querySelector('image'));
-  click('link', 'Recent plans');
+  click('link', 'Back to plans');
   await screen.findByRole('heading', { name: 'Recent plans' });
   const image = new File(['test image'], 'image.png', { type: 'image/png' });
   fireEvent.paste(document.body, { clipboardData: { files: [image] } });
@@ -782,7 +819,7 @@ test('recent plans lists device and account plans together, and older account pl
     assert.equal(screen.queryByRole('button', { name: 'Save to account' }), null);
     assert.equal(rows.size, 1);
 
-    click('link', 'Recent plans');
+    click('link', 'Back to plans');
     await screen.findByRole('heading', { name: 'Recent plans' });
     const list = screen.getByRole('list');
     assert.deepEqual([...list.querySelectorAll('strong')].map((name) => name.textContent), [
@@ -908,7 +945,7 @@ test('trial landing prominently offers the account-based trial and links to all 
   assert.ok(hero.getByText(/No credit card needed/));
   const footer = within(screen.getByRole('navigation', { name: 'Footer' }));
   assert.deepEqual(footer.getAllByRole('link').map((link) => link.getAttribute('href')), [
-    '/how-to-edit-a-floor-plan-pdf', '/pricing', '/terms', '/privacy', '/refunds-and-cancellation', '/support',
+    '/how-to-edit-a-floor-plan-pdf', '/floor-plan-guides', '/pricing', '/terms', '/privacy', '/refunds-and-cancellation', '/support',
   ]);
 });
 
@@ -921,7 +958,32 @@ test('the PDF editing guide shows the video followed by three steps', () => {
     'Upload the original drawing', 'Mark up the layout', 'Export a revised plan',
   ]);
   assert.ok(within(main).getByText(/up to 25 MB/));
-  assert.equal(within(main).queryByRole('link'), null);
+  assert.equal(within(main).queryByRole('link', { name: 'Edit your blueprint' }), null);
+  assert.deepEqual(within(main).getAllByRole('link').map((link) => link.getAttribute('href')), [
+    '/measure-a-floor-plan-pdf', '/print-a-floor-plan-pdf-to-scale',
+  ]);
+});
+
+test('each new guide has a public page and related navigation', async () => {
+  const previous = window.location.href;
+  try {
+    for (const [path, name] of [
+      ['/measure-a-floor-plan-pdf', 'How to measure a floor plan PDF'],
+      ['/mark-up-a-floor-plan-for-a-remodel', 'How to mark up a floor plan for a remodel'],
+      ['/print-a-floor-plan-pdf-to-scale', 'How to print a floor plan PDF to scale'],
+    ]) {
+      window.history.replaceState(null, '', path);
+      const view = render(React.createElement(Root));
+      await screen.findByRole('heading', { name, level: 1 });
+      const related = within(screen.getByRole('navigation', { name: 'Related floor plan guides' }));
+      assert.equal(related.getAllByRole('link').length, 3);
+      assert.equal(screen.getByRole('link', { name: 'All floor plan guides' }).getAttribute('href'), '/floor-plan-guides');
+      view.unmount();
+    }
+  } finally {
+    cleanup();
+    window.history.replaceState(null, '', previous);
+  }
 });
 
 test('trial starts only after accepting terms, and expired access cannot download under the subscription', async () => {
@@ -1040,7 +1102,7 @@ test('the billing route requires sign-in and the sandbox portal is labeled', asy
   assert.ok(screen.getByText('Billing is currently unavailable.'));
 });
 
-test('the desktop header shows the account name, and the dropdown works in the editor', () => {
+test('the desktop header shows the account name and keeps the menu available from Recent plans', () => {
   const user = { email: 'morgan@example.test', user_metadata: { planpatch_display_name: 'Morgan Lee' } };
   const onSignOut = () => { signedOut += 1; };
   let signedOut = 0;
@@ -1049,10 +1111,12 @@ test('the desktop header shows the account name, and the dropdown works in the e
   const header = screen.getByRole('banner');
   const nav = within(header.querySelector('.siteHeaderActions > .siteNav'));
   assert.ok(nav.getByRole('link', { name: 'Pricing' }));
-  assert.ok(nav.getByRole('link', { name: 'Edit your blueprint' }));
+  const editorLink = nav.getByRole('link', { name: 'Edit your blueprint' });
+  assert.ok(editorLink.querySelector('svg'));
+  assert.equal(editorLink.classList.contains('button'), false);
   assert.equal(header.querySelector('.accountMenuName').textContent, 'Morgan Lee');
 
-  view.rerender(React.createElement(SiteHeader, { page: 'workspace', account }));
+  view.rerender(React.createElement(SiteHeader, { page: 'recent', account }));
   const details = header.querySelector('.accountMenu');
   assert.equal(details.querySelector('summary').getAttribute('aria-label'), 'Account menu for Morgan Lee');
   assert.equal(details.querySelector('summary .accountAvatar').textContent, 'M');
