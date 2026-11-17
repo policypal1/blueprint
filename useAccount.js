@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
-const projectUrl = import.meta.env?.VITE_SUPABASE_URL?.trim();
-const publishableKey = import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
+export const projectUrl = import.meta.env?.VITE_SUPABASE_URL?.trim();
+export const publishableKey = import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
 const enabled = Boolean(projectUrl && publishableKey);
 const RETURN_TO = 'planpatch-sign-in-return';
 const RECOVERY_OWNER = 'planpatch-recovery-owner';

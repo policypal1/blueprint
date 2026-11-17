@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { fullEditorAccess, timedAccessActive } from './access.js';
 import { PolicyAgreement } from './Policies.jsx';
 
-export default function TrialPage({ account, access, offer, onSignIn }) {
+export default function TrialPage({ account, access, offer, offerChecking, offerError, onCheckOffer, onSignIn }) {
   const [accepted, setAccepted] = useState(false);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
   const data = access.data;
   const active = timedAccessActive(data?.trialEndsAt);
+  const available = offer || data?.canStartTrial;
 
   async function begin(event) {
     event.preventDefault();
@@ -25,7 +26,7 @@ export default function TrialPage({ account, access, offer, onSignIn }) {
 
   return (
     <main className="policyPage trialPage">
-      <h1>{offer || data?.trialEndsAt ? 'Your 3-day free trial' : 'Free trial'}</h1>
+      <h1>{available || data?.trialEndsAt ? 'Your 3-day free trial' : 'Free trial'}</h1>
       {account.loading || (account.user && (access.loading && !data)) ? (
         <p role="status">Checking trial access…</p>
       ) : active ? (
@@ -38,7 +39,14 @@ export default function TrialPage({ account, access, offer, onSignIn }) {
           <p>Your trial has ended. Choose a project credit or monthly access to edit and download your plans.</p>
           <a className="button primary" href="#/account/billing">Choose a plan</a>
         </>
-      ) : !offer ? (
+      ) : !available && offerChecking ? (
+        <p role="status">Checking trial availability…</p>
+      ) : !available && offerError ? (
+        <>
+          <p role="alert">Could not check trial availability.</p>
+          <button type="button" onClick={onCheckOffer}>Check again</button>
+        </>
+      ) : !available ? (
         <><p>Free trials are currently unavailable.</p><a className="button" href="#/editor">Open editor</a></>
       ) : !account.user ? (
         <>

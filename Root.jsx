@@ -95,7 +95,8 @@ export default function Root() {
   const account = useAccount();
   const owner = account.user?.id;
   const access = usePlanPatchAccount(account.client, owner);
-  const trialOffer = useTrialOffer(account.client);
+  const trialStatus = useTrialOffer();
+  const trialOffer = trialStatus.available;
   const priorOwner = useRef(owner);
   const priorFullAccess = useRef(false);
   const beforeLeaving = useRef(null);
@@ -217,7 +218,9 @@ export default function Root() {
       {showTrial && (
         <>
           <SiteHeader page={route} account={accountNav} />
-          <TrialPage account={account} access={access} offer={trialOffer} onSignIn={openSignIn} />
+          <TrialPage account={account} access={access} offer={trialOffer}
+            offerChecking={trialStatus.checking} offerError={trialStatus.error}
+            onCheckOffer={trialStatus.refresh} onSignIn={openSignIn} />
           <SiteFooter />
         </>
       )}

@@ -72,6 +72,20 @@ returning trials_enabled, payments_required;
 
 The trial starts for eligible new verified accounts. Existing accounts without a signup record need a paid plan to edit while the gate is active. For a quick rollback during testing, run the same statement with `trials_enabled = false`. The separate `payments_required` setting still controls paid access when the trial offer is off. The checkout function is for Stripe test purchases.
 
+For an offer visibility check, open `/#/trial` while signed out. Wait for the availability check to finish. An enabled offer shows **Create account**, a disabled offer says **Free trials are currently unavailable**, and a failed public request has a **Check again** action. The home and pricing pages read the same public setting and check it again when the tab comes into focus.
+
+To test real signup before turning on the public offer, apply [the single-address signup check migration](supabase/migrations/20261117005800_planpatch_trial_signup_check.sql). Keep `trials_enabled` off. In SQL Editor, replace the example with an email address you can verify that has never been used on the site.
+
+```sql
+update planpatch_private.sandbox_settings
+set trial_check_email_tag = planpatch_private.trial_tag('email', lower(btrim('test@example.com'))),
+    trial_check_expires_at = now() + interval '1 hour'
+where singleton
+returning trials_enabled, trial_check_expires_at;
+```
+
+In a separate browser session, open `/#/sign-in`, create the account, and confirm the email in that browser. Sign in and open `/#/trial`. Accept the terms, start the trial, and check the timer in the editor. The address is eligible to claim for one hour. Signup checks use separate email and network limits from public claims.
+
 Check that a new verified account can start a 72-hour trial with no payment details, a second signup on the same network is declined, and export stops when the trial or paid subscription ends. An independently purchased project retains its export access. Each credit is permanently associated with its original blueprint, including after deletion. Account-local drafts are isolated per login. Older drafts without a known owner stay on the device outside signed-in accounts.
 
 The public policies live in `Policies.jsx`. Replace the support placeholder using `VITE_PLANPATCH_SUPPORT_EMAIL` before inviting paying customers. When the new domain is ready, update the authentication and billing return URLs along with the hosting domain.

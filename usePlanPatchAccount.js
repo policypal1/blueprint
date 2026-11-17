@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fullEditorAccess, TERMS_VERSION } from './access.js';
+import { projectUrl, publishableKey } from './useAccount.js';
 
 async function accountRequest(client, body) {
   if (!client) throw new Error('Sign in to continue.');
@@ -26,19 +27,54 @@ async function readAccess(client) {
   };
 }
 
-export function useTrialOffer(client) {
-  const [available, setAvailable] = useState(false);
+export function useTrialOffer() {
+  const configured = Boolean(projectUrl && publishableKey);
+  const [state, setState] = useState({ available: false, checking: configured, error: false });
+  const pending = useRef(null);
+
+  const refresh = useCallback(async () => {
+    if (!configured || pending.current) return;
+    const request = new AbortController();
+    pending.current = request;
+    const deadline = window.setTimeout(() => request.abort(), 8_000);
+    setState((previous) => previous.error ? { ...previous, checking: true, error: false } : previous);
+    try {
+      const response = await fetch(new URL('/rest/v1/rpc/planpatch_trial_offer', projectUrl), {
+        headers: { apikey: publishableKey },
+        credentials: 'omit',
+        cache: 'no-store',
+        signal: request.signal,
+      });
+      if (!response.ok) throw new Error('Could not check trial availability.');
+      const available = await response.json();
+      if (typeof available !== 'boolean') throw new Error('Unexpected trial availability.');
+      if (pending.current === request) setState({ available, checking: false, error: false });
+    } catch {
+      if (pending.current === request) setState({ available: false, checking: false, error: true });
+    } finally {
+      window.clearTimeout(deadline);
+      if (pending.current === request) pending.current = null;
+    }
+  }, [configured]);
 
   useEffect(() => {
-    if (!client) return undefined;
-    let active = true;
-    client.rpc('planpatch_trial_offer').then(({ data }) => {
-      if (active) setAvailable(data === true);
-    }, () => {});
-    return () => { active = false; };
-  }, [client]);
+    if (!configured) return undefined;
+    const whenVisible = () => { if (!document.hidden) void refresh(); };
+    void refresh();
+    window.addEventListener('focus', whenVisible);
+    document.addEventListener('visibilitychange', whenVisible);
+    const timer = window.setInterval(whenVisible, 60_000);
+    return () => {
+      const request = pending.current;
+      pending.current = null;
+      request?.abort();
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', whenVisible);
+      window.removeEventListener('focus', whenVisible);
+    };
+  }, [configured, refresh]);
 
-  return Boolean(client && available);
+  return { ...state, refresh };
 }
 
 function goToStripe(url, host) {
