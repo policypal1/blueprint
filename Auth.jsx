@@ -153,8 +153,8 @@ export function SignInPage({
           </div>
           {mode === 'create' && (
             <p className="authPolicyLinks">
-              <a className="accountTextLink" href="#/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
-              <a className="accountTextLink" href="#/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+              <a className="accountTextLink" href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
+              <a className="accountTextLink" href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
             </p>
           )}
         </>

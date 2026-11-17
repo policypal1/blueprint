@@ -1,15 +1,17 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AccountPage from './Account.jsx';
 import { ResetPasswordPage, SignInPage } from './Auth.jsx';
-import Marketing, { DEMO_HASH, SiteFooter, SiteHeader } from './Marketing.jsx';
-import { CustomerPolicyPage, POLICY_LINKS } from './Policies.jsx';
+import { DEMO_HASH, SiteFooter, SiteHeader } from './Marketing.jsx';
+import PublicPage from './PublicPage.jsx';
 import TrialPage from './Trial.jsx';
+import TrialStatus from './TrialStatus.jsx';
 import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
-import { hasOpenedPlan, removeDeviceProjects } from './useProjectStore.js';
+import { removeDeviceProjects } from './useProjectStore.js';
 import { createProjectRepository } from './account-projects.js';
 import { useAccount } from './useAccount.js';
 import usePlanPatchAccount, { useTrialOffer } from './usePlanPatchAccount.js';
 import { canOpenEditor, fullEditorAccess, timedAccessActive } from './access.js';
+import { publicPageAt, publicPages } from './seo-pages.js';
 
 const Editor = lazy(() => import('./App.jsx'));
 const RECENT_HASH = '#/editor';
@@ -19,30 +21,28 @@ const PAGE_TITLES = {
   recent: 'Recent plans',
   workspace: 'Editor',
   sample: 'Editor',
-  pricing: 'Pricing',
   account: 'Account',
   security: 'Sign-in & security',
   billing: 'Billing',
   signIn: 'Sign in',
   resetPassword: 'Reset password',
   trial: 'Free trial',
-  ...POLICY_LINKS,
 };
 
 function readRoute() {
   const hash = window.location.hash;
   if (hash === WORKSPACE_HASH) return 'workspace';
   if (hash === '#/editor/sample') return 'sample';
-  if (hash.startsWith(RECENT_HASH) || (!hash && hasOpenedPlan())) return 'recent';
+  if (hash.startsWith(RECENT_HASH)) return 'recent';
   if (hash === '#/account') return 'account';
   if (hash === '#/account/security') return 'security';
   if (hash === '#/account/billing') return 'billing';
   if (hash === SIGN_IN_HASH) return 'signIn';
   if (hash === '#/reset-password') return 'resetPassword';
   if (hash === '#/trial') return 'trial';
-  if (Object.hasOwn(POLICY_LINKS, hash.slice(2))) return hash.slice(2);
   if (hash === DEMO_HASH) return 'demo';
-  return hash.startsWith('#/pricing') ? 'pricing' : 'home';
+  return (hash.startsWith('#/') && publicPageAt(hash.slice(1)))
+    || publicPageAt(window.location.pathname) || 'home';
 }
 function isEditorRoute(route) {
   return ['recent', 'workspace', 'sample'].includes(route);
@@ -97,6 +97,7 @@ export default function Root() {
   const access = usePlanPatchAccount(account.client, owner);
   const trialOffer = useTrialOffer(account.client);
   const priorOwner = useRef(owner);
+  const priorFullAccess = useRef(false);
   const beforeLeaving = useRef(null);
   const registerSave = useCallback((save) => { beforeLeaving.current = save; }, []);
   const repository = useMemo(() => owner && account.client
@@ -111,14 +112,14 @@ export default function Root() {
   const showEditor = isEditorRoute(route);
   const policy = access.data;
   const requireSignIn = Boolean(import.meta.env?.PROD || account.enabled);
+  const fullAccess = fullEditorAccess(policy);
   const editorAllowed = !requireSignIn || Boolean(owner && canOpenEditor(policy));
-  const projectAccess = policy?.paymentsRequired && !fullEditorAccess(policy)
+  const projectAccess = policy?.paymentsRequired && !fullAccess
     ? { credits: policy.projectCredits, ids: policy.projectIds, refresh: access.refresh }
     : null;
   const showAccount = ['account', 'security', 'billing'].includes(route);
   const showAuthPage = route === 'signIn' || route === 'resetPassword';
   const showTrial = route === 'trial';
-  const showPolicy = Object.hasOwn(POLICY_LINKS, route);
 
   function openSignIn() {
     if (showEditor || showTrial) {
@@ -160,8 +161,13 @@ export default function Root() {
     busy: account.busy || account.loading,
   } : null;
   useEffect(() => {
-    if (window.location.hash === WORKSPACE_HASH || (!window.location.hash && hasOpenedPlan())) {
+    if (window.location.hash === WORKSPACE_HASH) {
       window.history.replaceState(window.history.state, '', RECENT_HASH);
+    } else {
+      const legacyPage = window.location.hash.startsWith('#/') && publicPageAt(window.location.hash.slice(1));
+      if (legacyPage && legacyPage !== 'home') {
+        window.history.replaceState(window.history.state, '', publicPages[legacyPage].path + window.location.search);
+      }
     }
     const navigate = () => {
       const next = readRoute();
@@ -175,7 +181,7 @@ export default function Root() {
   }, []);
   useEffect(() => {
     const lostAccount = priorOwner.current && priorOwner.current !== owner;
-    if ((lostAccount && window.location.hash === WORKSPACE_HASH) || (owner && !window.location.hash)) {
+    if (lostAccount && window.location.hash === WORKSPACE_HASH) {
       window.location.hash = RECENT_HASH;
       setRoute('recent');
       setVisitedEditor(true);
@@ -186,16 +192,16 @@ export default function Root() {
     if (owner && (route === 'signIn' || signInDialog)) finishSignIn();
   }, [owner, route, signInDialog, finishSignIn]);
   useEffect(() => {
-    if (route === 'workspace' && projectAccess && policy?.trialEndsAt
-      && !timedAccessActive(policy.trialEndsAt)) {
+    const accessEnded = priorFullAccess.current && !fullAccess;
+    priorFullAccess.current = fullAccess;
+    if (route === 'workspace' && accessEnded) {
       window.location.hash = RECENT_HASH;
     }
-  }, [route, Boolean(projectAccess), policy?.trialEndsAt]);
+  }, [route, fullAccess]);
   useEffect(() => {
     const title = PAGE_TITLES[route];
-    document.title = title
-      ? `${title} · ${PRODUCT_NAME}`
-      : `${PRODUCT_NAME} · Edit your current blueprint`;
+    document.title = publicPages[route]?.title
+      ?? (title ? `${title} · ${PRODUCT_NAME}` : publicPages.home.title);
   }, [route]);
   return (
     <>
@@ -205,15 +211,8 @@ export default function Root() {
           <button aria-label="Dismiss sign-in notice" onClick={account.clearError}><Icon name="close" /></button>
         </div>
       )}
-      {!showEditor && !showAccount && !showAuthPage && !showTrial && !showPolicy && (
-        <Marketing page={route} account={accountNav} trialOffer={trialOffer} />
-      )}
-      {showPolicy && (
-        <>
-          <SiteHeader page={route} account={accountNav} />
-          <CustomerPolicyPage page={route} />
-          <SiteFooter />
-        </>
+      {!showEditor && !showAccount && !showAuthPage && !showTrial && (
+        <PublicPage page={route} account={accountNav} trialOffer={trialOffer} />
       )}
       {showTrial && (
         <>
@@ -239,6 +238,9 @@ export default function Root() {
       {(showEditor || (visitedEditor && editorAllowed)) && (
         <div className="editorRoot" hidden={!showEditor}>
           {showEditor && <SiteHeader page={route} account={accountNav} />}
+          {showEditor && editorAllowed && !policy?.monthly && timedAccessActive(policy?.trialEndsAt) && (
+            <TrialStatus expiresAt={policy.trialEndsAt} />
+          )}
           {!editorAllowed ? <EditorAccess account={account} access={access} offer={trialOffer} onSignIn={openSignIn} /> : (
           <div className="editorSurface">
             <Suspense

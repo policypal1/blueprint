@@ -65,7 +65,7 @@ export default function TrialPage({ account, access, offer, onSignIn }) {
         </>
       )}
       {notice && (
-        <p className="accountError" role="alert">{notice} <a className="accountTextLink" href="#/support">Contact support</a></p>
+        <p className="accountError" role="alert">{notice} <a className="accountTextLink" href="/support">Contact support</a></p>
       )}
     </main>
   );

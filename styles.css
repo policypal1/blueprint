@@ -721,6 +721,19 @@ p {
   padding-inline: 18px;
   font-size: 16px;
 }
+.heroGuideLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 44px;
+  margin: 4px auto 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.heroGuideLink:hover { color: var(--accent); }
 .blueprintDemo {
   max-width: 1100px;
   margin: 0 auto;
@@ -843,6 +856,26 @@ p {
   font-size: 14px;
 }
 .pricingTrial { margin-block: 0 26px; text-align: center; }
+.pricingAccount { margin-top: 20px; text-align: center; }
+.guidePage {
+  max-width: 960px;
+  margin-inline: auto;
+  padding: clamp(28px, 5vw, 55px) max(20px, 5%) clamp(40px, 7vw, 70px);
+}
+.guideIntro {
+  max-width: 660px;
+  margin: 0 auto 36px;
+  text-align: center;
+}
+.guideIntro h1 { margin: 0; font-size: clamp(32px, 6vw, 54px); text-wrap: balance; }
+.guideIntro p { margin: 14px auto 20px; max-width: 48ch; color: var(--muted); line-height: 1.55; }
+.guideIntro .button { min-height: 48px; }
+.guidePage .blueprintDemo { padding-inline: 0; }
+.guideSteps { display: grid; gap: 16px; margin: 0 0 24px; padding-inline-start: 25px; }
+.guideSteps li { padding: 12px 0 14px 8px; border-top: 1px solid var(--line); }
+.guideSteps li::marker { color: var(--accent); font-weight: 700; }
+.guideSteps h2 { margin: 0 0 6px; font-size: 20px; }
+.guideSteps p { max-width: 65ch; margin: 0; color: var(--muted); line-height: 1.55; }
 .policyPage {
   width: min(100%, 760px);
   min-height: 48vh;
@@ -909,6 +942,8 @@ p {
   font-size: clamp(13px, 2vw, 16px);
   white-space: nowrap;
 }
+.priceDetail { margin: 14px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.compactPriceLabel { margin: 0 0 4px; color: var(--muted); font-size: 13px; font-weight: 600; }
 .compactPrices .priceCard {
   display: flex;
   align-items: center;
@@ -917,6 +952,7 @@ p {
 }
 .compactPrices .price strong { font-size: clamp(29px, 4.5vw, 42px); }
 @media (max-width: 480px) {
+  .pricingPage .priceOptions { grid-template-columns: minmax(0, 1fr); }
   .compactPrices .priceCard { display: grid; gap: 8px; }
   .price span { display: block; margin-top: 4px; }
 }
@@ -969,6 +1005,30 @@ p {
   z-index: 60;
   flex: none;
   width: 100%;
+}
+.trialStatus {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  padding-inline: max(16px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-right));
+  min-height: 44px;
+  border-bottom: 1px solid var(--line);
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 13px;
+}
+.trialStatus time { font-weight: 700; font-variant-numeric: tabular-nums; }
+.trialStatus a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  color: var(--accent);
+  font-weight: 600;
 }
 .editorSurface {
   flex: 1;

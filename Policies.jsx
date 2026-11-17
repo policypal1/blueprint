@@ -18,7 +18,7 @@ export function SupportContact() {
 }
 
 export function PolicyAgreement() {
-  return <>I agree to the <a className="accountTextLink" href="#/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> and have read the <a className="accountTextLink" href="#/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</>;
+  return <>I agree to the <a className="accountTextLink" href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> and have read the <a className="accountTextLink" href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</>;
 }
 
 function Terms() {
@@ -32,7 +32,7 @@ function Terms() {
       <p>Monthly subscriptions renew until canceled. Access continues through the end of the paid billing period after cancellation. Downloads for subscription-only projects become unavailable after that period ends. Export your work before access ends. Independently purchased projects remain available while their credits are valid.</p>
       <h2>Using your revisions</h2>
       <p>Use {PRODUCT_NAME} exports as working markups. Verify dimensions and have a qualified professional review any plans used for construction, permitting or structural changes. Keep backups of important plans.</p>
-      <p>See <a className="accountTextLink" href="#/refunds-and-cancellation">Refunds &amp; cancellation</a> for billing terms. Contact <a className="accountTextLink" href="#/support">Support</a> for account and service questions.</p>
+      <p>See <a className="accountTextLink" href="/refunds-and-cancellation">Refunds &amp; cancellation</a> for billing terms. Contact <a className="accountTextLink" href="/support">Support</a> for account and service questions.</p>
     </>
   );
 }
@@ -49,7 +49,7 @@ function Privacy() {
       <p>Stripe handles payment card details and invoices. {PRODUCT_NAME} keeps the Stripe customer reference and purchase status needed to activate and manage access. Vercel hosts the website. These services process information to provide hosting, authentication, file storage and payments.</p>
       <h2>Deletion and requests</h2>
       <p>You can delete your account in Sign-in &amp; security. Account deletion removes the account and its cloud plans. It also clears its drafts in the current browser when browser storage is available. To remove local copies elsewhere, clear the site's data on those devices. Limited identifiers may remain while they are needed for trial abuse prevention, payment records or legal obligations.</p>
-      <p>Use <a className="accountTextLink" href="#/support">Support</a> for questions or requests about your information, including any rights that apply where you live.</p>
+      <p>Use <a className="accountTextLink" href="/support">Support</a> for questions or requests about your information, including any rights that apply where you live.</p>
     </>
   );
 }
@@ -58,7 +58,7 @@ function RefundsAndCancellation() {
   return (
     <>
       <h2>Refunds</h2>
-      <p>All purchases are final, except where applicable law requires a refund. Contact <a className="accountTextLink" href="#/support">Support</a> for a duplicate or incorrect charge or a request under applicable law.</p>
+      <p>All purchases are final, except where applicable law requires a refund. Contact <a className="accountTextLink" href="/support">Support</a> for a duplicate or incorrect charge or a request under applicable law.</p>
       <h2>Cancel your monthly subscription</h2>
       <p>Open <a className="accountTextLink" href="#/account/billing">Billing</a> and choose Manage billing before your next renewal. Cancellation stops future renewals. You can keep editing and downloading your subscription projects until the paid period ends. Download copies you need before that date.</p>
       <h2>One-time purchases and trials</h2>

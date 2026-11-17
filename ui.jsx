@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import brandMark from './favicon.svg';
+import { SITE_NAME } from './seo-pages.js';
 
-export const PRODUCT_NAME = 'EditFloorPlans.com';
+export const PRODUCT_NAME = SITE_NAME;
 
 const paths = {
   user: 'M20 21v-2a5 5 0 0 0-5-5H9a5 5 0 0 0-5 5v2M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',

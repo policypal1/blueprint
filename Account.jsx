@@ -212,7 +212,7 @@ function BillingSettings({ portalUrl, access }) {
             </button>
           </div>
         </div>
-        <p className="billingNotice"><a className="accountTextLink" href="#/refunds-and-cancellation">Refunds &amp; cancellation</a></p>
+        <p className="billingNotice"><a className="accountTextLink" href="/refunds-and-cancellation">Refunds &amp; cancellation</a></p>
         {data && !data.checkoutReady && <p className="billingNotice">Sandbox checkout is being set up.</p>}
         {refresh && (
           <div className="accountActions billingNotice">

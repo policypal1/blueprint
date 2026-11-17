@@ -3,24 +3,27 @@ import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
 import AccountMenu from './AccountMenu.jsx';
 import PlanIllustration, { DoorPlan } from './PlanIllustration.jsx';
 import { POLICY_LINKS } from './Policies.jsx';
+import { publicPages } from './seo-pages.js';
 
 export const PRICING = { project: 10, monthly: 19 };
 export const DEMO_HASH = '#/how-it-works';
 
 const plans = [
-  { label: 'Single project', unit: 'project', amount: PRICING.project, icon: 'file' },
-  { label: 'Monthly plan', unit: 'month', amount: PRICING.monthly, icon: 'folder' },
+  { label: 'Single project', unit: 'once', amount: PRICING.project, icon: 'file',
+    description: 'Make revisions to one original blueprint. Your credit stays with that project.' },
+  { label: 'Monthly access', unit: 'per month', amount: PRICING.monthly, icon: 'folder',
+    description: 'Edit multiple projects. Renews monthly until you cancel in Billing.' },
 ];
 
 const faqs = [
   ['Do I need a subscription?', 'A $10 project credit is a one-time purchase for a single original blueprint. The $19 USD monthly plan covers multiple projects.'],
-  ['Can I use my existing blueprint?', 'Yes. Paste an image or upload a PDF, PNG, JPG, or WebP.'],
-  ['What can I download?', 'You can export your revised plan as a PDF or PNG.'],
+  ['Can I use my existing blueprint?', 'Yes. Upload a PDF, PNG, JPG or WebP up to 25 MB. Choose the sheet you want when a PDF has more than one page.'],
+  ['What can I download?', 'Export your revised plan as a PDF or PNG while you have editing access.'],
   ['Where are my plans saved?', 'New drafts stay in this browser. Plans unlocked with a project credit are saved to your account.'],
 ];
 
 const EditorLink = ({ tabIndex, trial = false }) => (
-  <a href={trial ? '#/trial' : '#/editor'} className="button primary" tabIndex={tabIndex}>
+  <a href={trial ? '/#/trial' : '/#/editor'} className="button primary" tabIndex={tabIndex}>
     {trial ? 'Start 3-day free trial' : 'Edit your blueprint'} <Icon name="arrow" size={17} />
   </a>
 );
@@ -30,9 +33,9 @@ function scrollToDemo() {
   document.getElementById('how-it-works')?.scrollIntoView?.();
 }
 
-function BlueprintDemo() {
+function BlueprintDemo({ heading = 'How it works' }) {
   const [mobile, setMobile] = useState(
-    () => window.matchMedia?.('(max-width: 800px)').matches ?? false,
+    () => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 800px)').matches),
   );
   const videoRef = useRef(null);
 
@@ -89,7 +92,7 @@ function BlueprintDemo() {
 
   return (
     <section id="how-it-works" className="blueprintDemo" aria-labelledby="blueprint-demo-title">
-      <h2 id="blueprint-demo-title" tabIndex={-1}>How it works</h2>
+      <h2 id="blueprint-demo-title" tabIndex={-1}>{heading}</h2>
       <video
         key={String(mobile)}
         ref={videoRef}
@@ -109,12 +112,12 @@ function BlueprintDemo() {
 function SiteNav({ page, account, mobile = false, onNavigate }) {
   return (
     <nav className="siteNav" aria-label="Main navigation" onClick={onNavigate}>
-      <a href="#/pricing" aria-current={page === 'pricing' ? 'page' : undefined}>Pricing</a>
+      <a href={publicPages.pricing.path} aria-current={page === 'pricing' ? 'page' : undefined}>Pricing</a>
       {account && !account.signedIn && (
-        <a href="#/sign-in" aria-current={page === 'signIn' ? 'page' : undefined}>Sign in</a>
+        <a href="/#/sign-in" aria-current={page === 'signIn' ? 'page' : undefined}>Sign in</a>
       )}
       {mobile
-        ? <a href="#/editor" className="mobileEditorLink">Edit your blueprint</a>
+        ? <a href="/#/editor" className="mobileEditorLink">Edit your blueprint</a>
         : <EditorLink />}
     </nav>
   );
@@ -139,7 +142,7 @@ export function SiteHeader({ page, account }) {
   const workspace = ['recent', 'workspace', 'sample'].includes(page);
   return (
     <header className={`siteHeader${workspace ? ' workspaceHeader' : ''}`}>
-      <a href="#/" aria-label={`${PRODUCT_NAME} home`}>
+      <a href="/" aria-label={`${PRODUCT_NAME} home`}>
         <Brand />
       </a>
       <div className="siteHeaderActions">
@@ -160,12 +163,13 @@ export function SiteHeader({ page, account }) {
 function PriceOptions({ compact = false }) {
   return (
     <div className={compact ? 'priceOptions compactPrices' : 'priceOptions'}>
-      {plans.map(({ label, unit, amount, icon }) => (
+      {plans.map(({ label, unit, amount, icon, description }) => (
         <article className="priceCard" key={unit}>
           <span className="priceIcon"><Icon name={icon} size={22} /></span>
           <div>
-            {!compact && <h2>{label}</h2>}
-            <p className="price"><strong>${amount}</strong><span> per {unit}</span></p>
+            {compact ? <p className="compactPriceLabel">{label}</p> : <h2>{label}</h2>}
+            <p className="price"><strong>${amount}</strong><span> USD {unit}</span></p>
+            {!compact && <p className="priceDetail">{description}</p>}
           </div>
         </article>
       ))}
@@ -192,24 +196,16 @@ function HomeContent({ trialOffer, signedIn }) {
       <section className="hero" aria-labelledby="blueprint-hero-title">
         <div className="heroBlueprint" aria-hidden="true"><PlanIllustration /></div>
         <div className="heroCopy">
-          <h1 id="blueprint-hero-title">Edit your <span className="heroEmphasis">current blueprint</span>.</h1>
-          <p>{showTrial
-            ? 'Upload a floor plan, draw your changes, and share a revised PDF.'
-            : 'Paste a blueprint image or upload a PDF. Draw your changes right on top.'}</p>
+          <h1 id="blueprint-hero-title">Edit your <span className="heroEmphasis">existing floor plan</span>.</h1>
+          <p>Upload a PDF or image, mark up walls, doors and fixtures, and export a revised plan.</p>
           <div className="heroActions" ref={heroAction}>
             <EditorLink trial={showTrial} />
-            {showTrial && <p className="trialQualifier">No credit card needed</p>}
+            {showTrial && <p className="trialQualifier">No credit card needed. Ends automatically.</p>}
+            <a className="heroGuideLink" href={publicPages.guide.path}>See how it works</a>
           </div>
         </div>
       </section>
       <BlueprintDemo />
-      <section className="homeSection" aria-labelledby="project-pricing-title">
-        <div className="priceSectionHeading">
-          <h2 id="project-pricing-title">Pay per project</h2>
-          <a className="detailsLink" href="#/pricing">See pricing <Icon name="arrow" size={17} /></a>
-        </div>
-        <PriceOptions compact />
-      </section>
       <section className="homeSection" aria-labelledby="comparison-title">
         <h2 id="comparison-title">See what changed</h2>
         <p className="comparisonIntro">Close the old doorway, move the entry, and add a window.</p>
@@ -224,9 +220,45 @@ function HomeContent({ trialOffer, signedIn }) {
           </figure>
         </div>
       </section>
+      <section className="homeSection" aria-labelledby="project-pricing-title">
+        <div className="priceSectionHeading">
+          <h2 id="project-pricing-title">One project or monthly access</h2>
+          <a className="detailsLink" href={publicPages.pricing.path}>See pricing <Icon name="arrow" size={17} /></a>
+        </div>
+        <PriceOptions compact />
+      </section>
       <aside className="stickyEdit" aria-label="Blueprint editor shortcut" aria-hidden={!showSticky} data-visible={showSticky}>
         <EditorLink trial={showTrial} tabIndex={showSticky ? undefined : -1} />
       </aside>
+    </>
+  );
+}
+
+function GuideContent({ trialOffer, signedIn }) {
+  return (
+    <>
+      <header className="guideIntro">
+        <h1>How to edit a floor plan PDF</h1>
+        <p>Start with your existing drawing and mark up the changes you want to share.</p>
+        <EditorLink trial={trialOffer && !signedIn} />
+        {trialOffer && !signedIn && <p className="trialQualifier">No credit card needed.</p>}
+      </header>
+      <BlueprintDemo heading="Watch a floor plan revision" />
+      <ol className="guideSteps">
+        <li>
+          <h2>Upload the original drawing</h2>
+          <p>Use a PDF, PNG, JPG or WebP up to 25 MB. For a multi-page PDF, pick the floor plan sheet you want to edit.</p>
+        </li>
+        <li>
+          <h2>Mark up the layout</h2>
+          <p>Draw or mask walls, add doors and fixtures, and label the changes. Set the drawing scale using a known distance before measuring.</p>
+        </li>
+        <li>
+          <h2>Export a revised plan</h2>
+          <p>Download a PDF or PNG for review. For a scaled PDF, confirm the sheet size and print at actual size.</p>
+        </li>
+      </ol>
+      <a className="detailsLink" href={publicPages.pricing.path}>Compare the project and monthly plans <Icon name="arrow" size={17} /></a>
     </>
   );
 }
@@ -238,10 +270,11 @@ function PricingContent({ trialOffer, signedIn }) {
       {trialOffer && !signedIn && (
         <div className="pricingTrial">
           <EditorLink trial />
-          <p className="trialQualifier">No credit card needed</p>
+          <p className="trialQualifier">No credit card needed. Ends automatically.</p>
         </div>
       )}
       <PriceOptions />
+      {signedIn && <div className="pricingAccount"><a className="button primary" href="/#/account/billing">View billing</a></div>}
       <section className="faqSection" aria-labelledby="faq-title">
         <h2 id="faq-title">FAQs</h2>
         <div className="faqList">
@@ -266,10 +299,12 @@ function PricingContent({ trialOffer, signedIn }) {
 export function SiteFooter() {
   return (
     <footer className="siteFooter">
-      <a href="#/" aria-label={`${PRODUCT_NAME} home`}><Brand /></a>
+      <a href="/" aria-label={`${PRODUCT_NAME} home`}><Brand /></a>
       <nav aria-label="Footer">
+        <a href={publicPages.guide.path}>How it works</a>
+        <a href={publicPages.pricing.path}>Pricing</a>
         {Object.entries(POLICY_LINKS).map(([page, label]) => (
-          <a key={page} href={`#/${page}`}>{label}</a>
+          <a key={page} href={publicPages[page].path}>{label}</a>
         ))}
       </nav>
       <small>© {new Date().getFullYear()} {PRODUCT_NAME}</small>
@@ -279,13 +314,14 @@ export function SiteFooter() {
 
 export default function Marketing({ page, account, trialOffer = false }) {
   const pricing = page === 'pricing';
+  const guide = page === 'guide';
 
   useEffect(() => {
     if (page === 'demo') scrollToDemo();
   }, [page]);
 
   return (
-    <div className={pricing ? 'marketing' : 'marketing marketingHome'}>
+    <div className={pricing || guide ? 'marketing' : 'marketing marketingHome'}>
       <a
         className="skipLink"
         href="#main-content"
@@ -299,10 +335,10 @@ export default function Marketing({ page, account, trialOffer = false }) {
         Skip to content
       </a>
       <SiteHeader page={page} account={account} />
-      <main id="main-content" className={pricing ? 'pricingPage' : undefined} tabIndex={-1}>
-        {pricing
-          ? <PricingContent trialOffer={trialOffer} signedIn={account?.signedIn} />
-          : <HomeContent trialOffer={trialOffer} signedIn={account?.signedIn} />}
+      <main id="main-content" className={pricing ? 'pricingPage' : guide ? 'guidePage' : undefined} tabIndex={-1}>
+        {pricing && <PricingContent trialOffer={trialOffer} signedIn={account?.signedIn} />}
+        {guide && <GuideContent trialOffer={trialOffer} signedIn={account?.signedIn} />}
+        {!guide && !pricing && <HomeContent trialOffer={trialOffer} signedIn={account?.signedIn} />}
       </main>
       <SiteFooter />
     </div>

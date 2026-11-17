@@ -61,11 +61,26 @@ Account deletion requires typing `DELETE`. It removes the signed-in account and 
 
 Apply [the trial and project privacy migration](supabase/migrations/20261116235810_planpatch_trials_and_project_privacy.sql). In Supabase Authentication → Auth Hooks, enable the **Before User Created** Postgres hook `planpatch_private.record_trial_signup`. The Auth service supplies the signup IP. The hook stores a keyed network identifier and the trial request adds a keyed verified-email identifier. Raw IP addresses and the signing key stay out of the browser and app responses.
 
-In the release environment with that hook configured, set `trials_enabled = true` on the singleton row in `planpatch_private.sandbox_settings`. This advertises the trial **and** requires a valid trial or paid access to open the editor. Existing accounts without a signup record can keep using a paid plan. Test the activation in a separate environment before using it on any site with customers. The checkout function is still for Stripe test purchases.
+After enabling the hook, run this in the Supabase SQL Editor to advertise the trial and require a trial or paid access for the editor:
+
+```sql
+update planpatch_private.sandbox_settings
+set trials_enabled = true
+where singleton
+returning trials_enabled, payments_required;
+```
+
+The trial starts for eligible new verified accounts. Existing accounts without a signup record need a paid plan to edit while the gate is active. For a quick rollback during testing, run the same statement with `trials_enabled = false`. The separate `payments_required` setting still controls paid access when the trial offer is off. The checkout function is for Stripe test purchases.
 
 Check that a new verified account can start a 72-hour trial with no payment details, a second signup on the same network is declined, and export stops when the trial or paid subscription ends. An independently purchased project retains its export access. Each credit is permanently associated with its original blueprint, including after deletion. Account-local drafts are isolated per login. Older drafts without a known owner stay on the device outside signed-in accounts.
 
 The public policies live in `Policies.jsx`. Replace the support placeholder using `VITE_PLANPATCH_SUPPORT_EMAIL` before inviting paying customers. When the new domain is ready, update the authentication and billing return URLs along with the hosting domain.
+
+## Public pages and search
+
+`npm run build` writes the public HTML for the home page, pricing, the floor plan PDF guide, and the policy pages. It also generates `robots.txt` and `sitemap.xml`. The marketing pages have distinct titles, descriptions, and canonical URLs. The public guide lives at `/how-to-edit-a-floor-plan-pdf`, and old pricing and policy links with hash fragments still resolve.
+
+When `https://editfloorplans.com` serves the site, set `VITE_SITE_URL=https://editfloorplans.com` in the production deployment and rebuild. Use that domain as the canonical search address. Verify it in Google Search Console, submit `/sitemap.xml`, and use URL Inspection on the three marketing pages. Before redirecting the old domain, save backups of important browser drafts since browser storage belongs to each origin.
 
 ## What changed
 

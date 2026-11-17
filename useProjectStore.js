@@ -9,13 +9,6 @@ let writeQueue = Promise.resolve();
 const projectListKey = (owner) => owner ? `projects:${owner}` : 'projects';
 const currentProjectKey = (owner) => owner ? `${CURRENT_KEY}:${owner}` : CURRENT_KEY;
 
-export function hasOpenedPlan() {
-  try {
-    return Boolean(localStorage.getItem(CURRENT_KEY));
-  } catch {
-    return false;
-  }
-}
 function openDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
