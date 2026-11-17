@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AccountPage from './Account.jsx';
-import { ResetPasswordPage, SignInPage } from './Auth.jsx';
+import { AuthHeader, ResetPasswordPage, SignInPage } from './Auth.jsx';
 import { DEMO_HASH, SiteFooter, SiteHeader } from './Marketing.jsx';
 import PublicPage from './PublicPage.jsx';
 import TrialPage from './Trial.jsx';
@@ -31,10 +31,12 @@ const PAGE_TITLES = {
 };
 
 function readRoute() {
+  const page = publicPageAt(window.location.pathname);
+  if (!page || page === 'notFound') return 'notFound';
   const hash = window.location.hash;
   if (hash === WORKSPACE_HASH) return 'workspace';
   if (hash === '#/editor/sample') return 'sample';
-  if (hash.startsWith(RECENT_HASH)) return 'recent';
+  if (hash === RECENT_HASH) return 'recent';
   if (hash === '#/account') return 'account';
   if (hash === '#/account/security') return 'security';
   if (hash === '#/account/billing') return 'billing';
@@ -42,8 +44,7 @@ function readRoute() {
   if (hash === '#/reset-password') return 'resetPassword';
   if (hash === '#/trial') return 'trial';
   if (hash === DEMO_HASH) return 'demo';
-  return (hash.startsWith('#/') && publicPageAt(hash.slice(1)))
-    || publicPageAt(window.location.pathname) || 'home';
+  return hash.startsWith('#/') ? publicPageAt(hash.slice(1)) || 'notFound' : page;
 }
 function isEditorRoute(route) {
   return ['recent', 'workspace', 'sample'].includes(route);
@@ -52,35 +53,42 @@ function editorSignInLocation() {
   return publicPageAt(window.location.pathname) === 'signIn'
     && new URLSearchParams(window.location.search).get('next') === 'editor';
 }
-function EditorAccess({ account, access, offer }) {
-  if (account.loading || (account.user && access.loading)) {
-    return <main className="accessPage" role="status">Checking editor access…</main>;
-  }
-
+function EditorAccess({ access, offer, accountLoading }) {
+  const loading = accountLoading || access.loading;
   let title, message, action;
-  if (access.data?.deleting) {
+  if (loading) {
+    title = 'Checking editor access';
+    message = 'Opening your workspace…';
+  } else if (access.data?.deleting) {
     title = 'Account deletion in progress';
     message = 'Open security settings to finish deleting your account.';
-    action = <a className="button primary" href="#/account/security">Open security settings</a>;
+    action = <a className="button primary" href="/#/account/security">Open security settings</a>;
   } else if (!access.data) {
-    title = 'Editor access could not be checked';
-    message = access.error || 'Try checking your account again.';
-    action = <button className="primary" onClick={access.refresh}>Try again</button>;
+    title = 'Couldn’t open the editor';
+    message = 'You’re signed in. We couldn’t check your editor access.';
+    action = (
+      <>
+        <button className="primary" onClick={access.refresh}>Check access again</button>
+        <a className="button" href="/#/account">Account settings</a>
+      </>
+    );
   } else if (offer && access.data.canStartTrial) {
     title = 'Try the editor free for 3 days';
     message = 'Edit and export your blueprint. No credit card needed.';
-    action = <a className="button primary" href="#/trial">Start free trial</a>;
+    action = <a className="button primary" href="/#/trial">Start free trial</a>;
   } else {
     title = access.data.trialEndsAt ? 'Your free trial has ended' : 'Unlock the editor';
     message = 'Choose a $10 project credit or a $19 monthly plan to edit and download your plans.';
-    action = <a className="button primary" href="#/account/billing">View plans</a>;
+    action = <a className="button primary" href="/#/account/billing">View plans</a>;
   }
 
   return (
-    <main className="accessPage">
-      <h1>{title}</h1>
-      <p>{message}</p>
-      {action}
+    <main className="accessPage" aria-labelledby="editor-access-title">
+      <section className="accessCard">
+        <h1 id="editor-access-title">{title}</h1>
+        <p role={loading ? 'status' : undefined}>{message}</p>
+        {action && <div className="accessActions">{action}</div>}
+      </section>
     </main>
   );
 }
@@ -107,7 +115,7 @@ export default function Root() {
   const showEditor = isEditorRoute(route);
   const policy = access.data;
   const requireSignIn = Boolean(import.meta.env?.PROD || account.enabled);
-  const editorNeedsSignIn = showEditor && requireSignIn && !owner;
+  const editorNeedsSignIn = showEditor && requireSignIn && !account.loading && !owner;
   const editorSignIn = editorNeedsSignIn || (route === 'signIn' && editorSignInLocation());
   const fullAccess = fullEditorAccess(policy);
   const editorAllowed = !requireSignIn || Boolean(owner && canOpenEditor(policy));
@@ -147,8 +155,11 @@ export default function Root() {
   };
   const signInProps = {
     account,
-    onAuthenticate: (mode, email, password) =>
-      account.authenticate(mode, email, password, beforeLeaving.current, editorSignIn ? RECENT_HASH : signInTarget.current),
+    onAuthenticate: (mode, email, password, displayName) => account.authenticate(mode, email, password, {
+      beforeLeaving: beforeLeaving.current,
+      returnTo: editorSignIn ? RECENT_HASH : signInTarget.current,
+      displayName,
+    }),
     onGoogle: () => account.signInWithGoogle(beforeLeaving.current, editorSignIn ? RECENT_HASH : signInTarget.current),
     onAuthenticated: finishSignIn,
   };
@@ -159,10 +170,11 @@ export default function Root() {
     busy: account.busy || account.loading,
   } : null;
   useEffect(() => {
-    if (window.location.hash === WORKSPACE_HASH) {
+    if (publicPageAt(window.location.pathname) && window.location.hash === WORKSPACE_HASH) {
       window.history.replaceState(window.history.state, '', RECENT_HASH);
     } else {
-      const legacyPage = window.location.hash.startsWith('#/') && publicPageAt(window.location.hash.slice(1));
+      const legacyPage = publicPageAt(window.location.pathname)
+        && window.location.hash.startsWith('#/') && publicPageAt(window.location.hash.slice(1));
       if (legacyPage && legacyPage !== 'home') {
         window.history.replaceState(window.history.state, '', publicPages[legacyPage].path + window.location.search);
       }
@@ -182,12 +194,12 @@ export default function Root() {
     };
   }, []);
   useEffect(() => {
-    if (editorNeedsSignIn && !account.loading) {
+    if (editorNeedsSignIn) {
       window.history.replaceState(window.history.state, '', EDITOR_SIGN_IN_URL);
       setRoute('signIn');
       window.scrollTo(0, 0);
     }
-  }, [editorNeedsSignIn, account.loading]);
+  }, [editorNeedsSignIn]);
   useEffect(() => {
     const lostAccount = priorOwner.current && priorOwner.current !== owner;
     if (lostAccount && window.location.hash === WORKSPACE_HASH) {
@@ -214,7 +226,7 @@ export default function Root() {
   }, [route]);
   return (
     <>
-      {account.error && (
+      {account.error && (!showAuthPage || route === 'resetPassword') && (
         <div className="accountAlert" role="alert">
           <span>{account.error}</span>
           <button aria-label="Dismiss sign-in notice" onClick={account.clearError}><Icon name="close" /></button>
@@ -234,7 +246,7 @@ export default function Root() {
       )}
       {showAuthPage && (
         <>
-          <SiteHeader page={route === 'resetPassword' ? route : 'signIn'} account={accountNav} />
+          <AuthHeader />
           {route === 'resetPassword' ? <ResetPasswordPage account={account} /> : (
             <SignInPage {...signInProps} editorEntry={editorSignIn} trialOffer={trialOffer} />
           )}
@@ -248,13 +260,18 @@ export default function Root() {
             onSignOut={signOut} onDeleted={finishDeletion} />
         </>
       )}
-      {((showEditor && !editorNeedsSignIn) || (visitedEditor && editorAllowed)) && (
+      {showEditor && !editorNeedsSignIn && !editorAllowed && (
+        <>
+          <SiteHeader page={route} account={accountNav} />
+          <EditorAccess access={access} offer={trialOffer} accountLoading={account.loading} />
+        </>
+      )}
+      {(showEditor || visitedEditor) && editorAllowed && (
         <div className="editorRoot" hidden={!showEditor}>
           {showEditor && <SiteHeader page={route} account={accountNav} />}
-          {showEditor && editorAllowed && !policy?.monthly && timedAccessActive(policy?.trialEndsAt) && (
+          {showEditor && !policy?.monthly && timedAccessActive(policy?.trialEndsAt) && (
             <TrialStatus expiresAt={policy.trialEndsAt} />
           )}
-          {!editorAllowed ? <EditorAccess account={account} access={access} offer={trialOffer} /> : (
           <div className="editorSurface">
             <Suspense
               fallback={
@@ -290,7 +307,6 @@ export default function Root() {
               />}
             </Suspense>
           </div>
-          )}
         </div>
       )}
       {signInDialog && showTrial && (

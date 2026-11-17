@@ -5,12 +5,12 @@ import { loadEnv } from 'vite';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
-import { publicPages, SITE_NAME, TEST_SITE_ORIGIN } from './seo-pages.js';
+import { publicPages, SITE_NAME, SITE_ORIGIN } from './seo-pages.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.join(root, 'dist');
 const env = loadEnv('production', root, 'VITE_');
-const site = new URL(env.VITE_SITE_URL || TEST_SITE_ORIGIN);
+const site = new URL(env.VITE_SITE_URL || SITE_ORIGIN);
 if (site.protocol !== 'https:' || site.username || site.password || site.pathname !== '/' || site.search || site.hash) {
   throw new Error('VITE_SITE_URL must be the public HTTPS origin, without credentials or a page path.');
 }

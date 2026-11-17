@@ -5,22 +5,26 @@ export const publishableKey = import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY?.tr
 const enabled = Boolean(projectUrl && publishableKey);
 const RETURN_TO = 'planpatch-sign-in-return';
 const RECOVERY_OWNER = 'planpatch-recovery-owner';
+const EMAIL_CONFIRMATION_FLOW = 'confirm-email';
 const RETURN_ROUTES = new Set([
   '#/editor', '#/editor/workspace', '#/account', '#/account/security', '#/account/billing', '#/trial',
 ]);
+export const MIN_PASSWORD_LENGTH = 12;
+export const MAX_DISPLAY_NAME_LENGTH = 80;
+export const PASSWORD_HINT = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+
 const AUTH_ERRORS = {
   invalid_credentials: 'The email or password was incorrect.',
   email_not_confirmed: 'Confirm your email before signing in.',
   email_address_not_authorized: 'This address isn’t enabled for email testing.',
   over_email_send_rate_limit: 'Too many emails were requested. Wait a while and try again.',
   over_request_rate_limit: 'Too many attempts. Wait a moment and try again.',
-  weak_password: 'Choose a stronger password.',
+  weak_password: PASSWORD_HINT,
   same_password: 'Choose a password different from your current one.',
   draft_unsaved: 'Your draft could not be saved. Download a backup before signing in.',
 };
 let connection;
 
-export const MIN_PASSWORD_LENGTH = 8;
 export const authErrorText = (error, fallback) => Object.hasOwn(AUTH_ERRORS, error?.code)
   ? AUTH_ERRORS[error.code]
   : fallback;
@@ -43,8 +47,10 @@ function authResult({ data, error }) {
   return data;
 }
 
-function redirectUrl() {
-  return new URL('/', window.location.origin).href;
+function redirectUrl(flow) {
+  const url = new URL('/', window.location.origin);
+  if (flow) url.searchParams.set('auth', flow);
+  return url.href;
 }
 
 async function saveDraft(beforeLeaving) {
@@ -60,6 +66,7 @@ async function connect() {
   });
   const url = new URL(window.location.href);
   const code = url.searchParams.get('code');
+  const confirmationLink = url.searchParams.get('auth') === EMAIL_CONFIRMATION_FLOW;
   const errorCodes = ['error', 'error_code', 'error_description'];
   const hashParams = new URLSearchParams(url.hash.slice(1));
   const rejected = errorCodes.some((name) => url.searchParams.has(name) || hashParams.has(name));
@@ -71,17 +78,23 @@ async function connect() {
     ? await client.auth.exchangeCodeForSession(code).catch((error) => ({ error }))
     : null;
   const recovered = exchange?.data?.redirectType === 'recovery' ? exchange.data.user?.id : null;
-  const callbackError = rejected || exchange?.error
-    ? 'This sign-in or email link could not be completed. Try again from the browser where you started.'
+  // Supabase confirms the email before redirecting. The sign-in exchange still
+  // requires the verifier stored in the browser that requested the link.
+  const confirmedWithoutSession = confirmationLink && exchange?.error?.code === 'pkce_code_verifier_not_found';
+  const callbackError = (rejected || exchange?.error) && !confirmedWithoutSession
+    ? confirmationLink
+      ? 'This confirmation link may have expired or already been used. Sign in or request a new link.'
+      : 'This link couldn’t sign you in. For a password reset or Google sign-in, use the browser where you started.'
     : '';
 
   writeSessionValue(RECOVERY_OWNER, recovered);
   const destination = RETURN_ROUTES.has(returnTo) ? returnTo : '#/account';
-  url.hash = callbackError ? '#/sign-in' : recovered ? '#/reset-password' : destination;
+  url.hash = callbackError || confirmedWithoutSession ? '#/sign-in' : recovered ? '#/reset-password' : destination;
   for (const name of ['code', 'flow_id', ...errorCodes]) url.searchParams.delete(name);
+  if (confirmationLink) url.searchParams.delete('auth');
   window.history.replaceState(window.history.state, '', url);
   window.dispatchEvent(new Event('hashchange'));
-  return { client, callbackError, recovered };
+  return { client, callbackError, recovered, confirmedWithoutSession };
 }
 
 export function useAccount() {
@@ -91,6 +104,7 @@ export function useAccount() {
   const [loading, setLoading] = useState(enabled);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [emailConfirmed, setEmailConfirmed] = useState(false);
   const recovering = Boolean(user && recoveryOwner === user.id);
 
   useEffect(() => {
@@ -98,10 +112,11 @@ export function useAccount() {
     let active = true;
     let subscription;
     connection ??= connect();
-    connection.then(({ client: connected, callbackError, recovered }) => {
+    connection.then(({ client: connected, callbackError, recovered, confirmedWithoutSession }) => {
       if (!active) return;
       setClient(connected);
       if (callbackError) setError(callbackError);
+      if (confirmedWithoutSession) setEmailConfirmed(true);
       if (recovered !== undefined) setRecoveryOwner(recovered ?? null);
       subscription = connected.auth.onAuthStateChange((event, session) => {
         setUser(session?.user ?? null);
@@ -110,7 +125,10 @@ export function useAccount() {
           setRecoveryOwner(null);
           writeSessionValue(RECOVERY_OWNER, null);
         }
-        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') setError('');
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+          setError('');
+          setEmailConfirmed(false);
+        }
       }).data.subscription;
     }).catch(() => {
       if (!active) return;
@@ -134,7 +152,7 @@ export function useAccount() {
     window.location.assign(data.url);
   }
 
-  async function authenticate(mode, email, password, beforeLeaving, returnTo) {
+  async function authenticate(mode, email, password, { beforeLeaving, returnTo, displayName }) {
     if (mode === 'forgot') {
       await requestPasswordReset(email);
       return false;
@@ -142,7 +160,7 @@ export function useAccount() {
     if (mode === 'resend') {
       writeSessionValue(RETURN_TO, RETURN_ROUTES.has(returnTo) ? returnTo : '#/account');
       authResult(await client.auth.resend({
-        type: 'signup', email, options: { emailRedirectTo: redirectUrl() },
+        type: 'signup', email, options: { emailRedirectTo: redirectUrl(EMAIL_CONFIRMATION_FLOW) },
       }));
       return false;
     }
@@ -150,7 +168,13 @@ export function useAccount() {
     await saveDraft(beforeLeaving);
     if (mode === 'create') writeSessionValue(RETURN_TO, RETURN_ROUTES.has(returnTo) ? returnTo : '#/account');
     const result = mode === 'create'
-      ? await client.auth.signUp({ email, password, options: { emailRedirectTo: redirectUrl() } })
+      ? await client.auth.signUp({
+        email, password,
+        options: {
+          data: { planpatch_display_name: displayName },
+          emailRedirectTo: redirectUrl(EMAIL_CONFIRMATION_FLOW),
+        },
+      })
       : await client.auth.signInWithPassword({ email, password });
     return Boolean(authResult(result)?.session);
   }
@@ -194,7 +218,7 @@ export function useAccount() {
   }
 
   return {
-    enabled, client, user, loading, busy, error, recovering,
+    enabled, client, user, loading, busy, error, recovering, emailConfirmed,
     authenticate, signInWithGoogle, signOut, requestPasswordReset, completePasswordReset,
     updateEmail, updateDisplayName, clearError: () => setError(''),
   };

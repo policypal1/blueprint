@@ -25,7 +25,7 @@ For the existing Vercel project, use the Vite framework preset, `npm run build`,
 
 1. Create a dedicated Supabase project for EditFloorPlans.com. In its SQL Editor, run [the account migration](supabase/migrations/20261116052511_planpatch_accounts.sql) once. It creates the `projects` table, a private `blueprints` bucket, and owner-only permissions for both. If you manage the database through the Supabase CLI, apply the same migration with `supabase db push` from the linked checkout.
 2. In Google Cloud, configure the Google Auth Platform consent screen for EditFloorPlans.com with the `openid`, `email`, and `profile` scopes. Create a **Web application** OAuth client. Add your live site origin and the callback URL shown in Supabase under **Authentication → Sign In / Providers → Google**. Save the Google Client ID and Client Secret in that Supabase provider and enable it. Add test users while the Google app is in Testing, and publish the consent screen before signing up customers. [Google sign-in setup](https://supabase.com/docs/guides/auth/social-sign-in/auth-google)
-3. In Supabase **Authentication → URL Configuration**, set **Site URL** to the live Vercel origin. Allow the exact URL with its trailing slash, for example `https://blueprint-blue-theta.vercel.app/`. For local testing, also allow `http://localhost:5173/`. [Redirect URL setup](https://supabase.com/docs/guides/auth/redirect-urls)
+3. In Supabase **Authentication → URL Configuration**, set **Site URL** to `https://www.editfloorplans.com/`. For each origin that serves the app, allow its root URL and the same URL with `?auth=confirm-email`. This includes the Vercel test address if you use it to test signup. For local testing, use the same two URLs at `http://localhost:5173/`. [Redirect URL setup](https://supabase.com/docs/guides/auth/redirect-urls)
 4. In Vercel **Settings → Environment Variables**, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` from the Supabase project’s Connect panel. Redeploy with both variables. For local development use `.env.local`. Keep the Google Client Secret in Supabase. [Supabase API keys](https://supabase.com/docs/guides/api/api-keys)
 5. On the deployed site, sign in and upload a sample PDF. Add a wall and reload the browser to check that both reopen from **Recent plans**. If your account already has a cloud plan, sign in from another browser and check that it is listed there. Verify that a second account cannot open the first account’s cloud plan.
 
@@ -33,7 +33,7 @@ New drafts are saved in the current browser. Plans already stored in an account 
 
 ## Account and billing
 
-Open **Sign in** from the site navigation to create an email and password account or continue with Google. The editor sign-in prompt opens the same form. The sign-in page also offers password recovery. Open confirmation and recovery links in the browser where you requested them.
+Open **Sign in** from the site navigation to create an account with a name, an email address and a password, or continue with Google. Set the email provider’s password minimum to 12 characters to match the form. Users can confirm an email on any device and then sign in with their password. Open password recovery links in the browser where they were requested.
 
 After signing in, select the orange initial to open the account menu. **Profile settings** saves your display name, **Sign-in & security** manages your login, and **Billing** opens payment settings.
 
@@ -84,7 +84,7 @@ where singleton
 returning trials_enabled, trial_check_expires_at;
 ```
 
-In a separate browser session, open `/#/sign-in`, create the account, and confirm the email in that browser. Sign in and open `/#/trial`. Accept the terms, start the trial, and check the timer in the editor. The address is eligible to claim for one hour. Signup checks use separate email and network limits from public claims.
+In a separate browser session, open `/sign-in` and create the account. Confirm the email on any device, then sign in and open `/#/trial`. Accept the terms, start the trial, and check the timer in the editor. The address is eligible to claim for one hour. Signup checks use separate email and network limits from public claims.
 
 Check that a new verified account can start a 72-hour trial with no payment details, a second signup on the same network is declined, and export stops when the trial or paid subscription ends. An independently purchased project retains its export access. Each credit is permanently associated with its original blueprint, including after deletion. Account-local drafts are isolated per login. Older drafts without a known owner stay on the device outside signed-in accounts.
 
@@ -92,9 +92,9 @@ The public policies live in `Policies.jsx`. Replace the support placeholder usin
 
 ## Public pages and search
 
-`npm run build` writes the public HTML for the home page, pricing, the floor plan PDF guide, and the policy pages. It also generates `robots.txt` and `sitemap.xml`. The marketing pages have distinct titles, descriptions, and canonical URLs. The public guide lives at `/how-to-edit-a-floor-plan-pdf`, and old pricing and policy links with hash fragments still resolve.
+`npm run build` writes the marketing and policy pages, sign-in, and the custom `404.html`. It also generates `robots.txt` and `sitemap.xml`. The marketing pages have distinct titles, descriptions, and canonical URLs. The public guide lives at `/how-to-edit-a-floor-plan-pdf`, and old pricing and policy links with hash fragments still resolve.
 
-When `https://editfloorplans.com` serves the site, set `VITE_SITE_URL=https://editfloorplans.com` in the production deployment and rebuild. Use that domain as the canonical search address. Verify it in Google Search Console, submit `/sitemap.xml`, and use URL Inspection on the three marketing pages. Before redirecting the old domain, save backups of important browser drafts since browser storage belongs to each origin.
+`https://www.editfloorplans.com` is the default canonical search address. Set `VITE_SITE_URL` only to override it. Verify the domain in Google Search Console, submit `/sitemap.xml`, and use URL Inspection on the three marketing pages. Before redirecting the old domain, save backups of important browser drafts since browser storage belongs to each origin.
 
 ## What changed
 

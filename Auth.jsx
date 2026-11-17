@@ -1,12 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Modal, PRODUCT_NAME } from './ui.jsx';
-import { authErrorText, MIN_PASSWORD_LENGTH } from './useAccount.js';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { Brand, Modal, PRODUCT_NAME } from './ui.jsx';
+import { authErrorText, MAX_DISPLAY_NAME_LENGTH, MIN_PASSWORD_LENGTH, PASSWORD_HINT } from './useAccount.js';
 
 const AUTH_MODES = {
   signIn: { title: `Sign in to ${PRODUCT_NAME}`, submit: 'Sign in', error: 'Could not sign in. Try again.' },
   create: { title: 'Create your account', submit: 'Create account', error: 'Could not create an account. Try again.' },
   forgot: { title: 'Reset your password', submit: 'Send reset link', error: 'Could not request a reset link. Try again.' },
-  resend: { title: 'Confirm your email', submit: 'Resend confirmation', error: 'Could not resend confirmation. Try again.' },
 };
 
 function GoogleMark() {
@@ -20,13 +19,21 @@ function GoogleMark() {
   );
 }
 
-function AuthLayout({ title, onClose, children }) {
+export function AuthHeader() {
+  return (
+    <header className="siteHeader authHeader">
+      <a href="/" aria-label={`${PRODUCT_NAME} home`}><Brand /></a>
+    </header>
+  );
+}
+
+function AuthLayout({ title, onClose, inert, children }) {
   const heading = useRef(null);
   useEffect(() => { heading.current?.focus({ preventScroll: true }); }, [title]);
 
   if (onClose) return <Modal title={title} onClose={onClose} className="authDialog">{children}</Modal>;
   return (
-    <main className="authPage">
+    <main className="authPage" inert={inert ? '' : undefined}>
       <section className="accountCard authCard" aria-labelledby="auth-title">
         <h1 id="auth-title" ref={heading} tabIndex={-1}>{title}</h1>
         {children}
@@ -40,14 +47,18 @@ export function SignInPage({
   editorEntry = false, trialOffer = false,
 }) {
   const [mode, setMode] = useState(initialMode);
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showResend, setShowResend] = useState(false);
+  const [confirmationEmail, setConfirmationEmail] = useState('');
   const [pending, setPending] = useState('');
+  const passwordHint = useId();
   const copy = AUTH_MODES[mode];
-  const credentialForm = mode === 'signIn' || mode === 'create';
+  const creating = mode === 'create';
+  const credentialForm = mode === 'signIn' || creating;
   const waiting = account.loading || Boolean(pending);
   const title = editorEntry && mode === 'signIn' ? 'Sign in to use the editor' : copy.title;
 
@@ -57,33 +68,62 @@ export function SignInPage({
     setError('');
     setNotice('');
     setShowResend(false);
+    setConfirmationEmail('');
     account.clearError?.();
+    if (!onClose) window.scrollTo(0, 0);
   }
 
   async function submit(event) {
     event.preventDefault();
     if (waiting) return;
+    const displayName = name.trim();
+    const address = email.trim();
+    if (creating && !displayName) {
+      setError('Enter your name.');
+      return;
+    }
+    if (creating && password.length < MIN_PASSWORD_LENGTH) {
+      setError(PASSWORD_HINT);
+      return;
+    }
     setPending('email');
     setError('');
     setNotice('');
     setShowResend(false);
     account.clearError?.();
     try {
-      if (await onAuthenticate(mode, email.trim(), password)) {
+      if (await onAuthenticate(mode, address, password, creating ? displayName : undefined)) {
         onAuthenticated();
         return;
       }
       setPassword('');
       if (mode === 'forgot') {
         setNotice('If that email is registered, a reset link will arrive shortly. Open it in this browser.');
+      } else if (creating) {
+        setConfirmationEmail(address);
       } else {
-        setMode('signIn');
-        setNotice('Check your inbox for a confirmation link. Open it in this browser, then sign in.');
-        setShowResend(true);
+        setError(copy.error);
       }
     } catch (problem) {
       setError(authErrorText(problem, copy.error));
       setShowResend(problem?.code === 'email_not_confirmed');
+    } finally {
+      setPending('');
+    }
+  }
+
+  async function resendConfirmation() {
+    const address = confirmationEmail || email.trim();
+    if (waiting || !address) return;
+    setPending('resend');
+    setError('');
+    setNotice('');
+    try {
+      await onAuthenticate('resend', address, '');
+      setConfirmationEmail(address);
+      setNotice('A new confirmation link was sent.');
+    } catch (problem) {
+      setError(authErrorText(problem, 'Couldn’t resend the link. Try again in a moment.'));
     } finally {
       setPending('');
     }
@@ -103,10 +143,31 @@ export function SignInPage({
     }
   }
 
-  return (
-    <AuthLayout title={title} onClose={onClose && (() => { if (!pending) onClose(); })}>
+  const continueToSignIn = () => { if (!waiting) selectMode('signIn'); };
+  const confirmation = confirmationEmail && (
+    <Modal title="Check your email" onClose={continueToSignIn} className="authConfirmation">
+      <p>We sent a confirmation link to <strong>{confirmationEmail}</strong>.</p>
+      <p>Open the link on any device. Then sign in with the email and password you chose.</p>
+      {notice && <p role="status">{notice}</p>}
+      {error && <p className="accountError" role="alert">{error}</p>}
+      <div className="authConfirmationActions">
+        <button type="button" disabled={waiting} onClick={resendConfirmation}>
+          {pending === 'resend' ? 'Sending…' : 'Resend link'}
+        </button>
+        <button type="button" className="primary" data-dialog-focus disabled={waiting} onClick={continueToSignIn}>Back to sign in</button>
+      </div>
+    </Modal>
+  );
+  if (onClose && confirmation) return confirmation;
+
+  return (<>
+    <AuthLayout title={title} inert={Boolean(confirmation)} onClose={onClose && (() => { if (!pending) onClose(); })}>
       {account.loading || account.client ? (
         <>
+          {mode === 'signIn' && account.emailConfirmed && (
+            <p className="authConfirmed" role="status">Email confirmed. You can now sign in on any device.</p>
+          )}
+          {account.error && <p className="accountError" role="alert">{account.error}</p>}
           {credentialForm && (
             <>
               <button className="googleSignIn" type="button" onClick={startGoogle} disabled={waiting}>
@@ -117,35 +178,45 @@ export function SignInPage({
             </>
           )}
           <form className="profileSettings authForm" method="post" aria-busy={account.loading || undefined} onSubmit={submit}>
+            {creating && (
+              <label>
+                Name
+                <input type="text" name="name" autoComplete="name" required maxLength={MAX_DISPLAY_NAME_LENGTH}
+                  value={name} disabled={waiting} onChange={(event) => setName(event.target.value)} />
+              </label>
+            )}
             <label>
               Email address
               <input type="email" name="email" autoComplete="username" required data-dialog-focus
                 value={email} disabled={waiting} onChange={(event) => setEmail(event.target.value)} />
             </label>
             {credentialForm && (
-              <label>
-                Password
-                <input type="password" name="password" required
-                  minLength={mode === 'create' ? MIN_PASSWORD_LENGTH : undefined}
-                  autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
-                  value={password} disabled={waiting}
-                  onChange={(event) => setPassword(event.target.value)} />
-              </label>
+              <div className="authPassword">
+                <label>
+                  Password
+                  <input type="password" name="password" required
+                    minLength={creating ? MIN_PASSWORD_LENGTH : undefined}
+                    aria-describedby={creating ? passwordHint : undefined}
+                    autoComplete={creating ? 'new-password' : 'current-password'}
+                    value={password} disabled={waiting}
+                    onChange={(event) => setPassword(event.target.value)} />
+                </label>
+                {creating && <span className="authPasswordHint" id={passwordHint}>{PASSWORD_HINT}</span>}
+              </div>
             )}
-            {mode === 'create' && <p>Use at least {MIN_PASSWORD_LENGTH} characters.</p>}
             {mode === 'signIn' && (
               <button className="authTextButton authForgot" type="button" disabled={waiting}
                 onClick={() => selectMode('forgot')}>Forgot password?</button>
             )}
-            {error && <p className="accountError" role="alert">{error}</p>}
-            {notice && <p role="status">{notice}</p>}
+            {!confirmation && error && <p className="accountError" role="alert">{error}</p>}
+            {!confirmation && notice && <p role="status">{notice}</p>}
             <button className="primary authSubmit" type="submit" disabled={waiting}>
               {pending === 'email' ? 'Please wait…' : copy.submit}
             </button>
           </form>
           {showResend && (
             <button className="authTextButton" type="button" disabled={waiting}
-              onClick={() => selectMode('resend')}>Resend confirmation</button>
+              onClick={resendConfirmation}>{pending === 'resend' ? 'Sending…' : 'Resend confirmation'}</button>
           )}
           <div className="authAlternate">
             {mode === 'signIn' && (
@@ -156,7 +227,7 @@ export function SignInPage({
               {mode === 'signIn' ? 'Create an account' : 'Back to sign in'}
             </button>
           </div>
-          {mode === 'create' && (
+          {creating && (
             <p className="authPolicyLinks">
               <a className="accountTextLink" href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
               <a className="accountTextLink" href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
@@ -165,7 +236,8 @@ export function SignInPage({
         </>
       ) : <p>Account sign-in is currently unavailable.</p>}
     </AuthLayout>
-  );
+    {confirmation}
+  </>);
 }
 
 export function ResetPasswordPage({ account }) {
@@ -179,12 +251,17 @@ export function ResetPasswordPage({ account }) {
     setPending(true);
     setError('');
     const form = new FormData(event.currentTarget);
+    const password = String(form.get('password') || '');
     try {
-      if (form.get('password') !== form.get('confirmPassword')) {
+      if (password !== form.get('confirmPassword')) {
         setError('The passwords don’t match.');
         return;
       }
-      await account.completePasswordReset(form.get('password'));
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        setError(PASSWORD_HINT);
+        return;
+      }
+      await account.completePasswordReset(password);
       setSaved(true);
     } catch (problem) {
       setError(authErrorText(problem, 'Could not update your password. Request a new reset link if needed.'));
@@ -210,7 +287,7 @@ export function ResetPasswordPage({ account }) {
             <input type="password" name="confirmPassword" minLength={MIN_PASSWORD_LENGTH}
               autoComplete="new-password" disabled={pending} required />
           </label>
-          <p>Use at least {MIN_PASSWORD_LENGTH} characters.</p>
+          <p>{PASSWORD_HINT}</p>
           {error && <p role="alert" className="accountError">{error}</p>}
           <button className="primary authSubmit" type="submit" disabled={pending}>
             {pending ? 'Saving…' : 'Update password'}

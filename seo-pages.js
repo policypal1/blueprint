@@ -1,5 +1,5 @@
 export const SITE_NAME = 'EditFloorPlans.com';
-export const TEST_SITE_ORIGIN = 'https://blueprint-blue-theta.vercel.app';
+export const SITE_ORIGIN = 'https://www.editfloorplans.com';
 
 export const publicPages = {
   home: {
@@ -24,6 +24,12 @@ export const publicPages = {
     path: '/sign-in',
     title: `Sign in | ${SITE_NAME}`,
     description: 'Sign in or create an account to edit and export your floor plans.',
+    noindex: true,
+  },
+  notFound: {
+    path: '/404',
+    title: `Page not found | ${SITE_NAME}`,
+    description: 'Find your way back to EditFloorPlans.com or open your workspace.',
     noindex: true,
   },
   terms: {

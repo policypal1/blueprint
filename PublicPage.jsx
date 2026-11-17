@@ -1,5 +1,5 @@
 import React from 'react';
-import { SignInPage } from './Auth.jsx';
+import { AuthHeader, SignInPage } from './Auth.jsx';
 import Marketing, { SiteFooter, SiteHeader } from './Marketing.jsx';
 import { CustomerPolicyPage, POLICY_LINKS } from './Policies.jsx';
 
@@ -7,9 +7,28 @@ export default function PublicPage({ page, account, trialOffer }) {
   if (page === 'signIn') {
     return (
       <>
-        <SiteHeader page={page} account={account} />
+        <AuthHeader />
         <SignInPage account={{ loading: true }} />
       </>
+    );
+  }
+  if (page === 'notFound') {
+    return (
+      <div className="marketing">
+        <SiteHeader page={page} account={account} />
+        <main className="accessPage" aria-labelledby="not-found-title">
+          <section className="accessCard notFoundCard">
+            <p className="notFoundCode">404</p>
+            <h1 id="not-found-title">Page not found</h1>
+            <p>Double-check the address or head back to EditFloorPlans.com.</p>
+            <div className="accessActions">
+              <a href="/" className="button primary">Back to home</a>
+              <a href="/#/editor" className="button">Open the editor</a>
+            </div>
+          </section>
+        </main>
+        <SiteFooter />
+      </div>
     );
   }
   if (Object.hasOwn(POLICY_LINKS, page)) {

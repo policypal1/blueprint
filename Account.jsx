@@ -1,14 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AccountAvatar, profileName } from './AccountMenu.jsx';
 import { Icon, Modal, PRODUCT_NAME } from './ui.jsx';
-import { authErrorText } from './useAccount.js';
+import { authErrorText, MAX_DISPLAY_NAME_LENGTH } from './useAccount.js';
 import { canOpenEditor, timedAccessActive } from './access.js';
 import { PolicyAgreement } from './Policies.jsx';
 
 const SANDBOX_PORTAL_URL = 'https://billing.stripe.com/p/login/test_00w8wIf8fdke23P1oO4ZG00';
 const BILLING_PORTAL_URL = import.meta.env?.VITE_STRIPE_PORTAL_URL?.trim() || SANDBOX_PORTAL_URL;
 const STRIPE_TEST_PORTAL = /^https:\/\/billing\.stripe\.com\/p\/login\/test_[a-z0-9_-]+\/?$/i;
-const MAX_NAME_LENGTH = 80;
 
 function ProfileSettings({ account, onSignOut }) {
   const { user, busy, updateDisplayName } = account;
@@ -18,7 +17,7 @@ function ProfileSettings({ account, onSignOut }) {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const nextName = name.trim();
-  const canSave = nextName && nextName.length <= MAX_NAME_LENGTH
+  const canSave = nextName && nextName.length <= MAX_DISPLAY_NAME_LENGTH
     && nextName !== savedName && !saving && !busy;
 
   useEffect(() => { setName(savedName); }, [savedName]);
@@ -51,7 +50,7 @@ function ProfileSettings({ account, onSignOut }) {
           <input
             autoComplete="name"
             value={name}
-            maxLength={MAX_NAME_LENGTH}
+            maxLength={MAX_DISPLAY_NAME_LENGTH}
             required
             disabled={saving || busy}
             onChange={(event) => {
