@@ -18,6 +18,7 @@ await build({
     root: path.join(base, 'Root.jsx'),
     account: path.join(base, 'Account.jsx'),
     auth: path.join(base, 'Auth.jsx'),
+    trial: path.join(base, 'Trial.jsx'),
   },
   outdir: path.join(base, '.test-build'),
   outExtension: { '.js': '.mjs' },
@@ -153,6 +154,8 @@ const { default: Marketing, SiteHeader } = await import('../.test-build/marketin
 const { default: Root } = await import('../.test-build/root.mjs');
 const { default: AccountPage } = await import('../.test-build/account.mjs');
 const { SignInPage, ResetPasswordPage } = await import('../.test-build/auth.mjs');
+const { default: TrialPage } = await import('../.test-build/trial.mjs');
+const { canOpenEditor, fullEditorAccess } = await import('../access.js');
 const click = (role, name) => {
   const dialog = screen.queryByRole('dialog');
   return fireEvent.click((dialog ? within(dialog) : screen).getByRole(role, { name, exact: true }));
@@ -584,7 +587,7 @@ test('reopening shows saved plans and uploading from the list creates a new plan
   render(React.createElement(Root));
   await screen.findByRole('heading', { name: 'Recent plans' });
   await waitForUpload();
-  assert.ok(within(screen.getByRole('banner')).getByRole('link', { name: 'PlanPatch home' }));
+  assert.ok(within(screen.getByRole('banner')).getByRole('link', { name: 'EditFloorPlans.com home' }));
   assert.equal(window.location.hash, '#/editor');
   assert.equal(screen.queryByRole('button', { name: 'Restore backup' }), null);
   assert.equal(screen.queryByRole('button', { name: 'Try a sample plan' }), null);
@@ -595,7 +598,7 @@ test('reopening shows saved plans and uploading from the list creates a new plan
     target: { files: [new File(['test image'], 'Kitchen revision.png', { type: 'image/png' })] },
   });
   await screen.findByRole('main', { name: 'Drawing workspace' });
-  assert.ok(within(screen.getByRole('banner')).getByRole('link', { name: 'PlanPatch home' }));
+  assert.ok(within(screen.getByRole('banner')).getByRole('link', { name: 'EditFloorPlans.com home' }));
   click('button', 'Wall');
   draw(200, 200, 600, 200);
   assert.equal(count(), 1);
@@ -689,7 +692,7 @@ test('leaving Recent plans during an import keeps the destination page and allow
   }
 });
 
-function AccountEditor({ repository }) {
+function AccountEditor({ repository, owner = repository ? 'editor-test-owner' : undefined, ...props }) {
   const [showRecent, setShowRecent] = React.useState(true);
   React.useEffect(() => {
     const navigate = () => setShowRecent(window.location.hash === '#/editor');
@@ -698,6 +701,8 @@ function AccountEditor({ repository }) {
   }, []);
   return React.createElement(Editor, {
     repository,
+    owner,
+    ...props,
     showRecent,
     onOpenWorkspace: () => {
       window.location.hash = '#/editor/workspace';
@@ -770,9 +775,14 @@ test('recent plans lists device and account plans together, and older account pl
     cleanup();
 
     window.history.replaceState(null, '', '#/editor');
-    render(React.createElement(AccountEditor));
-    await screen.findByRole('button', { name: /Device garage/ });
+    render(React.createElement(AccountEditor, { owner: 'second-account' }));
+    await waitForUpload();
+    assert.equal(screen.queryByRole('button', { name: /Device garage/ }), null);
     assert.equal(screen.queryByRole('button', { name: /Account garage/ }), null);
+    cleanup();
+
+    render(React.createElement(AccountEditor, { repository }));
+    await screen.findByRole('button', { name: /Device garage/ });
     cleanup();
 
     globalThis.indexedDB = new IDBFactory();
@@ -832,6 +842,69 @@ test('when a newer account save exists, the editor can save local changes as a c
   assert.equal(rows.size, 2);
   assert.equal(rows.get(initial.id).project.name, 'Edited from a phone');
   assert.equal([...rows.values()].find(({ record }) => record.id !== initial.id).project.elements.length, 1);
+});
+
+test('a credit-locked project keeps its blueprint when cleared and has no replace action', async () => {
+  const project = {
+    name: 'Locked original', id: 'locked', elements: [], unitsPerInch: 4,
+    background: png, showBackground: true, createdAt: Date.now(), updatedAt: Date.now(),
+  };
+  const repository = {
+    list: async () => [project],
+    open: async () => ({ project, record: { id: project.id, revision: 1 } }),
+  };
+  window.history.replaceState(null, '', '#/editor');
+  render(React.createElement(AccountEditor, { repository, lockedProjectIds: [project.id] }));
+  const plan = await screen.findByRole('button', { name: /Locked original/ });
+  await waitFor(() => assert.equal(plan.disabled, false));
+  fireEvent.click(plan);
+  await screen.findByRole('main', { name: 'Drawing workspace' });
+  assert.ok(svg().querySelector('image'));
+  assert.equal(screen.queryByRole('button', { name: 'Import plan' }), null);
+  click('button', 'Wall');
+  draw(300, 300, 600, 300);
+  click('button', 'Plan settings');
+  fireEvent.click(screen.getByText('Project actions', { exact: true }));
+  click('button', 'Clear edits');
+  click('button', 'Clear edits');
+  await waitFor(() => assert.equal(count(), 0));
+  assert.ok(svg().querySelector('image'));
+});
+
+test('trial landing prominently offers the account-based trial and links to all customer policies', () => {
+  render(React.createElement(Marketing, { page: 'home', trialOffer: true }));
+  const hero = within(screen.getByRole('region', { name: /Edit your current blueprint/ }));
+  assert.equal(hero.getByRole('link', { name: 'Start 3-day free trial' }).getAttribute('href'), '#/trial');
+  assert.ok(hero.getByText('No credit card needed'));
+  const footer = within(screen.getByRole('navigation', { name: 'Footer' }));
+  assert.deepEqual(footer.getAllByRole('link').map((link) => link.getAttribute('href')), [
+    '#/terms', '#/privacy', '#/refunds-and-cancellation', '#/support',
+  ]);
+});
+
+test('trial starts only after accepting terms, and expired access cannot download under the subscription', async () => {
+  const old = window.location.href;
+  const started = [];
+  const account = { user: { id: 'test-trial-user' } };
+  try {
+    render(React.createElement(TrialPage, {
+      offer: true, account, access: { data: { canStartTrial: true }, startTrial: async () => started.push(true) },
+    }));
+    const start = screen.getByRole('button', { name: 'Start free trial' });
+    assert.equal(start.disabled, true);
+    assert.equal(document.querySelector('input[autocomplete=cc-number]'), null);
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(start);
+    await waitFor(() => assert.equal(window.location.hash, '#/editor'));
+    assert.equal(started.length, 1);
+    assert.equal(fullEditorAccess({ paymentsRequired: true, trialEndsAt: new Date(Date.now() + 5_000).toISOString() }), true);
+    const expired = { paymentsRequired: true, trialEndsAt: '2020-01-01T00:00:00Z', monthly: true, monthlyEndsAt: null };
+    assert.equal(canOpenEditor(expired), false);
+    assert.equal(canOpenEditor({ ...expired, projectIds: ['independently-paid-plan'] }), true);
+  } finally {
+    cleanup();
+    window.history.replaceState(null, '', old);
+  }
 });
 
 test('account settings save a trimmed display name and allow retry after a failed save', async () => {
@@ -935,7 +1008,7 @@ test('public sign-in route shows account sign-in and retains guest editor access
   window.history.replaceState(null, '', '#/sign-in');
   try {
     render(React.createElement(Root));
-    await screen.findByRole('heading', { name: 'Sign in to PlanPatch', level: 1 });
+    await screen.findByRole('heading', { name: 'Sign in to EditFloorPlans.com', level: 1 });
     assert.ok(screen.getByText('Account sign-in is currently unavailable.'));
     assert.ok(screen.getAllByRole('link', { name: 'Edit your blueprint' })
       .some((link) => link.getAttribute('href') === '#/editor'));
@@ -992,7 +1065,7 @@ test('the editor sign-in dialog retries credentials and completes a valid sign-i
     onClose: () => {}, onAuthenticated: () => { completed += 1; },
   }));
 
-  assert.ok(screen.getByRole('dialog', { name: 'Sign in to PlanPatch' }));
+  assert.ok(screen.getByRole('dialog', { name: 'Sign in to EditFloorPlans.com' }));
   fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'sam@example.test' } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'test-password-2026' } });
   click('button', 'Sign in');
