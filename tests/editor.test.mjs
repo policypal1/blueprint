@@ -155,7 +155,7 @@ const { default: Root } = await import('../.test-build/root.mjs');
 const { default: AccountPage } = await import('../.test-build/account.mjs');
 const { SignInPage, ResetPasswordPage } = await import('../.test-build/auth.mjs');
 const { default: TrialPage } = await import('../.test-build/trial.mjs');
-const { canOpenEditor, fullEditorAccess } = await import('../access.js');
+const { canOpenEditor, fullEditorAccess, trialTimeLeft } = await import('../access.js');
 const click = (role, name) => {
   const dialog = screen.queryByRole('dialog');
   return fireEvent.click((dialog ? within(dialog) : screen).getByRole(role, { name, exact: true }));
@@ -187,27 +187,28 @@ async function newProject(name) {
 
 test('landing and pricing explain the product and lead to the editor', async () => {
   render(React.createElement(Marketing, { page: 'home' }));
-  const hero = screen.getByRole('region', { name: /Edit your current blueprint/ });
-  assert.ok(within(hero).getByRole('heading', { name: /Edit your current blueprint/ }));
-  assert.ok(screen.getByText(/Paste a blueprint image or upload a PDF/));
+  const hero = screen.getByRole('region', { name: /Edit your existing floor plan/ });
+  assert.ok(within(hero).getByRole('heading', { name: /Edit your existing floor plan/ }));
+  assert.ok(screen.getByText(/Upload a PDF or image, mark up walls/));
+  assert.equal(within(hero).getByRole('link', { name: 'See how it works' }).getAttribute('href'), '/how-to-edit-a-floor-plan-pdf');
   assert.equal(
     within(hero).getByRole('link', { name: 'Edit your blueprint' }).getAttribute('href'),
-    '#/editor',
+    '/#/editor',
   );
   assert.equal(document.querySelector('video').getAttribute('src'), '/planpatch-demo.mp4');
   assert.equal(document.querySelector('.stickyEdit').getAttribute('aria-hidden'), 'true');
   assert.ok(screen.getByRole('heading', { name: 'How it works' }));
   assert.equal(screen.queryByText('Bring your plan'), null);
-  const pricing = screen.getByRole('heading', { name: 'Pay per project' });
+  const pricing = screen.getByRole('heading', { name: 'One project or monthly access' });
   const comparison = screen.getByRole('heading', { name: 'See what changed' });
-  assert.ok(pricing.compareDocumentPosition(comparison) & Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.ok(comparison.compareDocumentPosition(pricing) & Node.DOCUMENT_POSITION_FOLLOWING);
   assert.ok(screen.getByRole('img', { name: /the old doorway is filled.*a window is added/i }));
-  assert.ok(document.querySelector('.mobileMenu .siteNav a.mobileEditorLink[href="#/editor"]'));
+  assert.ok(document.querySelector('.mobileMenu .siteNav a.mobileEditorLink[href="/#/editor"]'));
   const desktopNav = within(document.querySelector('.siteHeaderActions > nav'));
   assert.equal(desktopNav.queryByRole('link', { name: 'How it works' }), null);
   assert.equal(
     desktopNav.getByRole('link', { name: 'Pricing' }).getAttribute('href'),
-    '#/pricing',
+    '/pricing',
   );
   assert.doesNotMatch(screen.getByRole('main').textContent, /\bbeta\b/i);
   cleanup();
@@ -873,12 +874,12 @@ test('a credit-locked project keeps its blueprint when cleared and has no replac
 
 test('trial landing prominently offers the account-based trial and links to all customer policies', () => {
   render(React.createElement(Marketing, { page: 'home', trialOffer: true }));
-  const hero = within(screen.getByRole('region', { name: /Edit your current blueprint/ }));
-  assert.equal(hero.getByRole('link', { name: 'Start 3-day free trial' }).getAttribute('href'), '#/trial');
-  assert.ok(hero.getByText('No credit card needed'));
+  const hero = within(screen.getByRole('region', { name: /Edit your existing floor plan/ }));
+  assert.equal(hero.getByRole('link', { name: 'Start 3-day free trial' }).getAttribute('href'), '/#/trial');
+  assert.ok(hero.getByText(/No credit card needed/));
   const footer = within(screen.getByRole('navigation', { name: 'Footer' }));
   assert.deepEqual(footer.getAllByRole('link').map((link) => link.getAttribute('href')), [
-    '#/terms', '#/privacy', '#/refunds-and-cancellation', '#/support',
+    '/how-to-edit-a-floor-plan-pdf', '/pricing', '/terms', '/privacy', '/refunds-and-cancellation', '/support',
   ]);
 });
 
@@ -901,6 +902,9 @@ test('trial starts only after accepting terms, and expired access cannot downloa
     const expired = { paymentsRequired: true, trialEndsAt: '2020-01-01T00:00:00Z', monthly: true, monthlyEndsAt: null };
     assert.equal(canOpenEditor(expired), false);
     assert.equal(canOpenEditor({ ...expired, projectIds: ['independently-paid-plan'] }), true);
+    assert.equal(trialTimeLeft('2026-11-18T03:30:00Z', Date.parse('2026-11-16T00:00:00Z')), '2 days 3 hr');
+    assert.equal(trialTimeLeft('2026-11-16T00:00:05Z', Date.parse('2026-11-16T00:00:00Z')), '1 min');
+    assert.equal(trialTimeLeft('2026-11-16T00:00:00Z', Date.parse('2026-11-16T00:00:00Z')), '');
   } finally {
     cleanup();
     window.history.replaceState(null, '', old);
@@ -1011,7 +1015,7 @@ test('public sign-in route shows account sign-in and retains guest editor access
     await screen.findByRole('heading', { name: 'Sign in to EditFloorPlans.com', level: 1 });
     assert.ok(screen.getByText('Account sign-in is currently unavailable.'));
     assert.ok(screen.getAllByRole('link', { name: 'Edit your blueprint' })
-      .some((link) => link.getAttribute('href') === '#/editor'));
+      .some((link) => link.getAttribute('href') === '/#/editor'));
   } finally {
     cleanup();
     window.history.replaceState(null, '', previous);
