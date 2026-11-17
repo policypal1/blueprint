@@ -30,7 +30,7 @@ export async function createCheckout(stripe, { plan, customer, owner, origin, at
       price_data: {
         currency: 'usd',
         unit_amount: AMOUNTS[plan],
-        product_data: { name: monthly ? 'PlanPatch monthly access' : 'PlanPatch single project' },
+        product_data: { name: monthly ? 'EditFloorPlans.com monthly access' : 'EditFloorPlans.com single project' },
         ...(monthly ? { recurring: { interval: 'month' } } : {}),
       },
     }],

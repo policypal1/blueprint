@@ -80,7 +80,7 @@ export function accountHandler({ admin, test, clientFor, siteOrigin, webhookSecr
     const reply = (status, payload) => new Response(JSON.stringify(payload), { status, headers });
     const requestOrigin = request.headers.get('Origin');
     if (requestOrigin) {
-      if (!allowed.has(requestOrigin)) return reply(403, { error: 'Open account settings from PlanPatch.' });
+      if (!allowed.has(requestOrigin)) return reply(403, { error: 'Open account settings from EditFloorPlans.com.' });
       headers['Access-Control-Allow-Origin'] = requestOrigin;
     }
     if (request.method === 'OPTIONS') {
@@ -154,7 +154,7 @@ export function accountHandler({ admin, test, clientFor, siteOrigin, webhookSecr
             if (access?.monthly) return reply(409, { error: 'Your monthly test subscription is already active.' });
           }
           const url = await createCheckout(test, { plan: body.plan, customer, owner: userId, origin, attempt: body.attempt });
-          return url ? reply(200, { url }) : reply(400, { error: 'Restart checkout from PlanPatch.' });
+          return url ? reply(200, { url }) : reply(400, { error: 'Restart checkout from EditFloorPlans.com.' });
         }
         const portal = await test.billingPortal.sessions.create({ customer, return_url: origin + '/#/account/billing' });
         return reply(200, { url: portal.url });
