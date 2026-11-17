@@ -1074,8 +1074,7 @@ test('the sign-in path and legacy bookmark both open the account page', async ()
       const view = render(React.createElement(Root));
       await screen.findByRole('heading', { name: 'Sign in to EditFloorPlans.com', level: 1 });
       assert.ok(screen.getByText('Account sign-in is currently unavailable.'));
-      assert.ok(screen.getAllByRole('link', { name: 'Edit your blueprint' })
-        .some((link) => link.getAttribute('href') === '/#/editor'));
+      assert.equal(screen.getByRole('link', { name: 'EditFloorPlans.com home' }).getAttribute('href'), '/');
       view.unmount();
     }
   } finally {
@@ -1084,7 +1083,7 @@ test('the sign-in path and legacy bookmark both open the account page', async ()
   }
 });
 
-test('sign-up requests verification and supports resending and password recovery', async () => {
+test('sign-up requires a name and 12-character password before showing the confirmation popup', async () => {
   const account = { client: {} };
   const requested = [];
   const onAuthenticate = async (...args) => {
@@ -1095,27 +1094,57 @@ test('sign-up requests verification and supports resending and password recovery
   assert.ok(screen.getByRole('button', { name: 'Continue with Google' }).querySelector('svg'));
 
   click('button', 'Create an account');
+  const name = screen.getByLabelText('Name');
   const email = screen.getByLabelText('Email address');
   const password = screen.getByLabelText('Password');
+  fireEvent.change(name, { target: { value: '  Morgan Lee  ' } });
   fireEvent.change(email, { target: { value: 'sam@example.test' } });
   assert.equal(password.autocomplete, 'new-password');
+  assert.equal(password.minLength, 12);
+  assert.ok(screen.getByText('Use at least 12 characters.'));
+  fireEvent.change(password, { target: { value: 'tenletters' } });
+  fireEvent.submit(password.closest('form'));
+  assert.equal(screen.getByRole('alert').textContent, 'Use at least 12 characters.');
+  assert.equal(requested.length, 0);
+
   fireEvent.change(password, { target: { value: 'test-password-2026' } });
   click('button', 'Create account');
-  await screen.findByText(/Check your inbox for a confirmation link/);
+  const confirmation = await screen.findByRole('dialog', { name: 'Check your email' });
+  assert.ok(within(confirmation).getByText('sam@example.test'));
+  assert.match(confirmation.textContent, /Open the link on any device/);
+  assert.ok(screen.getByRole('heading', { name: 'Create your account' }).closest('main').hasAttribute('inert'));
   assert.equal(screen.getByLabelText('Password').value, '');
-  click('button', 'Resend confirmation');
-  click('button', 'Resend confirmation');
-  await screen.findByText(/Check your inbox for a confirmation link/);
+  click('button', 'Resend link');
+  await within(confirmation).findByText('A new confirmation link was sent.');
+  click('button', 'Back to sign in');
+  assert.equal(screen.queryByRole('dialog'), null);
 
   click('button', 'Forgot password?');
   assert.equal(screen.queryByLabelText('Password'), null);
   click('button', 'Send reset link');
   await screen.findByText(/If that email is registered/);
   assert.deepEqual(requested, [
-    ['create', 'sam@example.test', 'test-password-2026'],
+    ['create', 'sam@example.test', 'test-password-2026', 'Morgan Lee'],
     ['resend', 'sam@example.test', ''],
-    ['forgot', 'sam@example.test', ''],
+    ['forgot', 'sam@example.test', '', undefined],
   ]);
+});
+
+test('unknown pages and unknown editor links have a route back home', async () => {
+  const previous = window.location.href;
+  try {
+    for (const path of ['/missing-page', '/#/editor/invalid']) {
+      window.history.replaceState(null, '', path);
+      const view = render(React.createElement(Root));
+      await screen.findByRole('heading', { level: 1, name: 'Page not found' });
+      assert.equal(screen.getByRole('link', { name: 'Back to home' }).getAttribute('href'), '/');
+      assert.equal(screen.getByRole('link', { name: 'Open the editor' }).getAttribute('href'), '/#/editor');
+      view.unmount();
+    }
+  } finally {
+    cleanup();
+    window.history.replaceState(null, '', previous);
+  }
 });
 
 test('the full editor sign-in page retries credentials and completes a valid sign-in', async () => {

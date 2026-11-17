@@ -92,3 +92,33 @@ test('the account endpoint rejects unsigned requests and invalid Stripe signatur
   const crossOrigin = await handler(new Request(origin, { headers: { Origin: 'https://elsewhere.test' } }));
   assert.equal(crossOrigin.status, 403);
 });
+
+test('the custom domain and existing Vercel address can check a signed-in account', async () => {
+  const sites = ['https://www.editfloorplans.com', 'https://editfloorplans.com', 'https://blueprint-blue-theta.vercel.app'];
+  const handler = accountHandler({
+    siteOrigin: sites[2],
+    clientFor: (authorization) => {
+      assert.equal(authorization, 'Bearer signed-in-fixture');
+      return {
+        rpc: (name) => ({ maybeSingle: async () => ({
+          data: name === 'planpatch_session'
+            ? { user_id: 'fixture-owner', deleting: false }
+            : { payments_required: true, project_ids: ['fixture-project'] },
+        }) }),
+      };
+    },
+  });
+  for (const site of sites) {
+    const preflight = await handler(new Request(origin, { method: 'OPTIONS', headers: { Origin: site } }));
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get('access-control-allow-origin'), site);
+    const access = await handler(new Request(origin, {
+      method: 'POST',
+      headers: { Origin: site, Authorization: 'Bearer signed-in-fixture', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'status' }),
+    }));
+    assert.equal(access.status, 200);
+    assert.equal(access.headers.get('access-control-allow-origin'), site);
+    assert.equal((await access.json()).paymentsRequired, true);
+  }
+});
