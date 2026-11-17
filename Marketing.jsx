@@ -199,8 +199,7 @@ function HomeContent({ trialOffer, signedIn }) {
           <p>Upload a PDF or image, mark up walls, doors and fixtures, and export a revised plan.</p>
           <div className="heroActions" ref={heroAction}>
             <EditorLink trial={showTrial} />
-            {showTrial && <p className="trialQualifier"><strong className="trialNoCard">No credit card needed</strong>. Ends automatically.</p>}
-            <a className="heroGuideLink" href={publicPages.guide.path}>See how it works</a>
+            {showTrial && <p className="trialQualifier"><strong className="trialNoCard">No credit card needed</strong></p>}
           </div>
         </div>
       </section>

@@ -780,19 +780,6 @@ html:has(.authConfirmation) { overflow: hidden; }
   padding-inline: 18px;
   font-size: 16px;
 }
-.heroGuideLink {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: fit-content;
-  min-height: 44px;
-  margin: 4px auto 0;
-  font-size: 14px;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.heroGuideLink:hover { color: var(--accent); }
 .blueprintDemo {
   max-width: 1100px;
   margin: 0 auto;
