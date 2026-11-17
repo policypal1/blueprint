@@ -6,6 +6,9 @@ const DB_NAME = 'blueprint-studio-db';
 const CURRENT_KEY = 'blueprint-studio-current-v1';
 let writeQueue = Promise.resolve();
 
+const projectListKey = (owner) => owner ? `projects:${owner}` : 'projects';
+const currentProjectKey = (owner) => owner ? `${CURRENT_KEY}:${owner}` : CURRENT_KEY;
+
 export function hasOpenedPlan() {
   try {
     return Boolean(localStorage.getItem(CURRENT_KEY));
@@ -23,11 +26,11 @@ function openDB() {
     request.onerror = () => reject(request.error);
   });
 }
-export async function readProjects() {
+export async function readProjects(owner) {
   const db = await openDB();
   try {
     return await new Promise((resolve, reject) => {
-      const request = db.transaction('app').objectStore('app').get('projects');
+      const request = db.transaction('app').objectStore('app').get(projectListKey(owner));
       request.onsuccess = () => resolve(Array.isArray(request.result) ? request.result : []);
       request.onerror = () => reject(request.error);
     });
@@ -35,28 +38,37 @@ export async function readProjects() {
     db.close();
   }
 }
-export function persistProjects(list) {
-  const snapshot = structuredClone(list);
-  const operation = writeQueue
-    .catch(() => {})
-    .then(async () => {
-      const db = await openDB();
-      try {
-        await new Promise((resolve, reject) => {
-          const tx = db.transaction('app', 'readwrite');
-          tx.objectStore('app').put(snapshot, 'projects');
-          tx.oncomplete = resolve;
-          tx.onerror = () => reject(tx.error);
-          tx.onabort = () => reject(tx.error || new Error('Save interrupted'));
-        });
-      } finally {
-        db.close();
-      }
-    });
+function writeProjects(owner, update) {
+  const operation = writeQueue.catch(() => {}).then(async () => {
+    const db = await openDB();
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('app', 'readwrite');
+        update(tx.objectStore('app'), projectListKey(owner));
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error || new Error('Save interrupted'));
+      });
+    } finally {
+      db.close();
+    }
+  });
   writeQueue = operation;
   return operation;
 }
-export function useProjectStore(makeEmpty, repository, showRecent) {
+
+export function persistProjects(list, owner) {
+  const snapshot = structuredClone(list);
+  return writeProjects(owner, (store, key) => store.put(snapshot, key));
+}
+
+export async function removeDeviceProjects(owner) {
+  if (!owner) return;
+  await writeProjects(owner, (store, key) => store.delete(key));
+  localStorage.removeItem(currentProjectKey(owner));
+}
+
+export function useProjectStore(makeEmpty, repository, showRecent, owner) {
   const cloud = useAccountProjects(repository, showRecent);
   const [project, setActiveState] = useState(makeEmpty);
   const [projects, setListState] = useState([]);
@@ -85,7 +97,7 @@ export function useProjectStore(makeEmpty, repository, showRecent) {
     setActiveState(next);
     if (nextAccountId) return;
     try {
-      localStorage.setItem(CURRENT_KEY, next.id);
+      localStorage.setItem(currentProjectKey(owner), next.id);
     } catch {
       /* IndexedDB remains the authoritative project store. */
     }
@@ -115,7 +127,7 @@ export function useProjectStore(makeEmpty, repository, showRecent) {
     if (!ready.current || failedLoad.current) return false;
     const thisRevision = revision.current;
     try {
-      await persistProjects(listRef.current);
+      await persistProjects(listRef.current, owner);
       persistedRevision.current = thisRevision;
       if (thisRevision === revision.current) setSaveStatus('Saved in this browser');
       return true;
@@ -127,14 +139,15 @@ export function useProjectStore(makeEmpty, repository, showRecent) {
 
   useEffect(() => {
     let alive = true;
-    readProjects()
+    // Older unassigned drafts stay on the device. We cannot infer their owner.
+    readProjects(owner)
       .then((list) => {
         if (!alive) return;
         // Validate all records before writing: never silently overwrite a damaged archive.
         const validated = list.map(validateProject).sort((a, b) => b.updatedAt - a.updatedAt);
         let id;
         try {
-          id = localStorage.getItem(CURRENT_KEY);
+          id = localStorage.getItem(currentProjectKey(owner));
         } catch {
           /* unavailable */
         }

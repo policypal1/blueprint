@@ -6,12 +6,12 @@ const enabled = Boolean(projectUrl && publishableKey);
 const RETURN_TO = 'planpatch-sign-in-return';
 const RECOVERY_OWNER = 'planpatch-recovery-owner';
 const RETURN_ROUTES = new Set([
-  '#/editor', '#/editor/workspace', '#/account', '#/account/security', '#/account/billing',
+  '#/editor', '#/editor/workspace', '#/account', '#/account/security', '#/account/billing', '#/trial',
 ]);
 const AUTH_ERRORS = {
   invalid_credentials: 'The email or password was incorrect.',
   email_not_confirmed: 'Confirm your email before signing in.',
-  email_address_not_authorized: 'This address isn’t enabled for PlanPatch’s email testing.',
+  email_address_not_authorized: 'This address isn’t enabled for email testing.',
   over_email_send_rate_limit: 'Too many emails were requested. Wait a while and try again.',
   over_request_rate_limit: 'Too many attempts. Wait a moment and try again.',
   weak_password: 'Choose a stronger password.',
@@ -114,7 +114,7 @@ export function useAccount() {
       }).data.subscription;
     }).catch(() => {
       if (!active) return;
-      setError('Sign-in is unavailable right now. You can still edit plans on this device.');
+      setError('Sign-in is unavailable right now. Try again in a moment.');
       setLoading(false);
     });
     return () => {
@@ -134,12 +134,13 @@ export function useAccount() {
     window.location.assign(data.url);
   }
 
-  async function authenticate(mode, email, password, beforeLeaving) {
+  async function authenticate(mode, email, password, beforeLeaving, returnTo) {
     if (mode === 'forgot') {
       await requestPasswordReset(email);
       return false;
     }
     if (mode === 'resend') {
+      writeSessionValue(RETURN_TO, RETURN_ROUTES.has(returnTo) ? returnTo : '#/account');
       authResult(await client.auth.resend({
         type: 'signup', email, options: { emailRedirectTo: redirectUrl() },
       }));
@@ -147,6 +148,7 @@ export function useAccount() {
     }
 
     await saveDraft(beforeLeaving);
+    if (mode === 'create') writeSessionValue(RETURN_TO, RETURN_ROUTES.has(returnTo) ? returnTo : '#/account');
     const result = mode === 'create'
       ? await client.auth.signUp({ email, password, options: { emailRedirectTo: redirectUrl() } })
       : await client.auth.signInWithPassword({ email, password });

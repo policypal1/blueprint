@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
 import AccountMenu from './AccountMenu.jsx';
 import PlanIllustration, { DoorPlan } from './PlanIllustration.jsx';
+import { POLICY_LINKS } from './Policies.jsx';
 
 export const PRICING = { project: 10, monthly: 19 };
 export const DEMO_HASH = '#/how-it-works';
@@ -12,15 +13,15 @@ const plans = [
 ];
 
 const faqs = [
-  ['Do I need a subscription?', 'A single project has a one-time price. The monthly plan is optional.'],
+  ['Do I need a subscription?', 'A $10 project credit is a one-time purchase for a single original blueprint. The $19 USD monthly plan covers multiple projects.'],
   ['Can I use my existing blueprint?', 'Yes. Paste an image or upload a PDF, PNG, JPG, or WebP.'],
   ['What can I download?', 'You can export your revised plan as a PDF or PNG.'],
-  ['Where are my plans saved?', 'Your plans are saved in the browser you use to edit them.'],
+  ['Where are my plans saved?', 'New drafts stay in this browser. Plans unlocked with a project credit are saved to your account.'],
 ];
 
-const EditorLink = ({ tabIndex }) => (
-  <a href="#/editor" className="button primary" tabIndex={tabIndex}>
-    Edit your blueprint <Icon name="arrow" size={17} />
+const EditorLink = ({ tabIndex, trial = false }) => (
+  <a href={trial ? '#/trial' : '#/editor'} className="button primary" tabIndex={tabIndex}>
+    {trial ? 'Start 3-day free trial' : 'Edit your blueprint'} <Icon name="arrow" size={17} />
   </a>
 );
 
@@ -172,9 +173,10 @@ function PriceOptions({ compact = false }) {
   );
 }
 
-function HomeContent() {
+function HomeContent({ trialOffer, signedIn }) {
   const heroAction = useRef(null);
   const [showSticky, setShowSticky] = useState(false);
+  const showTrial = trialOffer && !signedIn;
 
   useEffect(() => {
     if (!window.IntersectionObserver) return;
@@ -191,9 +193,12 @@ function HomeContent() {
         <div className="heroBlueprint" aria-hidden="true"><PlanIllustration /></div>
         <div className="heroCopy">
           <h1 id="blueprint-hero-title">Edit your <span className="heroEmphasis">current blueprint</span>.</h1>
-          <p>Paste a blueprint image or upload a PDF. Draw your changes right on top.</p>
+          <p>{showTrial
+            ? 'Upload a floor plan, draw your changes, and share a revised PDF.'
+            : 'Paste a blueprint image or upload a PDF. Draw your changes right on top.'}</p>
           <div className="heroActions" ref={heroAction}>
-            <EditorLink />
+            <EditorLink trial={showTrial} />
+            {showTrial && <p className="trialQualifier">No credit card needed</p>}
           </div>
         </div>
       </section>
@@ -220,26 +225,36 @@ function HomeContent() {
         </div>
       </section>
       <aside className="stickyEdit" aria-label="Blueprint editor shortcut" aria-hidden={!showSticky} data-visible={showSticky}>
-        <EditorLink tabIndex={showSticky ? undefined : -1} />
+        <EditorLink trial={showTrial} tabIndex={showSticky ? undefined : -1} />
       </aside>
     </>
   );
 }
 
-function PricingContent({ accountsEnabled }) {
+function PricingContent({ trialOffer, signedIn }) {
   return (
     <>
       <h1>Pricing</h1>
+      {trialOffer && !signedIn && (
+        <div className="pricingTrial">
+          <EditorLink trial />
+          <p className="trialQualifier">No credit card needed</p>
+        </div>
+      )}
       <PriceOptions />
       <section className="faqSection" aria-labelledby="faq-title">
         <h2 id="faq-title">FAQs</h2>
         <div className="faqList">
+          {trialOffer && (
+            <details>
+              <summary>What happens when the free trial ends?<Icon name="chevron" size={20} /></summary>
+              <p>The trial ends automatically after 72 hours. Choose a plan if you want to keep editing and downloading your work.</p>
+            </details>
+          )}
           {faqs.map(([question, answer]) => (
             <details key={question}>
               <summary>{question}<Icon name="chevron" size={20} /></summary>
-              <p>{accountsEnabled && question === 'Where are my plans saved?'
-                ? 'Drafts stay on this device. Save a plan to your account to open it on another device.'
-                : answer}</p>
+              <p>{answer}</p>
             </details>
           ))}
         </div>
@@ -248,7 +263,21 @@ function PricingContent({ accountsEnabled }) {
   );
 }
 
-export default function Marketing({ page, account }) {
+export function SiteFooter() {
+  return (
+    <footer className="siteFooter">
+      <a href="#/" aria-label={`${PRODUCT_NAME} home`}><Brand /></a>
+      <nav aria-label="Footer">
+        {Object.entries(POLICY_LINKS).map(([page, label]) => (
+          <a key={page} href={`#/${page}`}>{label}</a>
+        ))}
+      </nav>
+      <small>© {new Date().getFullYear()} {PRODUCT_NAME}</small>
+    </footer>
+  );
+}
+
+export default function Marketing({ page, account, trialOffer = false }) {
   const pricing = page === 'pricing';
 
   useEffect(() => {
@@ -271,16 +300,11 @@ export default function Marketing({ page, account }) {
       </a>
       <SiteHeader page={page} account={account} />
       <main id="main-content" className={pricing ? 'pricingPage' : undefined} tabIndex={-1}>
-        {pricing ? <PricingContent accountsEnabled={Boolean(account)} /> : <HomeContent />}
+        {pricing
+          ? <PricingContent trialOffer={trialOffer} signedIn={account?.signedIn} />
+          : <HomeContent trialOffer={trialOffer} signedIn={account?.signedIn} />}
       </main>
-      <footer className="siteFooter">
-        <a href="#/" aria-label={`${PRODUCT_NAME} home`}>
-          <Brand />
-        </a>
-        <a href="#/pricing">Pricing</a>
-        <a href="#/editor">Editor</a>
-        <small>© {new Date().getFullYear()} {PRODUCT_NAME}</small>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

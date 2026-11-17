@@ -1,12 +1,15 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AccountPage from './Account.jsx';
 import { ResetPasswordPage, SignInPage } from './Auth.jsx';
-import Marketing, { DEMO_HASH, SiteHeader } from './Marketing.jsx';
+import Marketing, { DEMO_HASH, SiteFooter, SiteHeader } from './Marketing.jsx';
+import { CustomerPolicyPage, POLICY_LINKS } from './Policies.jsx';
+import TrialPage from './Trial.jsx';
 import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
-import { hasOpenedPlan } from './useProjectStore.js';
+import { hasOpenedPlan, removeDeviceProjects } from './useProjectStore.js';
 import { createProjectRepository } from './account-projects.js';
 import { useAccount } from './useAccount.js';
-import usePlanPatchAccount from './usePlanPatchAccount.js';
+import usePlanPatchAccount, { useTrialOffer } from './usePlanPatchAccount.js';
+import { canOpenEditor, fullEditorAccess, timedAccessActive } from './access.js';
 
 const Editor = lazy(() => import('./App.jsx'));
 const RECENT_HASH = '#/editor';
@@ -22,6 +25,8 @@ const PAGE_TITLES = {
   billing: 'Billing',
   signIn: 'Sign in',
   resetPassword: 'Reset password',
+  trial: 'Free trial',
+  ...POLICY_LINKS,
 };
 
 function readRoute() {
@@ -34,13 +39,15 @@ function readRoute() {
   if (hash === '#/account/billing') return 'billing';
   if (hash === SIGN_IN_HASH) return 'signIn';
   if (hash === '#/reset-password') return 'resetPassword';
+  if (hash === '#/trial') return 'trial';
+  if (Object.hasOwn(POLICY_LINKS, hash.slice(2))) return hash.slice(2);
   if (hash === DEMO_HASH) return 'demo';
   return hash.startsWith('#/pricing') ? 'pricing' : 'home';
 }
 function isEditorRoute(route) {
   return ['recent', 'workspace', 'sample'].includes(route);
 }
-function EditorAccess({ account, access, onSignIn }) {
+function EditorAccess({ account, access, offer, onSignIn }) {
   if (account.loading || (account.user && access.loading)) {
     return <main className="accessPage" role="status">Checking editor access…</main>;
   }
@@ -49,9 +56,14 @@ function EditorAccess({ account, access, onSignIn }) {
   if (!account.user) {
     title = 'Sign in to open the editor';
     message = account.client
-      ? 'Use your PlanPatch account to open and manage your saved plans.'
+      ? `Use your ${PRODUCT_NAME} account to open and manage your saved plans.`
       : 'Account sign-in is currently unavailable.';
-    action = account.client && <button className="primary" onClick={onSignIn}>Sign in</button>;
+    action = account.client && (
+      <div className="accountActions">
+        {offer && <a className="button primary" href="#/trial">Start free trial</a>}
+        <button className={offer ? '' : 'primary'} onClick={onSignIn}>Sign in</button>
+      </div>
+    );
   } else if (access.data?.deleting) {
     title = 'Account deletion in progress';
     message = 'Open security settings to finish deleting your account.';
@@ -60,10 +72,14 @@ function EditorAccess({ account, access, onSignIn }) {
     title = 'Editor access could not be checked';
     message = access.error || 'Try checking your account again.';
     action = <button className="primary" onClick={access.refresh}>Try again</button>;
+  } else if (offer && access.data.canStartTrial) {
+    title = 'Try the editor free for 3 days';
+    message = 'Edit and export your blueprint. No credit card needed.';
+    action = <a className="button primary" href="#/trial">Start free trial</a>;
   } else {
-    title = 'Unlock the editor';
-    message = 'Use a $10 sandbox credit for one saved project or start a $19 monthly test subscription.';
-    action = <a className="button primary" href="#/account/billing">View sandbox plans</a>;
+    title = access.data.trialEndsAt ? 'Your free trial has ended' : 'Unlock the editor';
+    message = 'Choose a $10 project credit or a $19 monthly plan to edit and download your plans.';
+    action = <a className="button primary" href="#/account/billing">View plans</a>;
   }
 
   return (
@@ -79,6 +95,7 @@ export default function Root() {
   const account = useAccount();
   const owner = account.user?.id;
   const access = usePlanPatchAccount(account.client, owner);
+  const trialOffer = useTrialOffer(account.client);
   const priorOwner = useRef(owner);
   const beforeLeaving = useRef(null);
   const registerSave = useCallback((save) => { beforeLeaving.current = save; }, []);
@@ -94,18 +111,18 @@ export default function Root() {
   const showEditor = isEditorRoute(route);
   const policy = access.data;
   const requireSignIn = Boolean(import.meta.env?.PROD || account.enabled);
-  const editorAllowed = !requireSignIn || Boolean(owner && policy && !policy.deleting && (
-    !policy.paymentsRequired || policy.monthly || policy.projectCredits > 0 || policy.projectIds?.length
-  ));
-  const projectAccess = policy?.paymentsRequired && !policy.monthly
+  const editorAllowed = !requireSignIn || Boolean(owner && canOpenEditor(policy));
+  const projectAccess = policy?.paymentsRequired && !fullEditorAccess(policy)
     ? { credits: policy.projectCredits, ids: policy.projectIds, refresh: access.refresh }
     : null;
   const showAccount = ['account', 'security', 'billing'].includes(route);
   const showAuthPage = route === 'signIn' || route === 'resetPassword';
+  const showTrial = route === 'trial';
+  const showPolicy = Object.hasOwn(POLICY_LINKS, route);
 
   function openSignIn() {
-    if (showEditor) {
-      signInTarget.current = route === 'workspace' ? WORKSPACE_HASH : RECENT_HASH;
+    if (showEditor || showTrial) {
+      signInTarget.current = showTrial ? '#/trial' : route === 'workspace' ? WORKSPACE_HASH : RECENT_HASH;
       setSignInDialog(true);
       return;
     }
@@ -124,12 +141,15 @@ export default function Root() {
 
   const signOut = () => account.signOut(beforeLeaving.current);
   const finishDeletion = async () => {
+    await Promise.resolve(beforeLeaving.current?.()).catch(() => {});
+    await removeDeviceProjects(owner).catch(() => {});
     await account.signOut();
     window.location.hash = '#/';
   };
   const signInProps = {
     account,
-    onAuthenticate: (mode, email, password) => account.authenticate(mode, email, password, beforeLeaving.current),
+    onAuthenticate: (mode, email, password) =>
+      account.authenticate(mode, email, password, beforeLeaving.current, signInTarget.current),
     onGoogle: () => account.signInWithGoogle(beforeLeaving.current, signInTarget.current),
     onAuthenticated: finishSignIn,
   };
@@ -166,6 +186,12 @@ export default function Root() {
     if (owner && (route === 'signIn' || signInDialog)) finishSignIn();
   }, [owner, route, signInDialog, finishSignIn]);
   useEffect(() => {
+    if (route === 'workspace' && projectAccess && policy?.trialEndsAt
+      && !timedAccessActive(policy.trialEndsAt)) {
+      window.location.hash = RECENT_HASH;
+    }
+  }, [route, Boolean(projectAccess), policy?.trialEndsAt]);
+  useEffect(() => {
     const title = PAGE_TITLES[route];
     document.title = title
       ? `${title} · ${PRODUCT_NAME}`
@@ -179,7 +205,23 @@ export default function Root() {
           <button aria-label="Dismiss sign-in notice" onClick={account.clearError}><Icon name="close" /></button>
         </div>
       )}
-      {!showEditor && !showAccount && !showAuthPage && <Marketing page={route} account={accountNav} />}
+      {!showEditor && !showAccount && !showAuthPage && !showTrial && !showPolicy && (
+        <Marketing page={route} account={accountNav} trialOffer={trialOffer} />
+      )}
+      {showPolicy && (
+        <>
+          <SiteHeader page={route} account={accountNav} />
+          <CustomerPolicyPage page={route} />
+          <SiteFooter />
+        </>
+      )}
+      {showTrial && (
+        <>
+          <SiteHeader page={route} account={accountNav} />
+          <TrialPage account={account} access={access} offer={trialOffer} onSignIn={openSignIn} />
+          <SiteFooter />
+        </>
+      )}
       {showAuthPage && (
         <>
           <SiteHeader page={route} account={accountNav} />
@@ -197,7 +239,7 @@ export default function Root() {
       {(showEditor || (visitedEditor && editorAllowed)) && (
         <div className="editorRoot" hidden={!showEditor}>
           {showEditor && <SiteHeader page={route} account={accountNav} />}
-          {!editorAllowed ? <EditorAccess account={account} access={access} onSignIn={openSignIn} /> : (
+          {!editorAllowed ? <EditorAccess account={account} access={access} offer={trialOffer} onSignIn={openSignIn} /> : (
           <div className="editorSurface">
             <Suspense
               fallback={
@@ -214,6 +256,9 @@ export default function Root() {
                 active={showEditor}
                 repository={repository}
                 projectAccess={projectAccess}
+                lockedProjectIds={policy?.lockedProjectIds}
+                owner={owner}
+                canDownload={policy?.paymentsRequired ? access.canDownload : undefined}
                 authBusy={account.busy}
                 onRegisterSave={registerSave}
                 showRecent={route === 'recent'}
@@ -232,8 +277,8 @@ export default function Root() {
           )}
         </div>
       )}
-      {signInDialog && showEditor && (
-        <SignInPage {...signInProps} onClose={() => setSignInDialog(false)} />
+      {signInDialog && (showEditor || showTrial) && (
+        <SignInPage {...signInProps} initialMode={showTrial ? 'create' : 'signIn'} onClose={() => setSignInDialog(false)} />
       )}
     </>
   );

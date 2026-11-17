@@ -1,6 +1,6 @@
-# PlanPatch
+# EditFloorPlans.com
 
-PlanPatch edits existing blueprints on mobile and desktop.
+EditFloorPlans.com edits existing blueprints on mobile and desktop.
 
 ## Start here
 
@@ -23,8 +23,8 @@ For the existing Vercel project, use the Vite framework preset, `npm run build`,
 
 ## Enable accounts
 
-1. Create a dedicated Supabase project for PlanPatch. In its SQL Editor, run [the account migration](supabase/migrations/20261116052511_planpatch_accounts.sql) once. It creates the `projects` table, a private `blueprints` bucket, and owner-only permissions for both. If you manage the database through the Supabase CLI, apply the same migration with `supabase db push` from the linked checkout.
-2. In Google Cloud, configure the Google Auth Platform consent screen for PlanPatch with the `openid`, `email`, and `profile` scopes. Create a **Web application** OAuth client. Add your live site origin and the callback URL shown in Supabase under **Authentication → Sign In / Providers → Google**. Save the Google Client ID and Client Secret in that Supabase provider and enable it. Add test users while the Google app is in Testing, and publish the consent screen before signing up customers. [Google sign-in setup](https://supabase.com/docs/guides/auth/social-sign-in/auth-google)
+1. Create a dedicated Supabase project for EditFloorPlans.com. In its SQL Editor, run [the account migration](supabase/migrations/20261116052511_planpatch_accounts.sql) once. It creates the `projects` table, a private `blueprints` bucket, and owner-only permissions for both. If you manage the database through the Supabase CLI, apply the same migration with `supabase db push` from the linked checkout.
+2. In Google Cloud, configure the Google Auth Platform consent screen for EditFloorPlans.com with the `openid`, `email`, and `profile` scopes. Create a **Web application** OAuth client. Add your live site origin and the callback URL shown in Supabase under **Authentication → Sign In / Providers → Google**. Save the Google Client ID and Client Secret in that Supabase provider and enable it. Add test users while the Google app is in Testing, and publish the consent screen before signing up customers. [Google sign-in setup](https://supabase.com/docs/guides/auth/social-sign-in/auth-google)
 3. In Supabase **Authentication → URL Configuration**, set **Site URL** to the live Vercel origin. Allow the exact URL with its trailing slash, for example `https://blueprint-blue-theta.vercel.app/`. For local testing, also allow `http://localhost:5173/`. [Redirect URL setup](https://supabase.com/docs/guides/auth/redirect-urls)
 4. In Vercel **Settings → Environment Variables**, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` from the Supabase project’s Connect panel. Redeploy with both variables. For local development use `.env.local`. Keep the Google Client Secret in Supabase. [Supabase API keys](https://supabase.com/docs/guides/api/api-keys)
 5. On the deployed site, sign in and upload a sample PDF. Add a wall and reload the browser to check that both reopen from **Recent plans**. If your account already has a cloud plan, sign in from another browser and check that it is listed there. Verify that a second account cannot open the first account’s cloud plan.
@@ -44,19 +44,28 @@ Keep email confirmation enabled for email sign-ups. Supabase’s built-in sender
 
 ## Sandbox editor access
 
-The deployed editor requires a verified PlanPatch sign-in. A $10 sandbox purchase assigns one credit to a saved project when it is created. A $19 monthly sandbox subscription permits new and existing projects while its paid period is active. Billing, profile settings, and account deletion are available from the account menu.
+The deployed editor requires a verified EditFloorPlans.com sign-in. A $10 sandbox purchase assigns one credit to a saved project when it is created. A $19 monthly sandbox subscription permits new and existing projects while its paid period is active. Billing, profile settings, and account deletion are available from the account menu.
 
 Deploy the `planpatch-account` Edge Function after applying the account and sandbox migrations. The function verifies signed Stripe events and confirms the underlying test payment before granting editor access. The first verified payment activates paid enforcement across the editor and the database. Saved project records stay attached to their owner.
 
-Set these in Supabase Edge Function Secrets for the existing PlanPatch project.
+Set these in Supabase Edge Function Secrets for the existing EditFloorPlans.com project.
 
-- `STRIPE_TEST_SECRET_KEY` is the restricted test key for the Plan Patch sandbox. It needs Customers, Checkout Sessions, and Billing Portal sessions write access, plus Subscriptions, Invoices, Payment Intents, and Charges read access.
+- `STRIPE_TEST_SECRET_KEY` is the restricted test key for the EditFloorPlans.com sandbox. It needs Customers, Checkout Sessions, and Billing Portal sessions write access, plus Subscriptions, Invoices, Payment Intents, and Charges read access.
 - `STRIPE_TEST_WEBHOOK_SECRET` is the signing secret for the sandbox destination at the deployed `/functions/v1/planpatch-account` endpoint.
 
 Subscribe the endpoint to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, and `radar.early_fraud_warning.created`. The endpoint's GET response reports whether both secrets are configured. Test both offers and confirm the resulting access before using the sandbox for demonstrations. Disable the gate in `planpatch_private.sandbox_settings` if you need to roll back paid enforcement.
 
 Account deletion requires typing `DELETE`. It removes the signed-in account and its saved cloud plans, and closes its sandbox billing customer. Review any plans you want to export before deleting the account.
 
+## Three-day trial
+
+Apply [the trial and project privacy migration](supabase/migrations/20261116235810_planpatch_trials_and_project_privacy.sql). In Supabase Authentication → Auth Hooks, enable the **Before User Created** Postgres hook `planpatch_private.record_trial_signup`. The Auth service supplies the signup IP. The hook stores a keyed network identifier and the trial request adds a keyed verified-email identifier. Raw IP addresses and the signing key stay out of the browser and app responses.
+
+In the release environment with that hook configured, set `trials_enabled = true` on the singleton row in `planpatch_private.sandbox_settings`. This advertises the trial **and** requires a valid trial or paid access to open the editor. Existing accounts without a signup record can keep using a paid plan. Test the activation in a separate environment before using it on any site with customers. The checkout function is still for Stripe test purchases.
+
+Check that a new verified account can start a 72-hour trial with no payment details, a second signup on the same network is declined, and export stops when the trial or paid subscription ends. An independently purchased project retains its export access. Each credit is permanently associated with its original blueprint, including after deletion. Account-local drafts are isolated per login. Older drafts without a known owner stay on the device outside signed-in accounts.
+
+The public policies live in `Policies.jsx`. Replace the support placeholder using `VITE_PLANPATCH_SUPPORT_EMAIL` before inviting paying customers. When the new domain is ready, update the authentication and billing return URLs along with the hosting domain.
 
 ## What changed
 

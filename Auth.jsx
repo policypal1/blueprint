@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal } from './ui.jsx';
+import { Modal, PRODUCT_NAME } from './ui.jsx';
 import { authErrorText, MIN_PASSWORD_LENGTH } from './useAccount.js';
 
 const AUTH_MODES = {
-  signIn: { title: 'Sign in to PlanPatch', submit: 'Sign in', error: 'Could not sign in. Try again.' },
+  signIn: { title: `Sign in to ${PRODUCT_NAME}`, submit: 'Sign in', error: 'Could not sign in. Try again.' },
   create: { title: 'Create your account', submit: 'Create account', error: 'Could not create an account. Try again.' },
   forgot: { title: 'Reset your password', submit: 'Send reset link', error: 'Could not request a reset link. Try again.' },
   resend: { title: 'Confirm your email', submit: 'Resend confirmation', error: 'Could not resend confirmation. Try again.' },
@@ -36,9 +36,9 @@ function AuthLayout({ title, onClose, children }) {
 }
 
 export function SignInPage({
-  account, onAuthenticate, onGoogle, onAuthenticated, onClose,
+  account, onAuthenticate, onGoogle, onAuthenticated, onClose, initialMode = 'signIn',
 }) {
-  const [mode, setMode] = useState('signIn');
+  const [mode, setMode] = useState(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -145,12 +145,18 @@ export function SignInPage({
               onClick={() => selectMode('resend')}>Resend confirmation</button>
           )}
           <div className="authAlternate">
-            {mode === 'signIn' && <span>New to PlanPatch?</span>}
+            {mode === 'signIn' && <span>New to {PRODUCT_NAME}?</span>}
             <button className="authTextButton" type="button" disabled={Boolean(pending)}
               onClick={() => selectMode(mode === 'signIn' ? 'create' : 'signIn')}>
               {mode === 'signIn' ? 'Create an account' : 'Back to sign in'}
             </button>
           </div>
+          {mode === 'create' && (
+            <p className="authPolicyLinks">
+              <a className="accountTextLink" href="#/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
+              <a className="accountTextLink" href="#/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+            </p>
+          )}
         </>
       ) : <p>Account sign-in is currently unavailable.</p>}
     </AuthLayout>

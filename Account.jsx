@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AccountAvatar, profileName } from './AccountMenu.jsx';
-import { Icon, Modal } from './ui.jsx';
+import { Icon, Modal, PRODUCT_NAME } from './ui.jsx';
 import { authErrorText } from './useAccount.js';
+import { canOpenEditor, timedAccessActive } from './access.js';
+import { PolicyAgreement } from './Policies.jsx';
 
 const SANDBOX_PORTAL_URL = 'https://billing.stripe.com/p/login/test_00w8wIf8fdke23P1oO4ZG00';
 const BILLING_PORTAL_URL = import.meta.env?.VITE_STRIPE_PORTAL_URL?.trim() || SANDBOX_PORTAL_URL;
@@ -143,13 +145,15 @@ function SecuritySettings({ account }) {
 function BillingSettings({ portalUrl, access }) {
   const [pending, setPending] = useState('');
   const [error, setError] = useState('');
+  const [accepted, setAccepted] = useState(false);
   const attempts = useRef({});
   const { data, loading, refresh } = access ?? {};
   const backupPortal = STRIPE_TEST_PORTAL.test(portalUrl);
   const returned = new URLSearchParams(window.location.search).has('sandbox_checkout');
+  const trialActive = timedAccessActive(data?.trialEndsAt);
 
   async function visitStripe(action) {
-    if (pending) return;
+    if (pending || (action !== 'portal' && !accepted)) return;
     setPending(action);
     setError('');
     try {
@@ -172,6 +176,9 @@ function BillingSettings({ portalUrl, access }) {
           <h2 id="plans-billing-title">Plans and access</h2>
           <span className="billingMode">Test mode</span>
         </div>
+        {trialActive && (
+          <p>Your free trial ends {new Date(data.trialEndsAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}.</p>
+        )}
         {data?.monthly ? <p>Your monthly test subscription is active.</p> : (
           <p>{data?.projectCredits || data?.projectIds?.length
             ? `${data.projectCredits} unused project ${data.projectCredits === 1 ? 'credit' : 'credits'} · ${data.projectIds.length} unlocked`
@@ -181,28 +188,35 @@ function BillingSettings({ portalUrl, access }) {
           <p role="status">Stripe is confirming the test payment. Check again in a moment.</p>
         )}
         {access?.error && <p role="alert" className="accountError">{access.error}</p>}
+        {data?.checkoutReady && (
+          <label className="policyAgreement">
+            <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
+            <span><PolicyAgreement /></span>
+          </label>
+        )}
         <div className="billingChoices">
           <div className="billingChoice">
             <h3>Single project</h3>
-            <p><strong>$10</strong> for one saved project</p>
-            <button className="primary" disabled={!data?.checkoutReady || Boolean(pending)}
+            <p><strong>$10 USD</strong> once, for one original blueprint</p>
+            <button className="primary" disabled={!data?.checkoutReady || !accepted || Boolean(pending)}
               onClick={() => visitStripe('project')}>
               {pending === 'project' ? 'Opening Stripe…' : 'Buy a project credit'}
             </button>
           </div>
           <div className="billingChoice">
             <h3>Monthly plan</h3>
-            <p><strong>$19</strong> per month for the full editor</p>
-            <button className="primary" disabled={!data?.checkoutReady || Boolean(pending) || data.monthly}
+            <p><strong>$19 USD</strong> per month. Renews until canceled.</p>
+            <button className="primary" disabled={!data?.checkoutReady || !accepted || Boolean(pending) || data.monthly}
               onClick={() => visitStripe('monthly')}>
               {data?.monthly ? 'Active subscription' : pending === 'monthly' ? 'Opening Stripe…' : 'Start test subscription'}
             </button>
           </div>
         </div>
+        <p className="billingNotice"><a className="accountTextLink" href="#/refunds-and-cancellation">Refunds &amp; cancellation</a></p>
         {data && !data.checkoutReady && <p className="billingNotice">Sandbox checkout is being set up.</p>}
         {refresh && (
           <div className="accountActions billingNotice">
-            {data && (!data.paymentsRequired || data.monthly || data.projectCredits || data.projectIds.length) ? (
+            {canOpenEditor(data) ? (
               <a className="button" href="#/editor">Open editor</a>
             ) : null}
             <button type="button" onClick={refresh} disabled={loading}>
@@ -263,14 +277,14 @@ function DeleteAccount({ access, onDeleted }) {
       <h2 id="delete-account-title">Delete account</h2>
       <p>{deleting
         ? 'Account deletion is in progress. Finish the request to remove your account.'
-        : 'Permanently removes your PlanPatch account and its saved plans, and cancels any Stripe test subscription.'}</p>
+        : `Permanently removes your ${PRODUCT_NAME} account and its saved plans, and cancels any Stripe test subscription.`}</p>
       <button type="button" className="danger" onClick={() => {
         setConfirmation('');
         setError('');
         setOpen(true);
       }}>{deleting ? 'Finish account deletion' : 'Delete account'}</button>
       {open && (
-        <Modal title="Delete your PlanPatch account?" onClose={close}>
+        <Modal title={`Delete your ${PRODUCT_NAME} account?`} onClose={close}>
           <p>Export any account plans you want to keep. This action is permanent.</p>
           <form className="profileSettings" method="post" onSubmit={submit}>
             <label>Type DELETE to confirm

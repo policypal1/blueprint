@@ -1,11 +1,44 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { fullEditorAccess, TERMS_VERSION } from './access.js';
 
 async function accountRequest(client, body) {
   if (!client) throw new Error('Sign in to continue.');
   const { data, error } = await client.functions.invoke('planpatch-account', { body });
   if (!error) return data;
   const detail = await error.context?.json?.().catch(() => null);
-  throw new Error(detail?.error || 'PlanPatch could not reach your account. Try again.');
+  throw new Error(detail?.error || 'Could not reach your account. Try again.');
+}
+
+async function readAccess(client) {
+  const [billing, details] = await Promise.all([
+    accountRequest(client, { action: 'status' }),
+    client.rpc('planpatch_trial_details').maybeSingle(),
+  ]);
+  if (details.error && details.error.code !== 'PGRST202') {
+    throw new Error('Could not check your trial or plan access. Try again.');
+  }
+  return {
+    ...billing,
+    trialEndsAt: details.data?.trial_ends_at,
+    monthlyEndsAt: details.data?.monthly_ends_at,
+    canStartTrial: details.data?.can_start_trial,
+    lockedProjectIds: details.data?.locked_project_ids ?? billing.projectIds ?? [],
+  };
+}
+
+export function useTrialOffer(client) {
+  const [available, setAvailable] = useState(false);
+
+  useEffect(() => {
+    if (!client) return undefined;
+    let active = true;
+    client.rpc('planpatch_trial_offer').then(({ data }) => {
+      if (active) setAvailable(data === true);
+    }, () => {});
+    return () => { active = false; };
+  }, [client]);
+
+  return Boolean(client && available);
 }
 
 function goToStripe(url, host) {
@@ -24,7 +57,7 @@ export default function usePlanPatchAccount(client, owner) {
     const request = ++version.current;
     setState((prev) => ({ owner, data: prev.owner === owner ? prev.data : null, loading: true, error: '' }));
     try {
-      const data = await accountRequest(client, { action: 'status' });
+      const data = await readAccess(client);
       if (request === version.current) setState({ owner, data, loading: false, error: '' });
     } catch (error) {
       if (request === version.current) {
@@ -46,11 +79,36 @@ export default function usePlanPatchAccount(client, owner) {
     };
   }, [client, owner, refresh]);
 
+  const data = state.owner === owner ? state.data : null;
+  const trialEnd = data?.trialEndsAt;
+  const monthlyEnd = data?.monthlyEndsAt;
+  useEffect(() => {
+    const now = Date.now();
+    const ends = [Date.parse(trialEnd), Date.parse(monthlyEnd)].filter((end) => end > now);
+    if (!ends.length) return undefined;
+    const timer = window.setTimeout(refresh, Math.min(2_147_483_647, Math.min(...ends) - now + 75));
+    return () => window.clearTimeout(timer);
+  }, [trialEnd, monthlyEnd, refresh]);
+
   return {
-    data: state.owner === owner ? state.data : null,
+    data,
     loading: Boolean(owner && (state.owner !== owner || state.loading)),
     error: state.owner === owner ? state.error : '',
     refresh,
+    async startTrial() {
+      const { error } = await client.rpc('planpatch_start_trial', { accepted_version: TERMS_VERSION });
+      if (error) {
+        const detail = ['PT400', 'PT401', 'PT403'].includes(error.code) && error.message;
+        throw new Error(detail || 'Could not start your trial. Try again.');
+      }
+      await refresh();
+    },
+    async canDownload(projectId) {
+      const latest = await readAccess(client);
+      if (fullEditorAccess(latest) || (!latest.deleting && latest.projectIds?.includes(projectId))) return true;
+      void refresh();
+      return false;
+    },
     async checkout(plan, attempt) {
       const data = await accountRequest(client, { action: 'checkout', plan, attempt });
       goToStripe(data.url, 'checkout.stripe.com');

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { jsPDF } from 'jspdf';
-import { Icon, Modal, useDialog } from './ui.jsx';
+import { Icon, Modal, PRODUCT_NAME, useDialog } from './ui.jsx';
 import { DOORS, FIXTURES, PhoneControls, ToolButton, ToolChoices, editorMode } from './EditorControls.jsx';
 import {
   parseLength,
@@ -587,7 +587,7 @@ function normalizeBlueprintImport(raw, projectState) {
   return { elements, unitsPerInch, name: data.name, autoCalibrated: false, pixelAnchored: false };
 }
 
-const CHATGPT_BLUEPRINT_PROMPT = `Analyze the attached floor-plan/blueprint image and return ONLY valid JSON for PlanPatch. Do not use markdown fences or explanations.
+const CHATGPT_BLUEPRINT_PROMPT = `Analyze the attached floor-plan/blueprint image and return ONLY valid JSON for ${PRODUCT_NAME}. Do not use markdown fences or explanations.
 
 Preferred shape:
 {"version":2,"name":"Project name","units":"pixels","imageWidth":1320,"imageHeight":930,"scaleReference":{"x1":0,"y1":0,"x2":1000,"y2":0,"inches":409},"elements":[]}
@@ -865,7 +865,7 @@ function regularizeImportedElements(elements, unitsPerInch = 4) {
 
 export function BlueprintApp({
   active = true, showRecent = false, sampleRequested = false, onSampleOpened, onOpenWorkspace,
-  repository, projectAccess, authBusy = false, onRegisterSave,
+  repository, projectAccess, lockedProjectIds = [], owner, authBusy = false, onRegisterSave, canDownload,
 }) {
   const svgRef = useRef(null);
   const fileRef = useRef(null);
@@ -879,9 +879,10 @@ export function BlueprintApp({
   const {
     projects, setProjects, project, setProject, addLocalProject, selectProject, hydrated,
     saveStatus, projectRef, cloud, accountId, accountIdRef, flush,
-  } = useProjectStore(() => emptyProject('Untitled project'), repository, active && showRecent);
+  } = useProjectStore(() => emptyProject('Untitled project'), repository, active && showRecent, owner);
   const showPlans = showRecent || Boolean(projectAccess && !accountId);
   const canCreateProject = !projectAccess || projectAccess.credits > 0;
+  const originalLocked = Boolean(accountId && (lockedProjectIds.includes(accountId) || projectAccess?.ids.includes(accountId)));
   const [accountNotice, setAccountNotice] = useState('');
   const accountOperation = useRef(false);
   const accountDraft = cloud.current(accountId);
@@ -1036,13 +1037,15 @@ export function BlueprintApp({
 
   const clearAll = async () => {
     setEditorPanel(null);
-    if (!project.background && project.elements.length === 0) return;
+    if ((!project.background || originalLocked) && project.elements.length === 0) return;
     if (
       !(await ask({
         title: 'Clear this drawing?',
-        message: 'The background and all objects will be removed. You can Undo this change.',
+        message: originalLocked
+          ? 'This clears your edits and keeps the original blueprint. You can undo this change.'
+          : 'The background and all objects will be removed. You can undo this change.',
         type: 'confirm',
-        confirmLabel: 'Clear drawing',
+        confirmLabel: originalLocked ? 'Clear edits' : 'Clear drawing',
         danger: true,
       }))
     )
@@ -1050,7 +1053,7 @@ export function BlueprintApp({
     pushHistory();
     updateProject((p) => ({
       ...p,
-      background: null,
+      background: originalLocked ? p.background : null,
       elements: [],
       unitsPerInch: 4,
       calibrated: false,
@@ -1666,6 +1669,7 @@ export function BlueprintApp({
 
   async function handleImport(file) {
     if (!file || busy || importPending.current || !active || !hydrated) return;
+    if (!showPlans && originalLocked) return;
     if (file.size > MAX_FILE_BYTES) {
       await ask({
         title: 'File is too large',
@@ -1796,7 +1800,7 @@ export function BlueprintApp({
       const content = JSON.parse(await file.text());
       if (!onSamePage()) return;
       if (content.format !== 'blueprint-studio-project' || content.version !== 1)
-        throw new Error('Choose a PlanPatch .json backup.');
+        throw new Error('Choose a project .json backup.');
       const restored = validateProject(content.project);
       if (!(await openNewPlan({
         ...restored, id: uid(), name: restored.name.slice(0, 89) + ' (restored)', updatedAt: Date.now(),
@@ -1811,19 +1815,33 @@ export function BlueprintApp({
       setBusy(false);
     }
   };
-  const backupProject = () => {
+  const checkDownload = async () => {
+    if (canDownload && !(await canDownload(accountIdRef.current))) {
+      throw new Error('Your editing access has ended. Open Billing to choose a plan.');
+    }
+  };
+  const backupProject = async () => {
+    const onSamePage = captureRoute();
+    const saved = projectRef.current;
+    try {
+      if (canDownload) await checkDownload();
+    } catch (err) {
+      if (onSamePage()) await ask({ title: 'Backup unavailable', message: err.message, type: 'notice' });
+      return;
+    }
+    if (!onSamePage() || projectRef.current.id !== saved.id) return;
     downloadBlob(
       new Blob(
         [
           JSON.stringify({
             format: 'blueprint-studio-project',
             version: 1,
-            project: projectRef.current,
+            project: saved,
           }),
         ],
         { type: 'application/json' },
       ),
-      `${project.name.replace(/[^a-z0-9]+/gi, '-')}.blueprint.json`,
+      `${saved.name.replace(/[^a-z0-9]+/gi, '-')}.blueprint.json`,
     );
     setStatus('Project backup downloaded');
   };
@@ -1873,7 +1891,7 @@ export function BlueprintApp({
       );
     } catch (err) {
       console.error(err);
-      setImportError(err?.message || 'Could not read that PlanPatch code.');
+      setImportError(err?.message || 'Could not read that project JSON.');
     }
   };
 
@@ -1951,6 +1969,7 @@ export function BlueprintApp({
           .replace(/^-+|-+$/g, '')
           .toLowerCase() || 'blueprint';
 
+      let output;
       if (kind === 'pdf') {
         const png = canvas.toDataURL('image/png', 1);
         const pdf = new jsPDF({
@@ -1978,19 +1997,20 @@ export function BlueprintApp({
           0.5,
           layout.pageHeight - 0.2,
         );
-        downloadBlob(pdf.output('blob'), `${safeName}.pdf`);
-        setStatus('PDF exported');
+        output = pdf.output('blob');
       } else {
-        const pngBlob = await new Promise((resolve, reject) => {
+        output = await new Promise((resolve, reject) => {
           canvas.toBlob(
             (blob) => (blob ? resolve(blob) : reject(new Error('Could not create PNG file.'))),
             'image/png',
             1,
           );
         });
-        downloadBlob(pngBlob, `${safeName}.png`);
-        setStatus('PNG exported');
       }
+      await checkDownload();
+      if (!onSamePage() || projectRef.current.id !== project.id) return;
+      downloadBlob(output, `${safeName}.${kind}`);
+      setStatus(`${kind.toUpperCase()} exported`);
     } catch (err) {
       console.error('Export failed', err);
       setStatus('Export failed');
@@ -2061,6 +2081,14 @@ export function BlueprintApp({
     }
     if (!canCreateProject || accountOperation.current) {
       setAccountNotice('This plan needs a project credit. Open Billing to add one.');
+      return false;
+    }
+    if (!plan.background) {
+      await ask({
+        title: 'Upload an original blueprint',
+        message: 'A project credit is linked to the PDF or image you start with.',
+        type: 'notice',
+      });
       return false;
     }
     const onSamePage = captureRoute();
@@ -2368,7 +2396,7 @@ export function BlueprintApp({
             Advanced JSON import
           </button>
           <button className="wide danger" onClick={clearAll}>
-            Clear drawing
+            {originalLocked ? 'Clear edits' : 'Clear drawing'}
           </button>
           <p className="hint">Download a backup before clearing browser data.</p>
         </div>
@@ -2488,9 +2516,9 @@ export function BlueprintApp({
                 onClick={() => setProjectMenu(false)}
               />
               <div className="projectMenu">
-                <button onClick={createProject} disabled={!canCreateProject}>
-                  <Icon name="plus" /> New project
-                </button>
+                {projectAccess
+                  ? <a className="button" href="#/editor"><Icon name="plus" /> Start another project</a>
+                  : <button onClick={createProject}><Icon name="plus" /> New project</button>}
                 <button onClick={() => renameProject(project)}>
                   <Icon name="text" /> Rename current project
                 </button>
@@ -2499,10 +2527,8 @@ export function BlueprintApp({
                     <Icon name="trash" /> Delete account plan
                   </button>
                 )}
-                <button onClick={() => loadSample()} disabled={!canCreateProject}>
-                  <Icon name="file" /> Open sample project
-                </button>
-                {compact && (
+                {!projectAccess && <button onClick={() => loadSample()}><Icon name="file" /> Open sample project</button>}
+                {compact && !originalLocked && (
                   <button onClick={() => { setProjectMenu(false); fileRef.current?.click(); }}>
                     <Icon name="upload" /> Upload a plan
                   </button>
@@ -2558,7 +2584,7 @@ export function BlueprintApp({
               <Icon name="redo" />
             </button>
           )}
-          {!compact && (
+          {!compact && !originalLocked && (
             <button
               aria-label="Import plan"
               disabled={busy || !hydrated}
@@ -2595,7 +2621,7 @@ export function BlueprintApp({
             {!compact && <span>{toolHint}</span>}
             <span>{project.calibrated ? 'Scale calibrated' : 'Scale not calibrated'}</span>
           </div>
-          {!project.background && !project.elements.length && !busy && ['select', 'pan'].includes(tool) && (
+          {!originalLocked && !project.background && !project.elements.length && !busy && ['select', 'pan'].includes(tool) && (
             <div className="canvasWelcome">
               <span className="welcomeIcon">
                 <Icon name="upload" size={24} />
@@ -2930,7 +2956,7 @@ export function BlueprintApp({
           onClose={() => setImportOpen(false)}
         >
           <p className="modalLead">
-            Paste PlanPatch JSON generated from a blueprint image. Walls, doors, windows,
+            Paste project JSON generated from a blueprint image. Walls, doors, windows,
             labels and supported fixtures become normal editable objects.
           </p>
           <div className="importWorkflow">
@@ -2940,7 +2966,7 @@ export function BlueprintApp({
             </div>
             <div>
               <strong>2</strong>
-              <span>Use the PlanPatch format prompt.</span>
+              <span>Use the project format prompt.</span>
             </div>
             <div>
               <strong>3</strong>
