@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import AccountPage from './Account.jsx';
 import { AuthHeader, ResetPasswordPage, SignInPage } from './Auth.jsx';
 import { DEMO_HASH, SiteHeader } from './Marketing.jsx';
@@ -18,6 +19,18 @@ const RECENT_HASH = '#/editor';
 const WORKSPACE_HASH = '#/editor/workspace';
 const SIGN_IN_HASH = '#/sign-in';
 const EDITOR_SIGN_IN_URL = '/sign-in?next=editor';
+const APP_ROUTE_HASHES = {
+  recent: RECENT_HASH,
+  workspace: WORKSPACE_HASH,
+  sample: '#/editor/sample',
+  account: '#/account',
+  security: '#/account/security',
+  billing: '#/account/billing',
+  signIn: SIGN_IN_HASH,
+  resetPassword: '#/reset-password',
+  trial: '#/trial',
+  demo: DEMO_HASH,
+};
 const PAGE_TITLES = {
   recent: 'Recent plans',
   workspace: 'Editor',
@@ -34,16 +47,8 @@ function readRoute() {
   const page = publicPageAt(window.location.pathname);
   if (!page || page === 'notFound') return 'notFound';
   const hash = window.location.hash;
-  if (hash === WORKSPACE_HASH) return 'workspace';
-  if (hash === '#/editor/sample') return 'sample';
-  if (hash === RECENT_HASH) return 'recent';
-  if (hash === '#/account') return 'account';
-  if (hash === '#/account/security') return 'security';
-  if (hash === '#/account/billing') return 'billing';
-  if (hash === SIGN_IN_HASH) return 'signIn';
-  if (hash === '#/reset-password') return 'resetPassword';
-  if (hash === '#/trial') return 'trial';
-  if (hash === DEMO_HASH) return 'demo';
+  const match = Object.entries(APP_ROUTE_HASHES).find(([, routeHash]) => routeHash === hash);
+  if (match) return match[0];
   return hash.startsWith('#/') ? publicPageAt(hash.slice(1)) || 'notFound' : page;
 }
 function isEditorRoute(route) {
@@ -109,6 +114,8 @@ export default function Root() {
     const initial = readRoute();
     return initial === 'workspace' ? 'recent' : initial;
   });
+  // Count hash-based screens using fixed paths so sign-in tokens and project data stay out of pageviews.
+  const analyticsPath = publicPages[route]?.path ?? APP_ROUTE_HASHES[route]?.slice(1);
   const [visitedEditor, setVisitedEditor] = useState(() => isEditorRoute(route));
   const [signInDialog, setSignInDialog] = useState(false);
   const signInTarget = useRef('#/account');
@@ -226,6 +233,7 @@ export default function Root() {
   }, [route]);
   return (
     <>
+      {import.meta.env?.PROD && <Analytics route={analyticsPath} path={analyticsPath} />}
       {account.error && (!showAuthPage || route === 'resetPassword') && (
         <div className="accountAlert" role="alert">
           <span>{account.error}</span>
