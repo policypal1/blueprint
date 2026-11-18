@@ -54,6 +54,10 @@ function readRoute() {
 function isEditorRoute(route) {
   return ['recent', 'workspace', 'sample'].includes(route);
 }
+function cleanPageview(event) {
+  const url = new URL(event.url);
+  return { ...event, url: url.origin + url.pathname };
+}
 function editorSignInLocation() {
   return publicPageAt(window.location.pathname) === 'signIn'
     && new URLSearchParams(window.location.search).get('next') === 'editor';
@@ -233,7 +237,9 @@ export default function Root() {
   }, [route]);
   return (
     <>
-      {import.meta.env?.PROD && <Analytics route={analyticsPath} path={analyticsPath} />}
+      {import.meta.env?.PROD && (
+        <Analytics route={analyticsPath} path={analyticsPath} beforeSend={cleanPageview} />
+      )}
       {account.error && (!showAuthPage || route === 'resetPassword') && (
         <div className="accountAlert" role="alert">
           <span>{account.error}</span>
