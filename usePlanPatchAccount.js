@@ -145,12 +145,12 @@ export default function usePlanPatchAccount(client, owner) {
       void refresh();
       return false;
     },
-    async checkout(plan, attempt) {
-      const data = await accountRequest(client, { action: 'checkout', plan, attempt });
+    async checkout(plan, attempt, consent) {
+      const data = await accountRequest(client, { action: 'checkout', plan, attempt, consent });
       goToStripe(data.url, 'checkout.stripe.com');
     },
-    async portal() {
-      const data = await accountRequest(client, { action: 'billing' });
+    async portal(cancelMonthly = false) {
+      const data = await accountRequest(client, { action: 'billing', cancelMonthly });
       goToStripe(data.url, 'billing.stripe.com');
     },
     async deleteAccount(confirmation) {
