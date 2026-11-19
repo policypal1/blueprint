@@ -47,7 +47,7 @@ export const publicPages = {
   pricing: {
     path: '/pricing',
     title: `Floor Plan Editor Pricing | ${SITE_NAME}`,
-    description: 'Compare a single $10 USD blueprint project credit with the $19 USD monthly floor plan editor. See how credits, exports and renewals work.',
+    description: 'Preview the $10 USD single-project and $19 USD monthly plans. Billing is in test mode. See how credits, exports and renewals work.',
     sitemap: true,
   },
   signIn: {
@@ -65,7 +65,7 @@ export const publicPages = {
   terms: {
     path: '/terms',
     title: `Terms of Service | ${SITE_NAME}`,
-    description: 'Read the terms for using the floor plan editor, trying the service and purchasing project or monthly access.',
+    description: 'Read the terms for editing floor plans, uploading drawings, starting a free trial and using test billing.',
   },
   privacy: {
     path: '/privacy',
