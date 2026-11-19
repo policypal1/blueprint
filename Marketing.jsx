@@ -15,6 +15,8 @@ const plans = [
     description: 'Edit multiple projects. Renews monthly until you cancel in Billing.' },
 ];
 
+const billingStatus = 'Billing is in test mode. The prices shown do not currently result in a real charge.';
+
 const faqs = [
   ['Do I need a subscription?', 'A $10 project credit is a one-time purchase for a single original blueprint. The $19 USD monthly plan covers multiple projects.'],
   ['Can I use my existing blueprint?', 'Yes. Upload a PDF, PNG, JPG or WebP up to 25 MB. Choose the sheet you want when a PDF has more than one page.'],
@@ -224,6 +226,7 @@ function HomeContent({ trialOffer, signedIn }) {
           <a className="detailsLink" href={publicPages.pricing.path}>See pricing <Icon name="arrow" size={17} /></a>
         </div>
         <PriceOptions compact />
+        <p>{billingStatus}</p>
       </section>
       <aside className="stickyEdit" aria-label="Blueprint editor shortcut" aria-hidden={!showSticky} data-visible={showSticky}>
         <EditorLink trial={showTrial} tabIndex={showSticky ? undefined : -1} />
@@ -266,6 +269,7 @@ function PricingContent({ trialOffer, signedIn }) {
         </div>
       )}
       <PriceOptions />
+      <p>{billingStatus}</p>
       {signedIn && <div className="pricingAccount"><a className="button primary" href="/#/account/billing">View billing</a></div>}
       <section className="faqSection" aria-labelledby="faq-title">
         <h2 id="faq-title">FAQs</h2>
