@@ -299,6 +299,7 @@ export function SiteFooter() {
         {Object.entries(POLICY_LINKS).map(([page, label]) => (
           <a key={page} href={publicPages[page].path}>{label}</a>
         ))}
+        <a href="/privacy#cookie-settings">Cookie settings</a>
       </nav>
       <small>© {new Date().getFullYear()} {PRODUCT_NAME}</small>
     </footer>
