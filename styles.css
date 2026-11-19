@@ -2030,3 +2030,25 @@ hr {
     scroll-behavior: auto !important;
   }
 }
+
+.privacyChoices h2 { margin: 0 0 0.45rem; font-size: 1.15rem; }
+.privacyChoices p { margin: 0 0 0.7rem; line-height: 1.5; }
+.privacyChoices { scroll-margin-top: 5rem; }
+.privacyBanner {
+  position: fixed;
+  z-index: 80;
+  inset: auto auto 1rem 1rem;
+  width: min(29rem, calc(100% - 2rem));
+  max-height: 75vh;
+  overflow: auto;
+  padding: 1.1rem 1.25rem;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  box-shadow: 0 5px 22px rgb(37 42 43 / 15%);
+}
+.privacyActions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.65rem; }
+.privacyActions button { flex: 1 1 auto; }
+.privacyActions button[aria-pressed="true"] { border-color: var(--accent); }
+@media print { .privacyChoices { display: none; } }
