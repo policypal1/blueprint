@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Analytics } from '@vercel/analytics/react';
+import { ConsentAnalytics, PrivacyChoices } from './PrivacyChoices.jsx';
 import AccountPage from './Account.jsx';
 import { AuthHeader, ResetPasswordPage, SignInPage } from './Auth.jsx';
 import { DEMO_HASH, SiteHeader } from './Marketing.jsx';
@@ -53,10 +53,6 @@ function readRoute() {
 }
 function isEditorRoute(route) {
   return ['recent', 'workspace', 'sample'].includes(route);
-}
-function cleanPageview(event) {
-  const url = new URL(event.url);
-  return { ...event, url: url.origin + url.pathname };
 }
 function editorSignInLocation() {
   return publicPageAt(window.location.pathname) === 'signIn'
@@ -195,7 +191,8 @@ export default function Root() {
       setRoute(next);
       if (isEditorRoute(next)) setVisitedEditor(true);
       else setSignInDialog(false);
-      if (next !== 'demo') window.scrollTo(0, 0);
+      const cookieSettings = next === 'privacy' && window.location.hash === '#cookie-settings';
+      if (next !== 'demo' && !cookieSettings) window.scrollTo(0, 0);
     };
     window.addEventListener('hashchange', navigate);
     window.addEventListener('popstate', navigate);
@@ -237,9 +234,7 @@ export default function Root() {
   }, [route]);
   return (
     <>
-      {import.meta.env?.PROD && (
-        <Analytics route={analyticsPath} path={analyticsPath} beforeSend={cleanPageview} />
-      )}
+      {import.meta.env?.PROD && <ConsentAnalytics path={analyticsPath} />}
       {account.error && (!showAuthPage || route === 'resetPassword') && (
         <div className="accountAlert" role="alert">
           <span>{account.error}</span>
@@ -323,6 +318,7 @@ export default function Root() {
           </div>
         </div>
       )}
+      {route !== 'privacy' && <PrivacyChoices banner />}
       {signInDialog && showTrial && (
         <SignInPage {...signInProps} initialMode={signInDialog} onClose={() => setSignInDialog(false)} />
       )}

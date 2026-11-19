@@ -1007,7 +1007,7 @@ test('trial landing prominently offers the account-based trial and links to all 
   assert.equal(hero.getAllByRole('link').length, 1);
   const footer = within(screen.getByRole('navigation', { name: 'Footer' }));
   assert.deepEqual(footer.getAllByRole('link').map((link) => link.getAttribute('href')), [
-    '/how-to-edit-a-floor-plan-pdf', '/floor-plan-guides', '/pricing', '/terms', '/privacy', '/refunds-and-cancellation', '/support',
+    '/how-to-edit-a-floor-plan-pdf', '/floor-plan-guides', '/pricing', '/terms', '/privacy', '/refunds-and-cancellation', '/support', '/privacy#cookie-settings',
   ]);
 });
 
@@ -1353,4 +1353,41 @@ test('account deletion requires a typed confirmation from the account owner', as
   fireEvent.click(action);
   await waitFor(() => assert.equal(deleted, 1));
   assert.deepEqual(requests, ['DELETE']);
+});
+
+test('monthly checkout requires its own agreement and only confirmed purchases offer a downloadable acknowledgment', async () => {
+  const { MONTHLY_VERSION, MONTHLY_DISCLOSURE } = await import('../supabase/functions/planpatch-account/monthly-offer.js');
+  const calls = [];
+  const account = { user: { id: 'subscription-ui-test' } };
+  const access = { data: { checkoutReady: true, billingAvailable: true, monthlyOfferVersion: MONTHLY_VERSION },
+    checkout: async (...args) => { calls.push(args); } };
+  const view = render(React.createElement(AccountPage, { billing: true, account, access }));
+  const [policies, recurring] = screen.getAllByRole('checkbox');
+  const monthly = screen.getByRole('button', { name: 'Start test subscription' });
+  const project = screen.getByRole('button', { name: 'Buy a project credit' });
+  assert.equal(recurring.checked, false);
+  assert.equal(recurring.labels[0].textContent, MONTHLY_DISCLOSURE);
+  assert.equal(monthly.disabled, true);
+  fireEvent.click(policies);
+  assert.equal(project.disabled, false);
+  assert.equal(monthly.disabled, true);
+  assert.equal(screen.queryByText('Save subscription confirmation'), null);
+  fireEvent.click(recurring);
+  fireEvent.click(monthly);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0][2], { accepted: true, version: MONTHLY_VERSION });
+  const confirmed = { offer_version: MONTHLY_VERSION, offer_text: MONTHLY_DISCLOSURE, amount_paid_cents: 1900,
+    accepted_at: '2026-11-19T01:00:00Z', paid_at: '2026-11-19T01:01:00Z', first_period_end: '2026-12-19T01:01:00Z', invoice_id: 'in_test_confirmed' };
+  view.rerender(React.createElement(AccountPage, { billing: true, account, access: {
+    ...access, data: { ...access.data, monthly: true, monthlyConfirmation: confirmed },
+  } }));
+  const download = screen.getByRole('link', { name: 'Save subscription confirmation' });
+  assert.match(download.download, /\.txt$/);
+  const text = decodeURIComponent(download.href.split(',').slice(1).join(','));
+  for (const item of [MONTHLY_DISCLOSURE, confirmed.invoice_id, '$19.00 USD', 'https://www.editfloorplans.com/#/account/billing']) {
+    assert.ok(text.includes(item));
+  }
+  view.rerender(React.createElement(AccountPage, { billing: true, account: { user: { id: 'new-user' } }, access }));
+  assert.ok(screen.getAllByRole('checkbox').every(box => !box.checked));
+  assert.equal(screen.queryByRole('link', { name: 'Save subscription confirmation' }), null);
 });

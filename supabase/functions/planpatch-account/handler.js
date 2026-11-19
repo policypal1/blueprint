@@ -1,4 +1,6 @@
-import { createCheckout, fulfillVerifiedEvent } from './billing.js';
+import { createCheckout, monthlyCheckout, openBillingPortal, fulfillVerifiedEvent, validAttempt } from './billing.js';
+
+import { MONTHLY_VERSION } from './monthly-offer.js';
 
 const ACCOUNT = 'planpatch_accounts';
 const ACCOUNT_FIELDS = 'stripe_customer_id,stripe_test_customer_id,deletion_started_at';
@@ -137,8 +139,13 @@ export function accountHandler({ admin, test, clientFor, siteOrigin, webhookSecr
     try {
       if (body.action === 'status') {
         const access = deleting ? null : checked(await client.rpc('planpatch_sandbox_access').maybeSingle());
+        const confirmation = deleting ? null : await admin.rpc('planpatch_test_subscription_confirmation', {
+          owner_id: userId,
+        }).maybeSingle();
         return reply(200, {
           billingAvailable: Boolean(test), checkoutReady, deleting,
+          monthlyOfferVersion: confirmation && !confirmation.error ? MONTHLY_VERSION : null,
+          monthlyConfirmation: confirmation?.data ?? null,
           paymentsRequired: Boolean(access?.payments_required), monthly: Boolean(access?.monthly),
           projectCredits: Number(access?.project_credits ?? 0), projectIds: access?.project_ids ?? [],
         });
@@ -148,8 +155,12 @@ export function accountHandler({ admin, test, clientFor, siteOrigin, webhookSecr
         if (!test || (body.action === 'checkout' && !checkoutReady)) {
           return reply(503, { error: 'Sandbox billing is being set up.' });
         }
-        if (body.action === 'checkout' && !['project', 'monthly'].includes(body.plan)) {
+        if (body.action === 'checkout' && (!['project', 'monthly'].includes(body.plan) || !validAttempt(body.attempt))) {
           return reply(400, { error: 'Choose a test plan.' });
+        }
+        if (body.action === 'checkout' && body.plan === 'monthly'
+            && (body.consent?.accepted !== true || body.consent.version !== MONTHLY_VERSION)) {
+          return reply(400, { error: 'Review and agree to the current monthly billing terms before checkout.' });
         }
         const account = await ensureAccount(admin, userId);
         if (!account || account.deletion_started_at) return reply(409, { error: 'Account deletion is in progress.' });
@@ -157,14 +168,17 @@ export function accountHandler({ admin, test, clientFor, siteOrigin, webhookSecr
         if (!customer) return reply(409, { error: 'Account deletion is in progress.' });
         const returnOrigin = requestOrigin && requestOrigin !== DEV_ORIGIN ? requestOrigin : origin;
         if (body.action === 'checkout') {
+          const options = { plan: body.plan, customer, owner: userId, origin: returnOrigin, attempt: body.attempt };
           if (body.plan === 'monthly') {
             const access = checked(await client.rpc('planpatch_sandbox_access').maybeSingle());
             if (access?.monthly) return reply(409, { error: 'Your monthly test subscription is already active.' });
+            const url = await monthlyCheckout(test, admin, { ...options, origin });
+            return url ? reply(200, { url }) : reply(409, { error: 'Check your subscription in Manage test billing before starting another checkout.' });
           }
-          const url = await createCheckout(test, { plan: body.plan, customer, owner: userId, origin: returnOrigin, attempt: body.attempt });
-          return url ? reply(200, { url }) : reply(400, { error: 'Restart checkout from EditFloorPlans.com.' });
+          const checkout = await createCheckout(test, options);
+          return checkout ? reply(200, { url: checkout.url }) : reply(400, { error: 'Restart checkout from EditFloorPlans.com.' });
         }
-        const portal = await test.billingPortal.sessions.create({ customer, return_url: returnOrigin + '/#/account/billing' });
+        const portal = await openBillingPortal(test, customer, returnOrigin + '/#/account/billing', body.cancelMonthly === true);
         return reply(200, { url: portal.url });
       }
 
