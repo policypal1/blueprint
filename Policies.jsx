@@ -58,12 +58,14 @@ function Privacy() {
 function RefundsAndCancellation() {
   return (
     <>
-      <h2>Refunds</h2>
-      <p>All purchases are final, except where applicable law requires a refund. Contact <a className="accountTextLink" href="/support">Support</a> for a duplicate or incorrect charge or a request under applicable law.</p>
-      <h2>Cancel your monthly subscription</h2>
-      <p>Open <a className="accountTextLink" href="#/account/billing">Billing</a> and choose Manage billing before your next renewal. Cancellation stops future renewals. You can keep editing and downloading your subscription projects until the paid period ends. Download copies you need before that date.</p>
-      <h2>One-time purchases and trials</h2>
-      <p>A project credit has a single charge and stays with the project it unlocks. Deleting that project leaves the credit used. The three-day free trial ends automatically without a charge. Paid access begins only if you choose to purchase it.</p>
+      <p>Billing currently runs in test mode. The terms below apply when paid billing begins.</p>
+      <h2>$10 project credit</h2>
+      <p>You can request a full refund while your credit is unused. A credit is used when you apply it to a project. Deleting that project does not restore the credit. Contact <a className="accountTextLink" href="/support">Support</a> to request a refund.</p>
+      <h2>$19 monthly subscription</h2>
+      <p>Your subscription renews monthly until you cancel. You can cancel at any time to stop the next renewal. You keep access through the end of the period you paid for. We do not refund the current billing period or prorate unused days, except where required by law. If you believe a charge was made in error, contact <a className="accountTextLink" href="/support">Support</a> so we can correct it.</p>
+      <p>To cancel, open <a className="accountTextLink" href="/#/account/billing">Billing</a> and choose the option to manage your subscription. Download any subscription projects you need before the paid period ends.</p>
+      <h2>Free trial</h2>
+      <p>The three-day free trial ends automatically without a charge. Paid access begins only if you choose to purchase it.</p>
       <p>Contact Support if applicable law gives you a right to retrieve your files after access ends.</p>
     </>
   );
