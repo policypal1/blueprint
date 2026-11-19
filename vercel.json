@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "review/blueprint-launch-policies-20261119": false
+    }
+  },
   "buildCommand": "npm run build",
   "cleanUrls": true,
   "trailingSlash": false,
