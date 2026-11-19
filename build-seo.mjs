@@ -35,6 +35,7 @@ try {
     loader: { '.svg': 'dataurl' },
     define: { 'import.meta.env': JSON.stringify({
       VITE_PLANPATCH_SUPPORT_EMAIL: env.VITE_PLANPATCH_SUPPORT_EMAIL || '',
+      VITE_PLANPATCH_MAILING_ADDRESS: env.VITE_PLANPATCH_MAILING_ADDRESS || '',
     }) },
   });
   const { default: PublicPage } = await import(pathToFileURL(output).href);
