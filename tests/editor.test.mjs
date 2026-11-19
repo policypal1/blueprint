@@ -1194,6 +1194,29 @@ test('the desktop header shows the account name and keeps the menu available fro
   assert.equal(details.open, false);
 });
 
+test('support and cancellation links use the canonical account routes without publishing a placeholder mailbox', async () => {
+  const previous = window.location.href;
+  try {
+    window.history.replaceState(null, '', '/support');
+    const support = render(React.createElement(Root));
+    const main = within(await screen.findByRole('main'));
+    assert.equal(main.getByRole('link', { name: 'Open billing' }).getAttribute('href'), '/#/account/billing');
+    assert.equal(main.getByRole('link', { name: 'Open Sign-in & security' }).getAttribute('href'), '/#/account/security');
+    assert.ok(main.getByText('A support email address is currently unavailable.'));
+    assert.doesNotMatch(support.container.textContent, /@editfloorplans\.example/i);
+    support.unmount();
+
+    window.history.replaceState(null, '', '/refunds-and-cancellation');
+    render(React.createElement(Root));
+    const cancellation = within(await screen.findByRole('main'));
+    assert.equal(cancellation.getByRole('link', { name: 'Billing' }).getAttribute('href'), '/#/account/billing');
+    assert.ok(cancellation.getByText(/Billing is currently in Stripe test mode/));
+  } finally {
+    cleanup();
+    window.history.replaceState(null, '', previous);
+  }
+});
+
 test('the sign-in path and legacy bookmark both open the account page', async () => {
   const previous = window.location.href;
   try {
