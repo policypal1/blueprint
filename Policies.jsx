@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { PRODUCT_NAME } from './ui.jsx';
+import { PrivacyChoices } from './PrivacyChoices.jsx';
 
 export const POLICY_LINKS = {
   terms: 'Terms of Service',
@@ -48,6 +49,7 @@ function Privacy() {
       <h2>Payments and service providers</h2>
       <p>Stripe handles payment card details and invoices. {PRODUCT_NAME} keeps the Stripe customer reference and purchase status needed to activate and manage access. Vercel hosts the website. These services process information to provide hosting, authentication, file storage and payments.</p>
       <p>We use Vercel Web Analytics to count visits to pages and editor screens and see which sites refer visitors. It uses no analytics cookies. We send page names and keep drawing contents and account details out of pageview data.</p>
+      <PrivacyChoices />
       <h2>Deletion and requests</h2>
       <p>You can delete your account in Sign-in &amp; security. Account deletion removes the account and its cloud plans. It also clears its drafts in the current browser when browser storage is available. To remove local copies elsewhere, clear the site's data on those devices. Limited identifiers may remain while they are needed for trial abuse prevention, payment records or legal obligations.</p>
       <p>Use <a className="accountTextLink" href="/support">Support</a> for questions or requests about your information, including any rights that apply where you live.</p>
@@ -73,7 +75,11 @@ function RefundsAndCancellation() {
 
 export function CustomerPolicyPage({ page }) {
   const heading = useRef(null);
-  useEffect(() => { heading.current?.focus(); }, [page]);
+  useEffect(() => {
+    const settings = page === 'privacy' && window.location.hash === '#cookie-settings'
+      ? document.getElementById('cookie-settings') : null;
+    (settings || heading.current)?.focus();
+  }, [page]);
   return (
     <main className="policyPage">
       <h1 ref={heading} tabIndex={-1}>{POLICY_LINKS[page]}</h1>
