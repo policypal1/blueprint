@@ -3,6 +3,7 @@ import { AccountAvatar, profileName } from './AccountMenu.jsx';
 import { Icon, Modal, PRODUCT_NAME } from './ui.jsx';
 import { authErrorText, MAX_DISPLAY_NAME_LENGTH } from './useAccount.js';
 import { canOpenEditor, timedAccessActive } from './access.js';
+import { MONTHLY_VERSION, MONTHLY_DISCLOSURE, MONTHLY_CANCELLATION_URL } from './supabase/functions/planpatch-account/monthly-offer.js';
 import { PolicyAgreement } from './Policies.jsx';
 
 const SANDBOX_PORTAL_URL = 'https://billing.stripe.com/p/login/test_00w8wIf8fdke23P1oO4ZG00';
@@ -141,26 +142,56 @@ function SecuritySettings({ account }) {
   );
 }
 
+function SubscriptionConfirmation({ receipt }) {
+  const paidDate = new Date(receipt.paid_at).toISOString();
+  const periodEnd = new Date(receipt.first_period_end).toISOString();
+  const amount = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(receipt.amount_paid_cents / 100);
+  const configuredSupport = import.meta.env?.VITE_PLANPATCH_SUPPORT_EMAIL?.trim();
+  const support = configuredSupport && !configuredSupport.endsWith('.example') ? configuredSupport : 'https://www.editfloorplans.com/support';
+  const text = [
+    'Blueprint | Test subscription confirmation', 'Test mode. No real money was charged.', '',
+    'Initial test payment: ' + amount + ' USD on ' + paidDate,
+    'First paid period ends: ' + periodEnd, 'Stripe test invoice: ' + receipt.invoice_id, '',
+    'Accepted on ' + new Date(receipt.accepted_at).toISOString() + ' | Offer ' + receipt.offer_version,
+    receipt.offer_text, '', 'Manage or cancel your subscription: ' + MONTHLY_CANCELLATION_URL,
+    'Refunds and cancellation: https://www.editfloorplans.com/refunds-and-cancellation',
+    'Billing support: ' + support,
+  ].join('\n');
+  return (
+    <section className="accountCard" aria-labelledby="subscription-confirmation-title">
+      <h2 id="subscription-confirmation-title">Test subscription confirmation</h2>
+      <p>Stripe confirmed your first test payment of {amount} USD on {new Date(paidDate).toLocaleDateString()}.</p>
+      <p>{receipt.offer_text}</p>
+      <a className="accountTextLink" href={'data:text/plain;charset=utf-8,' + encodeURIComponent(text)}
+        download="Blueprint-test-subscription-confirmation.txt">Save subscription confirmation</a>
+    </section>
+  );
+}
+
 function BillingSettings({ portalUrl, access }) {
   const [pending, setPending] = useState('');
   const [error, setError] = useState('');
   const [accepted, setAccepted] = useState(false);
+  const [recurringAccepted, setRecurringAccepted] = useState(false);
   const attempts = useRef({});
   const { data, loading, refresh } = access ?? {};
+  const currentOffer = data?.monthlyOfferVersion === MONTHLY_VERSION;
   const backupPortal = STRIPE_TEST_PORTAL.test(portalUrl);
   const returned = new URLSearchParams(window.location.search).has('sandbox_checkout');
   const trialActive = timedAccessActive(data?.trialEndsAt);
 
   async function visitStripe(action) {
-    if (pending || (action !== 'portal' && !accepted)) return;
+    const openPortal = action === 'portal' || action === 'cancel';
+    if (pending || (!openPortal && !accepted) || (action === 'monthly' && (!recurringAccepted || !currentOffer))) return;
     setPending(action);
     setError('');
     try {
-      if (action === 'portal') {
-        await access.portal();
+      if (openPortal) {
+        await access.portal(action === 'cancel');
       } else {
         attempts.current[action] ??= crypto.randomUUID();
-        await access.checkout(action, attempts.current[action]);
+        const consent = action === 'monthly' ? { accepted: true, version: MONTHLY_VERSION } : undefined;
+        await access.checkout(action, attempts.current[action], consent);
       }
     } catch (problem) {
       setError(problem.message);
@@ -197,6 +228,7 @@ function BillingSettings({ portalUrl, access }) {
           <div className="billingChoice">
             <h3>Single project</h3>
             <p><strong>$10 USD</strong> once, for one original blueprint</p>
+            <p>You can request a full refund while your credit is unused.</p>
             <button className="primary" disabled={!data?.checkoutReady || !accepted || Boolean(pending)}
               onClick={() => visitStripe('project')}>
               {pending === 'project' ? 'Opening Stripe…' : 'Buy a project credit'}
@@ -205,7 +237,18 @@ function BillingSettings({ portalUrl, access }) {
           <div className="billingChoice">
             <h3>Monthly plan</h3>
             <p><strong>$19 USD</strong> per month. Renews until canceled.</p>
-            <button className="primary" disabled={!data?.checkoutReady || !accepted || Boolean(pending) || data.monthly}
+            {data?.checkoutReady && !data.monthly && currentOffer && (
+              <label className="policyAgreement">
+                <input type="checkbox" checked={recurringAccepted} onChange={(event) => setRecurringAccepted(event.target.checked)} />
+                <span>{MONTHLY_DISCLOSURE}</span>
+              </label>
+            )}
+            {currentOffer && !data?.monthly && (
+              <p><a className="accountTextLink" href="/refunds-and-cancellation" target="_blank" rel="noopener noreferrer">Cancellation policy</a>
+                {' · '}<a className="accountTextLink" href="/support" target="_blank" rel="noopener noreferrer">Billing support</a></p>
+            )}
+            {data?.checkoutReady && !data.monthly && !currentOffer && <p>Monthly checkout is being updated.</p>}
+            <button className="primary" disabled={!data?.checkoutReady || !accepted || !currentOffer || !recurringAccepted || Boolean(pending) || data.monthly}
               onClick={() => visitStripe('monthly')}>
               {data?.monthly ? 'Active subscription' : pending === 'monthly' ? 'Opening Stripe…' : 'Start test subscription'}
             </button>
@@ -224,11 +267,17 @@ function BillingSettings({ portalUrl, access }) {
           </div>
         )}
       </section>
+      {data?.monthlyConfirmation && <SubscriptionConfirmation receipt={data.monthlyConfirmation} />}
       <section className="accountCard" aria-labelledby="manage-billing-title">
         <h2 id="manage-billing-title">Payment methods and invoices</h2>
         {data?.billingAvailable ? (
           <>
             <p>Stripe manages saved payment methods, test invoices, and subscriptions.</p>
+            {data.monthly && (
+              <button disabled={Boolean(pending)} onClick={() => visitStripe('cancel')}>
+                {pending === 'cancel' ? 'Opening cancellation…' : 'Cancel test subscription'}
+              </button>
+            )}
             <button disabled={Boolean(pending)} onClick={() => visitStripe('portal')}>
               {pending === 'portal' ? 'Opening Stripe…' : 'Manage test billing'}
             </button>
@@ -284,7 +333,7 @@ function DeleteAccount({ access, onDeleted }) {
       }}>{deleting ? 'Finish account deletion' : 'Delete account'}</button>
       {open && (
         <Modal title={`Delete your ${PRODUCT_NAME} account?`} onClose={close}>
-          <p>Export any account plans you want to keep. This action is permanent.</p>
+          <p>Export any account plans you want to keep and save your subscription confirmation from Billing. This action is permanent.</p>
           <form className="profileSettings" method="post" onSubmit={submit}>
             <label>Type DELETE to confirm
               <input autoComplete="off" data-dialog-focus value={confirmation} disabled={pending}
@@ -333,7 +382,7 @@ export default function AccountPage({
             </a>
           </nav>
           {billing
-            ? <BillingSettings portalUrl={portalUrl} access={access} />
+            ? <BillingSettings key={account.user.id} portalUrl={portalUrl} access={access} />
             : security
               ? <div className="accountStack">
                 <SecuritySettings key={account.user.id} account={account} />
