@@ -3976,6 +3976,18 @@ function NumberInput({ value, onCommit, min = -MAX_PROJECT_NUMBER, max = MAX_PRO
   );
 }
 
+function WallColorInput({ value, onCommit }) {
+  const last = useRef(value);
+  useEffect(() => { last.current = value; }, [value]);
+  const change = (event) => {
+    const color = event.currentTarget.value;
+    if (!isWallColor(color) || last.current === color) return;
+    last.current = color;
+    onCommit(color);
+  };
+  return <input type="color" value={value} onInput={change} onChange={change} />;
+}
+
 function Properties({
   selected,
   project,
@@ -4019,7 +4031,7 @@ function Properties({
           </label>
           <label className="field wallColorField">
             <span>Wall color</span>
-            <input type="color" value={wallStyle(selected).color} onChange={event => set('color', event.target.value)} />
+            <WallColorInput value={wallStyle(selected).color} onCommit={color => set('color', color)} />
           </label>
           <button className="wide" onClick={onMatchWall}>{matching ? 'Cancel matching' : 'Match another wall'}</button>
           <p className="hint compactHint">Drag the end handles to change length. Drag the middle handle to change thickness.</p>
