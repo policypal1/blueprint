@@ -25,7 +25,7 @@ export default function PlanIllustration() {
           <path d="M84 132h148" />
           <rect x="40" y="64" width="25" height="40" />
           <rect x="251" y="64" width="25" height="40" />
-          <path d="M350 142v65h65a65 65 0 0 0-65-65M135 360h75v-75a75 75 0 0 0-75 75" />
+          <path className="planDoorSwing" d="M350 142v65h65a65 65 0 0 0-65-65M135 360h75v-75a75 75 0 0 0-75 75" />
           <path d="M389 306h174v33H389Zm8 10h158m-90-10v33" />
           <rect x="395" y="21" width="162" height="72" rx="9" />
           <rect x="405" y="31" width="140" height="52" rx="15" />
@@ -33,6 +33,11 @@ export default function PlanIllustration() {
           <ellipse cx="397" cy="155" rx="17" ry="18" />
           <rect x="519" y="145" width="35" height="16" rx="2" />
           <ellipse cx="536" cy="180" rx="16" ry="23" />
+        </g>
+        <g className="planDimensions" fill="#88613d" stroke="none" textAnchor="middle"
+          fontFamily="Inter, Arial, sans-serif" fontSize="15" letterSpacing="1">
+          <text x="300" y="-36">25′–0″</text>
+          <text x="-45" y="180" transform="rotate(-90 -45 180)">15′–0″</text>
         </g>
       </g>
     </svg>

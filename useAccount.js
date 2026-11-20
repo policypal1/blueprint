@@ -9,7 +9,20 @@ const RECOVERY_OWNER = 'planpatch-recovery-owner';
 const EMAIL_CONFIRMATION_FLOW = 'confirm-email';
 const RETURN_ROUTES = new Set([
   '#/editor', '#/editor/access', '#/editor/workspace', '#/account', '#/account/security', '#/account/billing', '#/trial',
+  '?plan=project#/account/billing', '?plan=monthly#/account/billing',
 ]);
+
+export function selectedBillingPlan(search) {
+  const plan = new URLSearchParams(search).get('plan');
+  return plan === 'project' || plan === 'monthly' ? plan : null;
+}
+
+export function accountReturnTarget(target, search) {
+  const plan = target === '#/account/billing' && selectedBillingPlan(search);
+  if (plan) return `?plan=${plan}#/account/billing`;
+  return RETURN_ROUTES.has(target) ? target : '#/account';
+}
+
 export const MIN_PASSWORD_LENGTH = 12;
 export const MAX_DISPLAY_NAME_LENGTH = 80;
 export const PASSWORD_HINT = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
@@ -92,8 +105,11 @@ async function connect() {
     : '';
 
   writeSessionValue(RECOVERY_OWNER, recovered);
-  const destination = RETURN_ROUTES.has(returnTo) ? returnTo : '#/account';
-  url.hash = callbackError || confirmedWithoutSession ? '#/sign-in' : recovered ? '#/reset-password' : destination;
+  const destination = new URL('/' + accountReturnTarget(returnTo), url.origin);
+  url.hash = callbackError || confirmedWithoutSession ? '#/sign-in' : recovered ? '#/reset-password' : destination.hash;
+  if (url.hash === '#/account/billing' && destination.searchParams.has('plan')) {
+    url.searchParams.set('plan', destination.searchParams.get('plan'));
+  }
   for (const name of ['code', 'flow_id', ...errorCodes]) url.searchParams.delete(name);
   if (confirmationLink) url.searchParams.delete('auth');
   window.history.replaceState(window.history.state, '', url);
@@ -157,7 +173,7 @@ export function useAccount() {
       options: { redirectTo: redirectUrl(), skipBrowserRedirect: true },
     }));
     if (!data?.url) throw new Error('Missing Google authorization URL.');
-    writeSessionValue(RETURN_TO, RETURN_ROUTES.has(returnTo) ? returnTo : '#/account');
+    writeSessionValue(RETURN_TO, accountReturnTarget(returnTo));
     writeSessionValue(GOOGLE_PREVIEW_RETURN, resumePreview ? '1' : null);
     window.location.assign(data.url);
   }
@@ -169,7 +185,7 @@ export function useAccount() {
       return false;
     }
     if (mode === 'resend') {
-      writeSessionValue(RETURN_TO, RETURN_ROUTES.has(returnTo) ? returnTo : '#/account');
+      writeSessionValue(RETURN_TO, accountReturnTarget(returnTo));
       authResult(await client.auth.resend({
         type: 'signup', email, options: { emailRedirectTo: redirectUrl(EMAIL_CONFIRMATION_FLOW) },
       }));
@@ -177,7 +193,7 @@ export function useAccount() {
     }
 
     await saveDraft(beforeLeaving);
-    if (mode === 'create') writeSessionValue(RETURN_TO, RETURN_ROUTES.has(returnTo) ? returnTo : '#/account');
+    if (mode === 'create') writeSessionValue(RETURN_TO, accountReturnTarget(returnTo));
     const result = mode === 'create'
       ? await client.auth.signUp({
         email, password,

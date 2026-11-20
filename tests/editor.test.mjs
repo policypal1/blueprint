@@ -5,13 +5,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
-import { IDBFactory, indexedDB } from 'fake-indexeddb';
+import { IDBFactory, IDBKeyRange, indexedDB } from 'fake-indexeddb';
 
 const base = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 await fs.mkdir(path.join(base, '.test-build'), { recursive: true });
 // Unit/component environment only: PDF decoding and rasterization are platform mocks.
 // This deliberately does not pretend to replace real-device PDF/browser acceptance tests.
-await build({
+const testBuild = {
   entryPoints: {
     editor: path.join(base, 'App.jsx'),
     marketing: path.join(base, 'Marketing.jsx'),
@@ -54,6 +54,29 @@ await build({
       },
     },
   ],
+};
+await build(testBuild);
+// Exercise production access gates with controllable account and billing responses.
+await build({
+  ...testBuild,
+  entryPoints: { gatedRoot: path.join(base, 'Root.jsx') },
+  plugins: [...testBuild.plugins, {
+    name: 'editor-access-fixtures',
+    setup(b) {
+      b.onResolve({ filter: /^\.\/use(Account|PlanPatchAccount)\.js$/ }, (args) => {
+        if (args.importer !== path.join(base, 'Root.jsx')) return;
+        return { path: args.path, namespace: 'access-fixture' };
+      });
+      b.onLoad({ filter: /.*/, namespace: 'access-fixture' }, ({ path: module }) => ({
+        resolveDir: base,
+        contents: module === './useAccount.js'
+          ? `export { accountReturnTarget } from './useAccount.js';
+             export const useAccount = () => globalThis.__editorAccess.account;`
+          : `export const useTrialOffer = () => ({ available: true });
+             export default () => globalThis.__editorAccess.access;`,
+      }));
+    },
+  }],
 });
 const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   url: 'https://blueprint.test',
@@ -225,8 +248,9 @@ test('live billing uses live consent and keeps purchases disabled during Stripe 
   const { LIVE_MONTHLY_VERSION, LIVE_MONTHLY_DISCLOSURE } = await import('../supabase/functions/planpatch-account/monthly-offer.js');
   const calls = [];
   const account = { user: { id: 'live-billing-ui' } };
-  const access = { data: { billingMode: 'live', checkoutReady: false, activationPending: true,
-    billingAvailable: true, monthlyOfferVersion: LIVE_MONTHLY_VERSION }, refresh: async () => {}, checkout: async (...args) => calls.push(args) };
+  let rechecks = 0;
+  const access = { data: { billingMode: 'live', checkoutReady: false, activationPending: true, canStartTrial: true,
+    billingAvailable: true, monthlyOfferVersion: LIVE_MONTHLY_VERSION }, refresh: async () => { rechecks++; }, checkout: async (...args) => calls.push(args) };
   const view = render(React.createElement(AccountPage, { account, access: { ...access, data: null, loading: true }, billing: true }));
   assert.equal(screen.queryByRole('link', { name: 'Open test billing portal' }), null);
   assert.equal(screen.queryByRole('button', { name: 'Start test subscription' }), null);
@@ -237,6 +261,11 @@ test('live billing uses live consent and keeps purchases disabled during Stripe 
   assert.equal(screen.queryByRole('button', { name: 'Refresh access' }), null);
   assert.equal(screen.getByRole('button', { name: 'Buy a project credit' }).disabled, true);
   assert.equal(screen.queryByRole('link', { name: 'Open test billing portal' }), null);
+  assert.ok(screen.getByText('Checkout is temporarily unavailable.'));
+  assert.equal(screen.getByRole('link', { name: /Try 3 days free/ }).getAttribute('href'), '/#/trial');
+  click('button', 'Check again');
+  await screen.findByText('Checkout is still unavailable. Please try again later.');
+  assert.equal(rechecks, 1);
   access.data.checkoutReady = true;
   view.rerender(React.createElement(AccountPage, { account, access, billing: true }));
   const [terms, renewal] = screen.getAllByRole('checkbox');
@@ -245,6 +274,40 @@ test('live billing uses live consent and keeps purchases disabled during Stripe 
   click('button', 'Start subscription');
   await waitFor(() => assert.equal(calls.length, 1));
   assert.deepEqual(calls[0][2], { accepted: true, version: LIVE_MONTHLY_VERSION });
+});
+
+test('billing keeps the selected order through sign-in and shows checkout failures beside the order', async () => {
+  const { accountReturnTarget } = await import('../useAccount.js');
+  const previous = window.location.href;
+  const { LIVE_MONTHLY_VERSION } = await import('../supabase/functions/planpatch-account/monthly-offer.js');
+  const access = {
+    data: { billingMode: 'live', checkoutReady: true, monthlyOfferVersion: LIVE_MONTHLY_VERSION },
+    checkout: async () => { throw new Error('Could not open Stripe. Try again.'); },
+  };
+  try {
+    for (const [plan, title] of [['project', 'Single project'], ['monthly', 'Monthly access']]) {
+      const target = accountReturnTarget('#/account/billing', `?plan=${plan}&tracking=test`);
+      assert.equal(target, `?plan=${plan}#/account/billing`);
+      // The callback validates the stored target again after email or Google authentication.
+      assert.equal(accountReturnTarget(target), target);
+      window.history.replaceState(null, '', '/' + target);
+      const view = render(React.createElement(AccountPage, { billing: true, account: { user: null, client: {} } }));
+      assert.ok(screen.getByRole('button', { name: 'Continue to sign in' }));
+      assert.ok(screen.getByText(/review your order/));
+      view.rerender(React.createElement(AccountPage, { billing: true, account: { user: { id: 'buyer' } }, access }));
+      const order = within(screen.getByRole('region', { name: 'Your order' }));
+      assert.deepEqual(order.getAllByRole('heading', { level: 3 }).map(el => el.textContent), [title]);
+      for (const agreement of order.getAllByRole('checkbox')) fireEvent.click(agreement);
+      fireEvent.click(order.getByRole('button', { name: plan === 'project' ? 'Buy a project credit' : 'Start subscription' }));
+      assert.equal((await order.findByRole('alert')).textContent, 'Could not open Stripe. Try again.');
+      assert.equal(order.getByRole('link', { name: 'View both plans' }).getAttribute('href'), '/#/account/billing');
+      view.unmount();
+    }
+    assert.equal(accountReturnTarget('#/account/billing', '?plan=unknown'), '#/account/billing');
+    assert.equal(accountReturnTarget('https://unexpected.example/'), '#/account');
+  } finally {
+    window.history.replaceState(null, '', previous);
+  }
 });
 
 test('a Stripe return rechecks access automatically until the delayed webhook can be observed', () => {
@@ -278,19 +341,22 @@ test('landing and pricing explain the product and lead to the editor', async () 
   render(React.createElement(Marketing, { page: 'home' }));
   const hero = screen.getByRole('region', { name: /Edit your existing floor plan/ });
   assert.ok(within(hero).getByRole('heading', { name: /Edit your existing floor plan/ }));
-  assert.ok(screen.getByText(/remodeling client.*PDF or image/));
-  assert.equal(within(hero).getByRole('link', { name: 'Try interactive demo' }).getAttribute('href'), '/demo');
+  assert.ok(screen.getByText(/existing PDF or image.*revised plan for your client/));
+  assert.equal(within(hero).getByRole('link', { name: 'Try the demo below' }).getAttribute('href'), '#doorway-demo');
   assert.equal(
     within(hero).getByRole('link', { name: 'Open editor' }).getAttribute('href'),
     '/#/editor',
   );
-  assert.equal(document.querySelector('.stickyEdit').getAttribute('aria-hidden'), 'true');
+  assert.equal(document.querySelector('.stickyEdit'), null);
   assert.equal(screen.queryByText('Bring your plan'), null);
   const pricing = screen.getByRole('heading', { name: 'One project or monthly access' });
-  const comparison = screen.getByRole('heading', { name: 'Give the hallway more clearance' });
-  assert.ok(comparison.compareDocumentPosition(pricing) & Node.DOCUMENT_POSITION_FOLLOWING);
-  assert.ok(screen.getByRole('img', { name: /the old doorway is filled.*leaving the hall clear/i }));
-  assert.equal(screen.getByRole('link', { name: 'Try this doorway revision' }).getAttribute('href'), '/demo');
+  const demo = screen.getByRole('region', { name: 'Try the floor plan demo' });
+  assert.equal(hero.nextElementSibling, demo);
+  assert.equal(within(demo).getByRole('link', { name: 'Watch the editor video' }).getAttribute('href'), '#/how-it-works');
+  assert.ok(demo.compareDocumentPosition(pricing) & Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.ok(within(demo).getByRole('button', { name: 'Choose Clean up' }));
+  fireEvent.click(within(hero).getByRole('link', { name: 'Try the demo below' }));
+  assert.equal(document.activeElement, within(demo).getByRole('heading', { level: 2 }));
   assert.ok(document.querySelector('.mobileMenu .siteNav a.navEditorLink[href="/#/editor"]'));
   const desktopNav = within(document.querySelector('.siteHeaderActions > nav'));
   assert.equal(desktopNav.queryByRole('link', { name: 'How it works' }), null);
@@ -1234,7 +1300,7 @@ test('reduced-motion visitors control sample playback and pricing keeps billing 
     view.unmount();
     render(React.createElement(Marketing, { page: 'pricing', trialOffer: true, account: { signedIn: true, user: { email: 'demo@example.test' } } }));
     assert.equal(screen.queryByRole('link', { name: 'View billing' }), null);
-    assert.doesNotMatch(screen.getByRole('main').textContent, /free trial|no credit card needed/i);
+    assert.match(screen.getByRole('main').textContent, /3-day free trial for new accounts · No credit card needed/);
     assert.equal(screen.queryByRole('link', { name: 'Start 3-day free trial' }), null);
     assert.ok(document.querySelector('.accountMenuLinks a[href="#/account/billing"]'));
   } finally {
@@ -1249,7 +1315,7 @@ test('guest landing opens the editor and exposes the same policy links in the mo
   assert.equal(hero.getByRole('link', { name: 'Open editor' }).getAttribute('href'), '/#/editor');
   assert.ok(hero.getByText('No credit card needed', { exact: true }).classList.contains('trialNoCard'));
   assert.equal(hero.queryByText(/ends automatically/i), null);
-  assert.equal(hero.getByRole('link', { name: 'Try interactive demo' }).getAttribute('href'), '/demo');
+  assert.equal(hero.getByRole('link', { name: 'Try the demo below' }).getAttribute('href'), '#doorway-demo');
   const footer = within(screen.getByRole('navigation', { name: 'Footer' }));
   assert.deepEqual(footer.getAllByRole('link').map((link) => link.getAttribute('href')), [
     '/terms', '/privacy', '/refunds-and-cancellation', '/support', '/privacy#cookie-settings',
@@ -1261,6 +1327,8 @@ test('guest landing opens the editor and exposes the same policy links in the mo
   fireEvent.keyDown(mobileFooter, { key: 'Escape' });
   assert.equal(mobileFooter.open, false);
   view.rerender(React.createElement(Marketing, { page: 'home', trialOffer: true, account: { signedIn: true } }));
+  assert.match(screen.getByRole('main').textContent, /3-day free trial for new accounts · No credit card needed/);
+  view.rerender(React.createElement(Marketing, { page: 'home', trialOffer: false }));
   assert.doesNotMatch(screen.getByRole('main').textContent, /free trial|no credit card needed/i);
 });
 
@@ -1293,23 +1361,25 @@ test('the original how-it-works link still opens the video and links to the inte
   }
 });
 
-test('a guest can revise the sample doorway, compare drawings, download and restart without opening project storage', async (t) => {
+test('a guest can revise the sample doorway, compare drawings, choose Export and restart without opening project storage', async (t) => {
   const previous = window.location.href;
   const dbOpen = t.mock.method(globalThis.indexedDB, 'open');
   const saved = { ...localStorage };
   t.after(() => { window.history.replaceState(null, '', previous); });
   window.history.replaceState(null, '', '/demo');
   render(React.createElement(Root));
-  const tour = within(await screen.findByRole('region', { name: 'Move a laundry doorway.' }));
+  const tour = within(await screen.findByRole('region', { name: 'Try the floor plan demo' }));
   const toolbar = within(tour.getByRole('group', { name: 'Demo editor tools' }));
-  const guide = within(tour.getByRole('complementary', { name: 'Demo instructions' }));
   const canvas = within(document.querySelector('.revisionCanvas'));
   const press = (scope, name) => fireEvent.click(scope.getByRole('button', { name, exact: true }));
   const stage = (label, sheet) => assert.ok(within(tour.getByRole('img', { name: label })).getByText(sheet));
 
   stage(/existing laundry door opens into the hall/, 'EXISTING PLAN');
   assert.ok(toolbar.getByRole('button', { name: 'Choose Door' }).disabled);
+  assert.ok(toolbar.getByText('Start here'));
   press(toolbar, 'Choose Clean up');
+  assert.equal(document.activeElement, canvas.getByRole('button', { name: 'Cover old swing' }));
+  assert.ok(canvas.getByText('Click here'));
   press(canvas, 'Cover old swing');
   stage(/leaving the opening/, 'DOOR REMOVAL');
   press(toolbar, 'Choose Wall');
@@ -1326,18 +1396,15 @@ test('a guest can revise the sample doorway, compare drawings, download and rest
   press(compare, 'Revised');
   stage(/relocated door opens into the laundry/, 'REVISED PLAN');
 
-  press(guide, 'Back');
+  press(tour, 'Back');
   stage(/the laundry wall is continuous/, 'DOORWAY INFILL');
   press(canvas, 'Place new door');
   press(toolbar, 'Choose Export');
-  assert.equal(guide.getByRole('link', { name: 'Edit my own plan' }).getAttribute('href'), '/#/editor');
-  press(within(tour.getByRole('group', { name: 'Compare drawings' })), 'Original');
-  press(guide, 'Download sample PDF');
-  await guide.findByText('Your sample PDF is ready to save.');
-  assert.equal(downloads.at(-1).name, 'laundry-doorway-revision.pdf');
-  assert.equal(downloads.at(-1).blob.type, 'application/pdf');
-  const sampleSvg = [...urlBlobs.values()].filter((blob) => blob.type.startsWith('image/svg+xml')).at(-1);
-  assert.match(await sampleSvg.text(), /REVISED PLAN/);
+  const ownPlan = tour.getByRole('link', { name: 'Edit my own plan' });
+  assert.equal(ownPlan.getAttribute('href'), '/#/editor');
+  assert.equal(document.activeElement, ownPlan);
+  assert.equal(tour.queryByRole('button', { name: /download.*pdf/i }), null);
+  assert.deepEqual(tour.getAllByRole('link'), [ownPlan]);
 
   press(tour, 'Restart');
   stage(/existing laundry door opens into the hall/, 'EXISTING PLAN');
@@ -1826,9 +1893,13 @@ test('mobile guest controls keep edits locked and ignore an import completed aft
   const view = render(React.createElement(Editor, props));
   click('button', 'Select');
   click('button', 'Edit');
+  assert.equal(requests, 0);
+  click('button', 'Door');
   click('button', 'Measure');
+  click('button', 'Set scale');
   assert.equal(requests, 2);
-  assert.equal(screen.getByRole('button', { name: 'View' }).getAttribute('aria-pressed'), 'true');
+  click('button', 'View');
+  assert.equal(screen.getByRole('button', { name: 'Select' }).getAttribute('aria-pressed'), 'true');
   const file = { name: 'Delayed plan.pdf', size: 512 };
   let finishReading;
   file.arrayBuffer = () => new Promise(resolve => { finishReading = resolve; });
@@ -1859,7 +1930,8 @@ for (const compact of [false, true]) {
     assert.equal(screen.queryByRole('button', { name: 'Try a sample plan' }), null);
     click('button', 'Zoom in');
     assert.equal(editRequests.length, 0);
-    click('button', compact ? 'Edit' : 'Wall');
+    if (compact) click('button', 'Edit');
+    click('button', compact ? 'Door' : 'Wall');
     assert.deepEqual(editRequests, [previews[0]]);
   });
 }
@@ -1878,4 +1950,61 @@ test('the editor sign-up page uses the full account form and can return to the p
   assert.ok(within(main).getByRole('button', { name: 'Sign in' }));
   click('link', 'Back to preview');
   assert.equal(returned, true);
+});
+
+
+test('door access dialog keeps the drawing visible for guests, eligible users and expired accounts', async () => {
+  const { default: GatedRoot } = await import('../.test-build/gatedRoot.mjs');
+  const previous = window.location.href;
+  const previousKeyRange = globalThis.IDBKeyRange;
+  globalThis.IDBKeyRange = IDBKeyRange;
+  try {
+    for (const state of ['guest', 'eligible', 'expired']) {
+      const guest = state === 'guest';
+      const account = guest ? { client: {} } : { user: { id: state, email: state + '@example.test' } };
+      globalThis.__editorAccess = {
+        account: { ...account, enabled: true },
+        access: { data: guest ? null : { paymentsRequired: true, canStartTrial: state === 'eligible',
+          trialEndsAt: state === 'expired' ? '2020-01-01T00:00:00Z' : null } },
+      };
+      window.history.replaceState(null, '', '/#/editor');
+      render(React.createElement(GatedRoot));
+      fireEvent.click(await screen.findByRole('button', { name: 'Try a sample plan' }));
+      await waitFor(() => assert.equal(window.location.hash, '#/editor/workspace'));
+      const door = screen.getByRole('button', { name: 'Door', exact: true });
+      const canvas = svg();
+      const original = canvas.innerHTML;
+      door.focus();
+      fireEvent.click(door);
+      const dialog = await screen.findByRole('dialog');
+      assert.equal(dialog.getAttribute('aria-modal'), 'true');
+      assert.equal(canvas.closest('.editorRoot').hidden, false);
+      assert.ok(canvas.closest('.editorRoot').hasAttribute('inert'));
+      assert.ok(dialog.contains(document.activeElement));
+      if (guest) {
+        assert.ok(within(dialog).getByRole('button', { name: 'Create account' }));
+        assert.match(dialog.textContent, /No credit card needed/);
+      } else if (state === 'eligible') {
+        assert.equal(within(dialog).getByRole('button', { name: 'Start free trial' }).disabled, true);
+        assert.ok(within(dialog).getByRole('checkbox'));
+      } else {
+        assert.equal(within(dialog).getByRole('link', { name: /Single project/ }).getAttribute('href'), '/?plan=project#/account/billing');
+        assert.equal(within(dialog).getByRole('link', { name: /Monthly access/ }).getAttribute('href'), '/?plan=monthly#/account/billing');
+      }
+      fireEvent.keyDown(document.activeElement, { key: 'Escape' });
+      await waitFor(() => assert.ok(!screen.queryByRole('dialog'), 'dialog closed'));
+      assert.ok(svg() === canvas, 'same drawing node');
+      assert.equal(canvas.innerHTML, original);
+      assert.equal(canvas.closest('.editorRoot').hasAttribute('inert'), false);
+      assert.equal(window.location.hash, '#/editor/workspace');
+      assert.ok(document.activeElement === door, 'focus returns to Door');
+      cleanup();
+      sessionStorage.clear();
+    }
+  } finally {
+    cleanup();
+    window.history.replaceState(null, '', previous);
+    globalThis.IDBKeyRange = previousKeyRange;
+    delete globalThis.__editorAccess;
+  }
 });

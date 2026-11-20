@@ -29,7 +29,11 @@ async function readAccess(client) {
 
 export function useTrialOffer() {
   const configured = Boolean(projectUrl && publishableKey);
-  const [state, setState] = useState({ available: false, checking: configured, error: false });
+  const [state, setState] = useState(() => ({
+    available: configured && typeof document !== 'undefined' && document.getElementById('root')?.dataset.trialOffer === 'true',
+    checking: configured,
+    error: false,
+  }));
   const pending = useRef(null);
 
   const refresh = useCallback(async () => {

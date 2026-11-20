@@ -60,7 +60,8 @@ export function SignInPage({
   const creating = mode === 'create';
   const credentialForm = mode === 'signIn' || creating;
   const waiting = account.loading || Boolean(pending);
-  const title = editorEntry && mode === 'signIn' ? 'Sign in to use the editor' : copy.title;
+  const title = creating && editorEntry && onClose ? 'Create an account to edit this plan'
+    : editorEntry && mode === 'signIn' ? 'Sign in to use the editor' : copy.title;
 
   function selectMode(next) {
     setMode(next);
@@ -164,6 +165,11 @@ export function SignInPage({
     <AuthLayout title={title} inert={Boolean(confirmation)} onClose={onClose && (() => { if (!pending) onClose(); })}>
       {account.loading || account.client ? (
         <>
+          {creating && editorEntry && onClose && (
+            <p className="editorSignUpOffer">{trialOffer
+              ? <>New accounts get a <strong>3-day free trial</strong>. No credit card needed.</>
+              : 'Choose editing access after you create your account.'}</p>
+          )}
           {previewWarning && !error && <p role="status">{previewWarning}</p>}
           {mode === 'signIn' && account.emailConfirmed && (
             <p className="authConfirmed" role="status">Email confirmed. You can now sign in on any device.</p>
@@ -188,7 +194,8 @@ export function SignInPage({
             )}
             <label>
               Email address
-              <input type="email" name="email" autoComplete="username" required data-dialog-focus
+              <input type="email" name="email" autoComplete="username" required
+                data-dialog-focus={editorEntry && creating && onClose ? undefined : true}
                 value={email} disabled={waiting} onChange={(event) => setEmail(event.target.value)} />
             </label>
             {credentialForm && (

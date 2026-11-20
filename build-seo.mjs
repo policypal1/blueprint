@@ -22,6 +22,19 @@ const escapeText = (value) => value.replace(/[&<>"']/g, (char) => (
 const meta = (name, content, property = 'name') => `<meta ${property}="${name}" content="${escapeText(content)}">`;
 const jsonLd = (value) => `<script type="application/ld+json">${JSON.stringify(value).replaceAll('<', '\\u003c')}</script>`;
 
+async function readTrialOffer() {
+  if (!env.VITE_SUPABASE_URL || !env.VITE_SUPABASE_PUBLISHABLE_KEY) return false;
+  try {
+    const response = await fetch(new URL('/rest/v1/rpc/planpatch_trial_offer', env.VITE_SUPABASE_URL), {
+      headers: { apikey: env.VITE_SUPABASE_PUBLISHABLE_KEY },
+      signal: AbortSignal.timeout(4000),
+    });
+    return response.ok && await response.json() === true;
+  } catch {
+    return false;
+  }
+}
+const trialOffer = await readTrialOffer();
 const generated = await mkdtemp(path.join(root, '.seo-build-'));
 try {
   const output = path.join(generated, 'public.mjs');
@@ -45,7 +58,7 @@ try {
   await Promise.all(Object.entries(publicPages).map(async ([route, page]) => {
     const canonical = new URL(page.path, site).href;
     const markup = renderToStaticMarkup(React.createElement(PublicPage, {
-      page: route, account: { signedIn: false },
+      page: route, account: { signedIn: false }, trialOffer,
     }));
     const head = [
       `<title>${escapeText(page.title)}</title>`,
@@ -80,7 +93,7 @@ try {
     const html = template
       .replace(/<meta\s+name="description"[^>]*>/, '')
       .replace(/<title>[^<]*<\/title>/, () => head.join('\n    '))
-      .replace('<div id="root"></div>', () => `<div id="root">${markup}</div>`);
+      .replace('<div id="root"></div>', () => `<div id="root" data-trial-offer="${trialOffer}">${markup}</div>`);
     await writeFile(path.join(dist, route === 'home' ? 'index.html' : `${page.path.slice(1)}.html`), html);
   }));
 

@@ -1,8 +1,6 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from './ui.jsx';
-import { ConsentAnalytics } from './PrivacyChoices.jsx';
 import RevisionDrawing from './RevisionDrawing.jsx';
-import { downloadRevisionPdf } from './revision-export.js';
 
 const tools = [
   { name: 'Clean up', icon: 'clean', frame: 0 },
@@ -12,15 +10,15 @@ const tools = [
 ];
 
 const frames = [
-  { tool: 0, stage: 'original', title: 'Clear the old swing', text: 'Start with Clean up. Its Rectangle tool covers marks printed on the original plan.', action: 'Choose Clean up' },
-  { tool: 0, stage: 'original', title: 'Cover the printed door', text: 'The rectangle is sized for this sample. Select the old swing in the hallway to cover it.', action: 'Cover old swing', point: [268, 322], tag: 'Old swing' },
-  { tool: 1, stage: 'masked', title: 'Close the opening', text: 'The swing is gone. Choose Wall to fill the gap where the doorway used to be.', action: 'Choose Wall' },
-  { tool: 1, stage: 'masked', title: 'Start the wall', text: 'Mark the left edge of the opening. This is where the replacement wall begins.', action: 'Set wall start', point: [242, 293], tag: 'Start here' },
-  { tool: 1, stage: 'masked', title: 'Finish the wall', text: 'Mark the opposite edge to connect the wall across the old opening.', action: 'Finish wall', point: [314, 293], tag: 'End here' },
-  { tool: 2, stage: 'cleaned', title: 'Move the doorway', text: 'Choose Door. The sample uses a 36-inch swing door that opens into the laundry room.', action: 'Choose Door' },
-  { tool: 2, stage: 'cleaned', title: 'Place the new door', text: 'Select the marked spot farther along the same wall. The new swing will leave the hallway clear.', action: 'Place new door', point: [421, 293], tag: 'New doorway' },
-  { tool: 3, stage: 'revised', title: 'Check the change', text: 'Switch between the two plans to check the door swing. Choose Export when the revision is ready.', action: 'Choose Export' },
-  { tool: 3, stage: 'revised', title: 'Your revised floor plan', text: 'The door now opens into the laundry. Download the sample PDF for client review, or try a revision on your own drawing.', action: 'Download sample PDF' },
+  { tool: 0, stage: 'original', instruction: 'Choose Clean up to erase the old door.' },
+  { tool: 0, stage: 'original', instruction: 'Click the old door swing.', action: 'Cover old swing', point: [268, 322] },
+  { tool: 1, stage: 'masked', instruction: 'Choose Wall to close the opening.' },
+  { tool: 1, stage: 'masked', instruction: 'Click the left end of the gap.', action: 'Set wall start', point: [242, 293] },
+  { tool: 1, stage: 'masked', instruction: 'Click the right end to finish the wall.', action: 'Finish wall', point: [314, 293] },
+  { tool: 2, stage: 'cleaned', instruction: 'Choose Door to place the new entry.' },
+  { tool: 2, stage: 'cleaned', instruction: 'Click the new doorway location.', action: 'Place new door', point: [421, 293] },
+  { tool: 3, stage: 'revised', instruction: 'Choose Export to finish.' },
+  { tool: 3, stage: 'revised', instruction: 'Your revised plan is ready.' },
 ];
 
 const LAST = frames.length - 1;
@@ -38,123 +36,87 @@ function EditGuide({ frame }) {
   return <svg className="revisionMark" viewBox="0 0 800 500" aria-hidden="true">{mark}</svg>;
 }
 
-export default function RevisionDemo() {
+export default function RevisionDemo({ embedded = false, videoHref }) {
   const [index, setIndex] = useState(0);
   const [compareOriginal, setCompareOriginal] = useState(false);
-  const [downloadState, setDownloadState] = useState('idle');
-  const [hasDownloaded, setHasDownloaded] = useState(false);
-  const drawing = useRef(null);
-  const downloading = useRef(false);
+  const player = useRef(null);
+  const keyboardStep = useRef(false);
   const frame = frames[index];
   const last = index === LAST;
   const review = frame.stage === 'revised';
-  const chapter = frame.tool;
-  const heading = useRef(null);
+  const Heading = embedded ? 'h2' : 'h1';
 
-  function go(to) {
+  useEffect(() => {
+    if (!keyboardStep.current) return;
+    keyboardStep.current = false;
+    player.current?.querySelector('[data-next-action="true"]')?.focus({ preventScroll: true });
+  }, [index]);
+
+  function go(to, event) {
+    keyboardStep.current = event.detail === 0;
     setIndex(to);
     setCompareOriginal(false);
-    setDownloadState('idle');
-    // A canvas target can disappear after use. Keep keyboard navigation inside the tour.
-    heading.current?.focus({ preventScroll: true });
   }
-
-  async function download() {
-    if (downloading.current) return;
-    downloading.current = true;
-    setDownloadState('busy');
-    try {
-      await downloadRevisionPdf(drawing.current);
-      setDownloadState('done');
-      setHasDownloaded(true);
-    } catch {
-      setDownloadState('error');
-    } finally {
-      downloading.current = false;
-    }
-  }
-
-  const advance = () => last ? download() : go(index + 1);
-  const busy = downloadState === 'busy';
 
   return (
-    <section className="revisionDemo" aria-labelledby="revision-title">
-      {import.meta.env?.PROD && <ConsentAnalytics path={hasDownloaded ? '/demo/sample-downloaded' : '/demo'} />}
-      <header className="revisionIntro">
-        <div className="revisionKicker"><Icon name="select" size={16} /> Interactive demo</div>
-        <h1 id="revision-title">Move a laundry doorway.</h1>
-        <p>The existing door swings into the hall. Move it along the wall and give the homeowner a revised plan.</p>
-      </header>
-
-      <div className="revisionPlayer" aria-label="Guided floor plan editor">
+    <section id="doorway-demo" className="revisionDemo" data-embedded={embedded} aria-labelledby="revision-title">
+      <div className="revisionHeading">
+        <Heading id="revision-title" tabIndex={-1} className="revisionTitle">Try the floor plan demo</Heading>
+        {videoHref && <a className="detailsLink" href={videoHref}>Watch the editor video</a>}
+      </div>
+      <div className="revisionPlayer" ref={player}>
         <div className="revisionFileBar">
-          <div className="revisionFile"><Icon name="file" size={19} /><strong>Laundry remodel.pdf</strong><span>Sample plan</span></div>
-          <button type="button" className="revisionRestart" disabled={index === 0 || busy} onClick={() => go(0)}>
+          <div className="revisionFile"><Icon name="file" size={19} /><strong>Laundry remodel.pdf</strong></div>
+          <button type="button" className="revisionRestart" disabled={index === 0} onClick={(event) => go(0, event)}>
             <Icon name="undo" size={16} />Restart
           </button>
         </div>
+        <div className="revisionDirection">
+          <div className="revisionProgress" aria-hidden="true">
+            {tools.map(({ name }, position) => <i key={name} data-on={position <= frame.tool} />)}
+          </div>
+          <div className="revisionInstruction" aria-live="polite" aria-atomic="true">
+            <span>Step {frame.tool + 1} of 4</span>
+            <strong>{frame.instruction}</strong>
+          </div>
+        </div>
         <div className="revisionBody">
-          <div className="revisionWorkspace">
-            <div className="revisionTools" role="group" aria-label="Demo editor tools">
-              {tools.map(({ name, icon, frame: start }, position) => (
-                <button key={name} type="button" disabled={position > chapter || busy || (position === chapter && index !== start)}
-                  data-current={position === chapter} data-prompt={index === start}
-                  aria-label={`Choose ${name}`}
-                  onClick={() => position === chapter ? advance() : go(start)}>
-                  <Icon name={icon} size={17} /><span>{name}</span>
+          <div className="revisionTools" role="group" aria-label="Demo editor tools">
+            {tools.map(({ name, icon, frame: start }, position) => {
+              const prompt = index === start;
+              return (
+                <button key={name} type="button" disabled={!prompt} data-current={position === frame.tool}
+                  data-next-action={prompt} aria-label={`Choose ${name}`} onClick={(event) => go(index + 1, event)}>
+                  <Icon name={icon} size={18} /><span>{name}</span>
+                  {prompt && <span className="revisionToolCue" aria-hidden="true">{index === 0 ? 'Start here' : 'Click here'}</span>}
                 </button>
-              ))}
-            </div>
-            <div className="revisionCanvas">
-              <div className="revisionSheet">
-                <div aria-hidden={review && compareOriginal ? true : undefined}>
-                  <RevisionDrawing stage={frame.stage} ref={drawing} />
-                </div>
-                {review && compareOriginal && <div className="revisionOriginal"><RevisionDrawing stage="original" /></div>}
-                <EditGuide frame={frame} />
-                {frame.point && (
-                  <button key={index} type="button" className="revisionHotspot" aria-label={frame.action}
-                    style={{ left: `${frame.point[0] / 8}%`, top: `${frame.point[1] / 5}%` }} onClick={advance}>
-                    <span className="revisionHotspotRing" /><span className="revisionHotspotTag">{frame.tag}</span>
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="revisionSheetBar">
-              <span><Icon name="file" size={14} /> {review && !compareOriginal ? 'Revised drawing' : frame.stage === 'original' || compareOriginal ? 'Original drawing' : 'Revision in progress'}</span>
-              {review && <div className="revisionToggle" role="group" aria-label="Compare drawings">
-                <button type="button" aria-pressed={compareOriginal} onClick={() => setCompareOriginal(true)}>Original</button>
-                <button type="button" aria-pressed={!compareOriginal} onClick={() => setCompareOriginal(false)}>Revised</button>
-              </div>}
+              );
+            })}
+          </div>
+          <div className="revisionCanvas">
+            <div className="revisionSheet">
+              <RevisionDrawing stage={review && compareOriginal ? 'original' : frame.stage} />
+              <EditGuide frame={frame} />
+              {frame.point && (
+                <button key={index} type="button" className="revisionHotspot" aria-label={frame.action} data-next-action="true"
+                  style={{ left: `${frame.point[0] / 8}%`, top: `${frame.point[1] / 5}%` }} onClick={(event) => go(index + 1, event)}>
+                  <span className="revisionHotspotRing" /><span className="revisionHotspotTag">Click here</span>
+                </button>
+              )}
             </div>
           </div>
-          <aside className="revisionGuide" aria-label="Demo instructions">
-            <div className="revisionProgress">
-              <span>Step {chapter + 1} of 4</span>
-              <div aria-hidden="true">{tools.map(({ name }, position) => <i key={name} data-on={position <= chapter} />)}</div>
-            </div>
-            <div aria-live="polite" aria-atomic="true">
-              <h2 ref={heading} tabIndex={-1}>{frame.title}</h2>
-              <p>{frame.text}</p>
-            </div>
-            <div className="revisionGuideActions">
-              <button type="button" className="revisionPrimary" onClick={advance} disabled={busy}>
-                <Icon name={last ? 'download' : frame.point ? 'select' : tools[chapter].icon} size={17} />
-                {busy ? 'Preparing PDF…' : frame.action}
-              </button>
-              {last && <a className="revisionOwnPlan" href="/#/editor">Edit my own plan</a>}
-              {index > 0 && <button type="button" className="revisionBack" onClick={() => go(index - 1)} disabled={busy}>
-                <Icon name="back" size={15} /> Back
-              </button>}
-            </div>
-            {downloadState === 'done' && <p className="revisionStatus" role="status">Your sample PDF is ready to save.</p>}
-            {downloadState === 'error' && <p className="revisionStatus" role="alert">The PDF couldn’t be prepared. Try the download again.</p>}
-          </aside>
+        </div>
+        <div className="revisionFooter">
+          <button type="button" className="revisionBack" onClick={(event) => go(index - 1, event)} disabled={index === 0}>
+            <Icon name="back" size={15} /> Back
+          </button>
+          {review && <div className="revisionToggle" role="group" aria-label="Compare drawings">
+            <button type="button" aria-pressed={compareOriginal} onClick={() => setCompareOriginal(true)}>Original</button>
+            <button type="button" aria-pressed={!compareOriginal} onClick={() => setCompareOriginal(false)}>Revised</button>
+          </div>}
+          {last && <a className="button primary revisionOwnPlan" href="/#/editor" data-next-action="true">Edit my own plan</a>}
         </div>
       </div>
-      {last && <div className="revisionFeedback"><span>What change did your last client ask for?</span>
-        <a href="mailto:support@editfloorplans.com?subject=My%20last%20floor%20plan%20revision">Tell us about it</a>
-      </div>}
     </section>
   );
 }

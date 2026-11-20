@@ -2,32 +2,45 @@ import React, { useState } from 'react';
 import { canOpenEditor, fullEditorAccess, timedAccessActive } from './access.js';
 import { PRICING } from './Marketing.jsx';
 import { PolicyAgreement } from './Policies.jsx';
-import { Icon } from './ui.jsx';
+import { Icon, Modal } from './ui.jsx';
 
-export function ExpiredTrialPlans({ expired = true }) {
+function AccessLayout({ title, onClose, paid = false, children }) {
+  if (onClose) {
+    return <Modal title={title} onClose={onClose} className="editorAccessDialog">{children}</Modal>;
+  }
   return (
-    <main className="accessPage">
-      <section className="accessCard expiredTrialCard" aria-labelledby="expired-trial-title">
-        <h1 id="expired-trial-title">{expired ? 'Your free trial has ended' : 'Choose a plan to edit'}</h1>
-        <p>Choose how you’d like to keep editing and downloading your plans.</p>
-        <nav className="expiredTrialOptions" aria-label="Choose a plan">
-          <a href="/?plan=project#/account/billing">
-            <Icon name="file" />
-            <span>Single project<small>One project credit</small></span>
-            <span className="expiredTrialPrice">${PRICING.project}<small>one time</small></span>
-          </a>
-          <a href="/?plan=monthly#/account/billing">
-            <Icon name="folder" />
-            <span>Monthly access<small>Multiple projects</small></span>
-            <span className="expiredTrialPrice">${PRICING.monthly}<small>per month</small></span>
-          </a>
-        </nav>
+    <main className={paid ? 'accessPage' : 'trialPage'}>
+      <section className={paid ? 'accessCard expiredTrialCard' : 'trialCard'} aria-labelledby="access-offer-title">
+        <h1 id="access-offer-title">{title}</h1>
+        {children}
       </section>
     </main>
   );
 }
 
-export default function TrialPage({ account, access, offer, offerChecking, offerError, onCheckOffer, onSignIn }) {
+export function ExpiredTrialPlans({ expired = true, onClose, onChoose, previewWarning }) {
+  const title = expired ? 'Your free trial has ended' : 'Choose a plan to edit';
+  return (
+    <AccessLayout title={title} onClose={onClose} paid>
+      <p>Choose how you’d like to edit and export your plans.</p>
+      <nav className="expiredTrialOptions" aria-label="Choose a plan">
+        <a href="/?plan=project#/account/billing" onClick={onChoose}>
+          <Icon name="file" />
+          <span>Single project<small>Edit and export one plan</small></span>
+          <span className="expiredTrialPrice">${PRICING.project}<small>one time</small></span>
+        </a>
+        <a href="/?plan=monthly#/account/billing" onClick={onChoose}>
+          <Icon name="folder" />
+          <span>Monthly access<small>Edit and export multiple plans</small></span>
+          <span className="expiredTrialPrice">${PRICING.monthly}<small>per month</small></span>
+        </a>
+      </nav>
+      {previewWarning && <p role="status">{previewWarning}</p>}
+    </AccessLayout>
+  );
+}
+
+export default function TrialPage({ account, access, offer, offerChecking, offerError, onCheckOffer, onSignIn, onClose }) {
   const [accepted, setAccepted] = useState(false);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
@@ -53,12 +66,10 @@ export default function TrialPage({ account, access, offer, offerChecking, offer
     }
   }
 
-  if (expired && !canOpenEditor(data) && !account.loading) return <ExpiredTrialPlans />;
+  if (expired && !canOpenEditor(data) && !account.loading) return <ExpiredTrialPlans onClose={onClose} />;
 
   return (
-    <main className="trialPage">
-      <section className="trialCard" aria-labelledby="trial-title">
-      <h1 id="trial-title">{title}</h1>
+    <AccessLayout title={title} onClose={onClose && (() => { if (!pending) onClose(); })}>
       {starting && (
         <p className="trialOfferLine"><strong className="trialNoCard">No credit card needed</strong></p>
       )}
@@ -116,7 +127,6 @@ export default function TrialPage({ account, access, offer, offerChecking, offer
       {notice && (
         <p className="accountError" role="alert">{notice} <a className="accountTextLink" href="/support">Contact support</a></p>
       )}
-      </section>
-    </main>
+    </AccessLayout>
   );
 }
