@@ -96,8 +96,7 @@ export default function EditorGuide({ compact, mode, step, onStep, onReplay, onT
     );
     return (
       <Modal title="Editor walkthrough" onClose={onClose} className={`editorGuide sampleWalkthrough${inEditor ? ' inEditorWalkthrough' : ''}`} footer={actions}>
-        <p className="sampleIntro">Follow a sample plan from first edit to export. Your own drawings stay unchanged.</p>
-        <SampleEditorPreview key={`preview-${step}`} step={step} playing={playing && visible} />
+        {!inEditor && <p className="sampleIntro">Follow a sample plan from first edit to export. Your own drawings stay unchanged.</p>}
         <div key={`instructions-${step}`} className="walkthroughStep" aria-live="polite">
           <div className="guideStepIntro">
             <span className="guideStepIcon"><Icon name={current.icon} size={24} /></span>
@@ -106,6 +105,7 @@ export default function EditorGuide({ compact, mode, step, onStep, onReplay, onT
           <h3>{current.title}</h3>
           <p>{current.text}</p>
         </div>
+        <SampleEditorPreview key={`preview-${step}`} step={step} playing={playing && visible} />
         {last && startHref && <a className="button primary sampleStart" href={startHref}>{startLabel}</a>}
       </Modal>
     );
