@@ -1,6 +1,6 @@
-import { createCheckout, monthlyCheckout, openBillingPortal, fulfillVerifiedEvent, validAttempt } from './billing.js';
+import { createBilling, validAttempt } from './billing.js';
 
-import { MONTHLY_VERSION } from './monthly-offer.js';
+import { MONTHLY_VERSION, LIVE_MONTHLY_VERSION } from './monthly-offer.js';
 
 const ACCOUNT = 'planpatch_accounts';
 const ACCOUNT_FIELDS = 'stripe_customer_id,stripe_test_customer_id,deletion_started_at';
@@ -68,7 +68,7 @@ async function getStripeCustomer(admin, stripe, column, userId, account, client)
   return latest?.deletion_started_at ? null : latest?.[column];
 }
 
-export function accountHandler({ admin, test, clientFor, siteOrigin, webhookSecret, cryptoProvider }) {
+export function accountHandler({ admin, test, live, clientFor, siteOrigin, webhookSecret, liveWebhookSecret, cryptoProvider, getBillingConfig }) {
   const origin = new URL(siteOrigin).origin;
   const allowed = new Set([
     origin,
@@ -77,8 +77,10 @@ export function accountHandler({ admin, test, clientFor, siteOrigin, webhookSecr
     'https://blueprint-blue-theta.vercel.app',
     DEV_ORIGIN,
   ]);
-  const webhookConfigured = Boolean(webhookSecret?.startsWith('whsec_'));
-  const checkoutReady = Boolean(test && webhookConfigured);
+  const configFor = async () => getBillingConfig ? await getBillingConfig() : { billing_live: false };
+  const signed = (secret) => Boolean(secret?.startsWith('whsec_'));
+  const services = (config, livemode) => createBilling({ livemode,
+    prices: { project: config.project_price, monthly: config.monthly_price }, portalConfiguration: config.portal_configuration });
 
   return async function handle(request) {
     const headers = {
@@ -99,28 +101,38 @@ export function accountHandler({ admin, test, clientFor, siteOrigin, webhookSecr
         'Access-Control-Allow-Headers': 'apikey, authorization, content-type, x-client-info, x-region',
       } });
     }
-    if (request.method === 'GET') return reply(200, {
-      sandboxBillingConfigured: Boolean(test), webhookConfigured, checkoutReady,
-    });
+    if (request.method === 'GET') {
+      try {
+        const config = await configFor();
+        const mode = config.billing_live === true;
+        return reply(200, { billingMode: mode ? 'live' : 'test',
+          billingConfigured: Boolean(mode ? live : test),
+          webhookConfigured: signed(mode ? liveWebhookSecret : webhookSecret),
+          checkoutReady: Boolean(mode ? live && signed(liveWebhookSecret) && config.checkout_enabled
+            && config.project_price && config.monthly_price && config.portal_configuration : test && signed(webhookSecret)) });
+      } catch { return reply(503, { error: 'Billing configuration is unavailable.' }); }
+    }
     if (request.method !== 'POST') return reply(405, { error: 'Method not allowed.' });
 
     const signature = request.headers.get('stripe-signature');
     if (signature) {
-      if (!checkoutReady) return reply(503, { error: 'Sandbox checkout is being set up.' });
-      let event;
-      try {
-        event = await test.webhooks.constructEventAsync(await request.text(), signature,
-          webhookSecret, undefined, cryptoProvider);
-      } catch {
-        return reply(400, { error: 'Invalid Stripe signature.' });
+      const payload = await request.text();
+      let verified;
+      for (const candidate of [{ stripe: live, secret: liveWebhookSecret, mode: true },
+        { stripe: test, secret: webhookSecret, mode: false }]) {
+        if (!candidate.stripe || !signed(candidate.secret)) continue;
+        try {
+          const event = await candidate.stripe.webhooks.constructEventAsync(payload, signature,
+            candidate.secret, undefined, cryptoProvider);
+          if (event.livemode === candidate.mode) { verified = { ...candidate, event }; break; }
+        } catch { /* Only a verified signature can enter fulfillment. */ }
       }
-      if (event.livemode !== false) return reply(400, { error: 'Expected a sandbox event.' });
+      if (!verified) return reply(400, { error: 'Invalid Stripe signature or payment mode.' });
       try {
-        await fulfillVerifiedEvent(event, test, admin);
+        const config = await configFor();
+        await services(config, verified.mode).fulfillVerifiedEvent(verified.event, verified.stripe, admin);
         return reply(200, { received: true });
-      } catch {
-        return reply(503, { error: 'Could not verify this sandbox payment yet.' });
-      }
+      } catch { return reply(503, { error: 'Could not verify this payment yet.' }); }
     }
 
     const authorization = request.headers.get('Authorization') || '';
@@ -137,14 +149,24 @@ export function accountHandler({ admin, test, clientFor, siteOrigin, webhookSecr
 
     let deleting = session.deleting;
     try {
+      const config = await configFor();
+      const isLive = config.billing_live === true;
+      const stripe = isLive ? live : test;
+      const monthlyVersion = isLive ? LIVE_MONTHLY_VERSION : MONTHLY_VERSION;
+      const confirmationRpc = isLive ? 'planpatch_live_subscription_confirmation' : 'planpatch_test_subscription_confirmation';
+      const webhookConfigured = signed(isLive ? liveWebhookSecret : webhookSecret);
+      const checkoutReady = Boolean(stripe && webhookConfigured && (!isLive || (config.checkout_enabled
+        && config.project_price && config.monthly_price && config.portal_configuration)));
+      const { createCheckout, monthlyCheckout, openBillingPortal } = services(config, isLive);
       if (body.action === 'status') {
         const access = deleting ? null : checked(await client.rpc('planpatch_sandbox_access').maybeSingle());
-        const confirmation = deleting ? null : await admin.rpc('planpatch_test_subscription_confirmation', {
+        const confirmation = deleting ? null : await admin.rpc(confirmationRpc, {
           owner_id: userId,
         }).maybeSingle();
         return reply(200, {
-          billingAvailable: Boolean(test), checkoutReady, deleting,
-          monthlyOfferVersion: confirmation && !confirmation.error ? MONTHLY_VERSION : null,
+          billingAvailable: Boolean(stripe && (!isLive || config.portal_configuration)), checkoutReady, deleting, billingMode: isLive ? 'live' : 'test',
+          activationPending: isLive && !config.checkout_enabled,
+          monthlyOfferVersion: confirmation && !confirmation.error ? monthlyVersion : null,
           monthlyConfirmation: confirmation?.data ?? null,
           paymentsRequired: Boolean(access?.payments_required), monthly: Boolean(access?.monthly),
           projectCredits: Number(access?.project_credits ?? 0), projectIds: access?.project_ids ?? [],
@@ -152,40 +174,40 @@ export function accountHandler({ admin, test, clientFor, siteOrigin, webhookSecr
       }
       if (body.action === 'billing' || body.action === 'checkout') {
         if (deleting) return reply(409, { error: 'Account deletion is in progress.', deleting });
-        if (!test || (body.action === 'checkout' && !checkoutReady)) {
-          return reply(503, { error: 'Sandbox billing is being set up.' });
+        if (!stripe || (isLive && body.action === 'billing' && !config.portal_configuration) || (body.action === 'checkout' && !checkoutReady)) {
+          return reply(503, { error: isLive ? 'Payments are awaiting Stripe activation.' : 'Sandbox billing is being set up.' });
         }
         if (body.action === 'checkout' && (!['project', 'monthly'].includes(body.plan) || !validAttempt(body.attempt))) {
-          return reply(400, { error: 'Choose a test plan.' });
+          return reply(400, { error: 'Choose a plan.' });
         }
         if (body.action === 'checkout' && body.plan === 'monthly'
-            && (body.consent?.accepted !== true || body.consent.version !== MONTHLY_VERSION)) {
+            && (body.consent?.accepted !== true || body.consent.version !== monthlyVersion)) {
           return reply(400, { error: 'Review and agree to the current monthly billing terms before checkout.' });
         }
         const account = await ensureAccount(admin, userId);
         if (!account || account.deletion_started_at) return reply(409, { error: 'Account deletion is in progress.' });
-        const customer = await getStripeCustomer(admin, test, 'stripe_test_customer_id', userId, account, client);
+        const customer = await getStripeCustomer(admin, stripe, isLive ? 'stripe_customer_id' : 'stripe_test_customer_id', userId, account, client);
         if (!customer) return reply(409, { error: 'Account deletion is in progress.' });
         const returnOrigin = requestOrigin && requestOrigin !== DEV_ORIGIN ? requestOrigin : origin;
         if (body.action === 'checkout') {
           const options = { plan: body.plan, customer, owner: userId, origin: returnOrigin, attempt: body.attempt };
           if (body.plan === 'monthly') {
             const access = checked(await client.rpc('planpatch_sandbox_access').maybeSingle());
-            if (access?.monthly) return reply(409, { error: 'Your monthly test subscription is already active.' });
-            const url = await monthlyCheckout(test, admin, { ...options, origin });
-            return url ? reply(200, { url }) : reply(409, { error: 'Check your subscription in Manage test billing before starting another checkout.' });
+            if (access?.monthly) return reply(409, { error: 'Your monthly subscription is already active.' });
+            const url = await monthlyCheckout(stripe, admin, { ...options, origin });
+            return url ? reply(200, { url }) : reply(409, { error: 'Check your subscription in Manage billing before starting another checkout.' });
           }
-          const checkout = await createCheckout(test, options);
+          const checkout = await createCheckout(stripe, options);
           return checkout ? reply(200, { url: checkout.url }) : reply(400, { error: 'Restart checkout from EditFloorPlans.com.' });
         }
-        const portal = await openBillingPortal(test, customer, returnOrigin + '/#/account/billing', body.cancelMonthly === true);
+        const portal = await openBillingPortal(stripe, customer, returnOrigin + '/#/account/billing', body.cancelMonthly === true);
         return reply(200, { url: portal.url });
       }
 
       if (body.confirmation !== 'DELETE') return reply(400, { error: 'Type DELETE to confirm.' });
       const account = await ensureAccount(admin, userId);
       if (!account) return reply(401, { error: 'Sign in to manage your account.' });
-      if (account.stripe_customer_id || (!test && account.stripe_test_customer_id)) {
+      if ((!live && account.stripe_customer_id) || (!test && account.stripe_test_customer_id)) {
         return reply(503, { error: 'Billing cleanup is unavailable. Try deleting your account again later.', deleting });
       }
       checked(await admin.from(ACCOUNT).update({ deletion_started_at: new Date().toISOString() })
@@ -193,6 +215,7 @@ export function accountHandler({ admin, test, clientFor, siteOrigin, webhookSecr
       deleting = true;
       const frozen = await readAccount(admin, userId);
       if (frozen) {
+        await removeCustomer(live, frozen.stripe_customer_id);
         await removeCustomer(test, frozen.stripe_test_customer_id);
         await removeBlueprints(admin.storage.from('blueprints'), userId);
         const { error } = await admin.auth.admin.deleteUser(userId);
@@ -203,7 +226,7 @@ export function accountHandler({ admin, test, clientFor, siteOrigin, webhookSecr
       const errors = {
         status: 'Could not check account access. Try again.',
         billing: 'Could not open billing. Try again.',
-        checkout: 'Could not open test checkout. Try again.',
+        checkout: 'Could not open checkout. Try again.',
         delete: 'Could not finish deleting your account. Try again.',
       };
       return reply(503, { error: errors[body.action], deleting });
