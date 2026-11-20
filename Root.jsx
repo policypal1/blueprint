@@ -280,7 +280,7 @@ export default function Root() {
   }, [route, createFromEditor]);
   return (
     <>
-      {import.meta.env?.PROD && <ConsentAnalytics path={analyticsPath} />}
+      {import.meta.env?.PROD && route !== 'revisionDemo' && <ConsentAnalytics path={analyticsPath} />}
       {account.error && (!showAuthPage || route === 'resetPassword') && (
         <div className="accountAlert" role="alert">
           <span>{account.error}</span>
