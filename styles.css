@@ -752,7 +752,7 @@ html:has(.authConfirmation) { overflow: hidden; }
 .planIllustration { display: block; width: 100%; height: auto; }
 .heroBlueprint .planIllustration { overflow: visible; }
 .heroBlueprint svg > rect { fill: transparent; }
-.heroBlueprint svg [stroke] { stroke: #bfdbcd; }
+.heroBlueprint svg [stroke]:not([stroke="none"]) { stroke: #bfdbcd; }
 .heroBlueprint svg g[fill="#fffaf3"] { fill: #294746; }
 .heroBlueprint svg [fill="#efeee8"] { fill: #335352; }
 .heroBlueprint svg g[stroke-width="1.5"] { stroke: #e2a777; }
