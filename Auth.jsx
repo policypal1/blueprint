@@ -44,7 +44,7 @@ function AuthLayout({ title, onClose, inert, children }) {
 
 export function SignInPage({
   account, onAuthenticate, onGoogle, onAuthenticated, onClose, initialMode = 'signIn',
-  editorEntry = false, trialOffer = false, previewWarning = '',
+  editorEntry = false, trialOffer = false, previewWarning = '', onBackToPreview,
 }) {
   const [mode, setMode] = useState(initialMode);
   const [name, setName] = useState('');
@@ -60,8 +60,7 @@ export function SignInPage({
   const creating = mode === 'create';
   const credentialForm = mode === 'signIn' || creating;
   const waiting = account.loading || Boolean(pending);
-  const title = editorEntry && creating ? 'Create an account to edit your plan'
-    : editorEntry && mode === 'signIn' ? 'Sign in to use the editor' : copy.title;
+  const title = editorEntry && mode === 'signIn' ? 'Sign in to use the editor' : copy.title;
 
   function selectMode(next) {
     setMode(next);
@@ -166,11 +165,6 @@ export function SignInPage({
       {account.loading || account.client ? (
         <>
           {previewWarning && !error && <p role="status">{previewWarning}</p>}
-          {creating && editorEntry && (
-            <p>{trialOffer
-              ? 'Start a free 3-day trial to draw, make changes, and export your plan. No credit card needed.'
-              : 'Sign up to choose editing access for your plan.'}</p>
-          )}
           {mode === 'signIn' && account.emailConfirmed && (
             <p className="authConfirmed" role="status">Email confirmed. You can now sign in on any device.</p>
           )}
@@ -243,6 +237,9 @@ export function SignInPage({
           )}
         </>
       ) : <p>Account sign-in is currently unavailable.</p>}
+      {onBackToPreview && (
+        <a className="accountTextLink" href="/#/editor" onClick={onBackToPreview}>Back to preview</a>
+      )}
     </AuthLayout>
     {confirmation}
   </>);
