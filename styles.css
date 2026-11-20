@@ -1974,7 +1974,11 @@ hr {
 .editorGuide { width: min(470px, 100%); }
 .sampleWalkthrough { width: min(900px, 100%); }
 .inEditorWalkthrough { width: min(1140px, 100%); }
-.inEditorWalkthrough .sampleEditorBody { height: min(43vh, 430px); }
+.inEditorWalkthrough .sampleEditorBody { height: min(32vh, 340px); min-height: 200px; }
+.sampleWalkthrough .guideStepIntro { float: right; gap: 7px; margin: 0 0 8px 12px; }
+.sampleWalkthrough .guideStepIcon { width: 30px; height: 30px; }
+.sampleWalkthrough .walkthroughStep { margin-bottom: 14px; }
+.sampleWalkthrough .walkthroughStep > p { font-size: 14px; }
 .sampleIntro { margin: 0 0 15px; font-size: 14px; color: var(--muted); }
 .sampleEditor { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; margin-bottom: 20px; background: var(--paper); }
 .sampleEditorBar { display: flex; justify-content: space-between; gap: 12px; padding: 11px 14px; color: var(--chromeText); background: var(--chrome); font-size: 14px; }
@@ -1995,6 +1999,12 @@ hr {
 .sampleObjectType { display: block; color: var(--muted); font-size: 12px; margin-bottom: 10px; }
 .sampleProperties label { display: block; padding: 6px 0; font-size: 14px; }
 .sampleProperties input { width: 100%; margin-top: 6px; min-height: 36px; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: white; color: var(--ink); font-size: 14px; pointer-events: none; }
+@media (max-height: 740px) {
+  .sampleProperties { padding: 9px; }
+  .sampleProperties > strong { margin-bottom: 6px; }
+  .sampleProperties label { padding-block: 4px; }
+  .sampleProperties input { min-height: 30px; margin-top: 4px; padding: 4px; }
+}
 .sampleProperties [data-highlight='true'] input { border-color: var(--accent); background: var(--soft); }
 .sampleAction { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 5px; margin-block: 12px; border: 1px solid var(--line); border-radius: 6px; }
 .sampleAction[data-highlight='true'] { background: var(--orange); border-color: var(--orange); }
