@@ -20,6 +20,7 @@ await build({
     auth: path.join(base, 'Auth.jsx'),
     trial: path.join(base, 'Trial.jsx'),
     editorGuide: path.join(base, 'EditorGuide.jsx'),
+    trialStatus: path.join(base, 'TrialStatus.jsx'),
   },
   outdir: path.join(base, '.test-build'),
   outExtension: { '.js': '.mjs' },
@@ -157,6 +158,7 @@ const { default: AccountPage } = await import('../.test-build/account.mjs');
 const { SignInPage, ResetPasswordPage } = await import('../.test-build/auth.mjs');
 const { default: TrialPage } = await import('../.test-build/trial.mjs');
 const { default: EditorGuide } = await import('../.test-build/editorGuide.mjs');
+const { default: TrialStatus } = await import('../.test-build/trialStatus.mjs');
 function Walkthrough() {
   const [step, onStep] = React.useState(0);
   const [open, setOpen] = React.useState(true);
@@ -191,6 +193,52 @@ async function newProject(name) {
   click('button', 'Create project');
   await waitFor(() => assert.equal(document.querySelector('.projectButton').textContent, name));
 }
+
+test('trial countdown ticks each second and catches up after a background pause', () => {
+  const realNow = Date.now;
+  const realInterval = window.setInterval;
+  const realClear = window.clearInterval;
+  let now = Date.parse('2026-11-20T00:00:00Z');
+  let tick;
+  Date.now = () => now;
+  window.setInterval = (callback, delay) => { assert.equal(delay, 1000); tick = callback; return 987654; };
+  window.clearInterval = () => {};
+  try {
+    render(React.createElement(TrialStatus, { expiresAt: '2026-11-20T03:28:05Z' }));
+    assert.equal(screen.getByRole('timer').textContent, '03:28:05');
+    now += 1000;
+    act(tick);
+    assert.equal(screen.getByRole('timer').textContent, '03:28:04');
+    now += 65_000;
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    assert.equal(screen.getByRole('timer').textContent, '03:26:59');
+    now = Date.parse('2026-11-20T03:28:05Z');
+    act(tick);
+    assert.equal(screen.queryByRole('timer'), null);
+  } finally {
+    cleanup(); Date.now = realNow; window.setInterval = realInterval; window.clearInterval = realClear;
+  }
+});
+
+test('live billing uses live consent and keeps purchases disabled during Stripe review', async () => {
+  const { LIVE_MONTHLY_VERSION, LIVE_MONTHLY_DISCLOSURE } = await import('../supabase/functions/planpatch-account/monthly-offer.js');
+  const calls = [];
+  const account = { user: { id: 'live-billing-ui' } };
+  const access = { data: { billingMode: 'live', checkoutReady: false, activationPending: true,
+    billingAvailable: true, monthlyOfferVersion: LIVE_MONTHLY_VERSION }, checkout: async (...args) => calls.push(args) };
+  const view = render(React.createElement(AccountPage, { account, access, billing: true }));
+  assert.ok(screen.getByText('Payments are awaiting Stripe activation.'));
+  assert.equal(screen.getByRole('button', { name: 'Buy a project credit' }).disabled, true);
+  assert.equal(screen.queryByRole('link', { name: 'Open test billing portal' }), null);
+  access.data.checkoutReady = true;
+  view.rerender(React.createElement(AccountPage, { account, access, billing: true }));
+  const [terms, renewal] = screen.getAllByRole('checkbox');
+  assert.equal(renewal.labels[0].textContent, LIVE_MONTHLY_DISCLOSURE);
+  fireEvent.click(terms); fireEvent.click(renewal);
+  click('button', 'Start subscription');
+  await waitFor(() => assert.equal(calls.length, 1));
+  assert.deepEqual(calls[0][2], { accepted: true, version: LIVE_MONTHLY_VERSION });
+});
 
 test('landing and pricing explain the product and lead to the editor', async () => {
   render(React.createElement(Marketing, { page: 'home' }));
@@ -1144,8 +1192,8 @@ test('trial starts only after accepting terms, and expired access cannot downloa
     const expired = { paymentsRequired: true, trialEndsAt: '2020-01-01T00:00:00Z', monthly: true, monthlyEndsAt: null };
     assert.equal(canOpenEditor(expired), false);
     assert.equal(canOpenEditor({ ...expired, projectIds: ['independently-paid-plan'] }), true);
-    assert.equal(trialTimeLeft('2026-11-18T03:30:00Z', Date.parse('2026-11-16T00:00:00Z')), '2 days 3 hr');
-    assert.equal(trialTimeLeft('2026-11-16T00:00:05Z', Date.parse('2026-11-16T00:00:00Z')), '1 min');
+    assert.equal(trialTimeLeft('2026-11-18T03:30:00Z', Date.parse('2026-11-16T00:00:00Z')), '2d 03:30:00');
+    assert.equal(trialTimeLeft('2026-11-16T00:00:05Z', Date.parse('2026-11-16T00:00:00Z')), '00:00:05');
     assert.equal(trialTimeLeft('2026-11-16T00:00:00Z', Date.parse('2026-11-16T00:00:00Z')), '');
   } finally {
     cleanup();
@@ -1225,7 +1273,7 @@ test('the billing route requires sign-in and the sandbox portal is labeled', asy
   const portal = screen.getByRole('link', { name: 'Open test billing portal' });
   assert.match(portal.href, /^https:\/\/billing\.stripe\.com\/p\/login\/test_/);
   assert.equal(portal.rel, 'noopener noreferrer');
-  assert.ok(screen.getByText('Test mode'));
+  assert.ok(screen.getByText('Checking…'));
   const sections = within(screen.getByRole('navigation', { name: 'Account' }));
   assert.deepEqual(sections.getAllByRole('link').map((link) => link.getAttribute('href')), [
     '#/account', '#/account/security', '#/account/billing',
