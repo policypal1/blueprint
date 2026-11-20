@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
 import AccountMenu from './AccountMenu.jsx';
-import PlanIllustration, { DoorPlan } from './PlanIllustration.jsx';
+import PlanIllustration from './PlanIllustration.jsx';
 import RevisionDemo from './RevisionDemo.jsx';
 import { POLICY_LINKS } from './Policies.jsx';
 import { publicPages } from './seo-pages.js';
@@ -179,52 +179,36 @@ function PriceOptions({ compact = false }) {
   );
 }
 
+function TrialQualifier() {
+  return (
+    <p className="trialQualifier">
+      <Icon name="card" size={16} /> <span>3-day free trial for new accounts · <strong className="trialNoCard">No credit card needed</strong></span>
+    </p>
+  );
+}
+
 function HomeContent({ showTrial, showVideo }) {
-  const heroAction = useRef(null);
-  const [showSticky, setShowSticky] = useState(false);
-
-  useEffect(() => {
-    if (!window.IntersectionObserver) return;
-    const observer = new window.IntersectionObserver(([entry]) => {
-      setShowSticky(entry.boundingClientRect.bottom <= 0);
-    });
-    observer.observe(heroAction.current);
-    return () => observer.disconnect();
-  }, []);
-
   return (
     <>
       <section className="hero" aria-labelledby="blueprint-hero-title">
         <div className="heroBlueprint" aria-hidden="true"><PlanIllustration /></div>
         <div className="heroCopy">
           <h1 id="blueprint-hero-title">Edit your <span className="heroEmphasis">existing floor plan</span>.</h1>
-          <p>Show your remodeling client where a door or wall could move. Mark the change on their PDF or image and export the revision for review.</p>
-          <div className="heroActions" ref={heroAction}>
+          <p>Mark up walls and doors on your existing PDF or image. Export the revised plan for your client.</p>
+          <div className="heroActions">
             <EditorLink />
-            {showTrial && <p className="trialQualifier">3-day free trial · <strong className="trialNoCard">No credit card needed</strong></p>}
-            <div><a href={publicPages.revisionDemo.path} className="detailsLink">Try interactive demo <Icon name="arrow" size={16} /></a></div>
+            {showTrial && <TrialQualifier />}
+            <div><a href="#doorway-demo" className="detailsLink demoScrollLink" onClick={(event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              document.getElementById('revision-title')?.focus({ preventScroll: true });
+              document.getElementById('doorway-demo')?.scrollIntoView?.({ block: 'start' });
+            }}>Try the demo below <Icon name="chevron" size={18} /></a></div>
           </div>
         </div>
       </section>
+      <RevisionDemo embedded videoHref={showVideo ? undefined : DEMO_HASH} />
       {showVideo && <BlueprintDemo />}
-      <section className="homeSection" aria-labelledby="comparison-title">
-        <h2 id="comparison-title">Give the hallway more clearance</h2>
-        <p className="comparisonIntro">The laundry door blocks the hall when it opens. Move the doorway along the wall and swing the door into the laundry.</p>
-        <div className="comparisonGrid">
-          <figure>
-            <figcaption><strong>Original</strong><span>Door opens into the hall</span></figcaption>
-            <DoorPlan />
-          </figure>
-          <figure>
-            <figcaption><strong>Revised</strong><span>Door opens into the laundry</span></figcaption>
-            <DoorPlan revised />
-          </figure>
-        </div>
-        <div className="revisionExampleLinks">
-          <a href={publicPages.revisionDemo.path} className="detailsLink">Try this doorway revision <Icon name="arrow" size={16} /></a>
-          {!showVideo && <a href={DEMO_HASH} className="detailsLink">Watch the editor video</a>}
-        </div>
-      </section>
       <section className="homeSection" aria-labelledby="project-pricing-title">
         <div className="priceSectionHeading">
           <h2 id="project-pricing-title">One project or monthly access</h2>
@@ -232,9 +216,6 @@ function HomeContent({ showTrial, showVideo }) {
         </div>
         <PriceOptions compact />
       </section>
-      <aside className="stickyEdit" aria-label="Floor plan editor shortcut" aria-hidden={!showSticky} data-visible={showSticky}>
-        <EditorLink tabIndex={showSticky ? undefined : -1} />
-      </aside>
     </>
   );
 }
@@ -269,7 +250,7 @@ function PricingContent({ showTrial }) {
       {showTrial && (
         <div className="pricingTrial">
           <EditorLink />
-          <p className="trialQualifier">3-day free trial · <strong className="trialNoCard">No credit card needed</strong></p>
+          <TrialQualifier />
         </div>
       )}
       <PriceOptions />
@@ -329,11 +310,10 @@ export function SiteFooter() {
   );
 }
 
-export default function Marketing({ page, account, trialOffer = false }) {
+export default function Marketing({ page, account, trialOffer: showTrial = false }) {
   const pricing = page === 'pricing';
   const guide = page === 'guide';
   const home = page === 'home' || page === 'demo';
-  const showTrial = trialOffer && !account?.signedIn;
 
   useEffect(() => {
     if (page === 'demo') scrollToDemo();
