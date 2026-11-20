@@ -228,7 +228,7 @@ function BillingSettings({ portalUrl, access }) {
           <div className="billingChoice">
             <h3>Single project</h3>
             <p><strong>$10 USD</strong> once, for one original blueprint</p>
-            <p>You can request a full refund while your credit is unused.</p>
+            <p>Revise one saved original plan and export your changes as PDF or PNG.</p>
             <button className="primary" disabled={!data?.checkoutReady || !accepted || Boolean(pending)}
               onClick={() => visitStripe('project')}>
               {pending === 'project' ? 'Opening Stripe…' : 'Buy a project credit'}
@@ -244,8 +244,7 @@ function BillingSettings({ portalUrl, access }) {
               </label>
             )}
             {currentOffer && !data?.monthly && (
-              <p><a className="accountTextLink" href="/refunds-and-cancellation" target="_blank" rel="noopener noreferrer">Cancellation policy</a>
-                {' · '}<a className="accountTextLink" href="/support" target="_blank" rel="noopener noreferrer">Billing support</a></p>
+              <p><a className="accountTextLink" href="/support" target="_blank" rel="noopener noreferrer">Billing support</a></p>
             )}
             {data?.checkoutReady && !data.monthly && !currentOffer && <p>Monthly checkout is being updated.</p>}
             <button className="primary" disabled={!data?.checkoutReady || !accepted || !currentOffer || !recurringAccepted || Boolean(pending) || data.monthly}
@@ -254,7 +253,6 @@ function BillingSettings({ portalUrl, access }) {
             </button>
           </div>
         </div>
-        <p className="billingNotice"><a className="accountTextLink" href="/refunds-and-cancellation">Refunds &amp; cancellation</a></p>
         {data && !data.checkoutReady && <p className="billingNotice">Sandbox checkout is being set up.</p>}
         {refresh && (
           <div className="accountActions billingNotice">
