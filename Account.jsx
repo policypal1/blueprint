@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AccountAvatar, profileName } from './AccountMenu.jsx';
 import { Icon, Modal, PRODUCT_NAME } from './ui.jsx';
 import { authErrorText, MAX_DISPLAY_NAME_LENGTH } from './useAccount.js';
-import { canOpenEditor, timedAccessActive } from './access.js';
+import { canOpenEditor } from './access.js';
 import { MONTHLY_VERSION, MONTHLY_DISCLOSURE, LIVE_MONTHLY_VERSION, LIVE_MONTHLY_DISCLOSURE, MONTHLY_CANCELLATION_URL } from './supabase/functions/planpatch-account/monthly-offer.js';
 import { PolicyAgreement } from './Policies.jsx';
 
@@ -183,7 +183,6 @@ function BillingSettings({ portalUrl, access }) {
   const backupPortal = !isLive && STRIPE_TEST_PORTAL.test(portalUrl);
   const query = new URLSearchParams(window.location.search);
   const returned = query.has('checkout') || query.has('sandbox_checkout');
-  const trialActive = timedAccessActive(data?.trialEndsAt);
 
   async function visitStripe(action) {
     const openPortal = action === 'portal' || action === 'cancel';
@@ -209,11 +208,8 @@ function BillingSettings({ portalUrl, access }) {
       <section className="accountCard" aria-labelledby="plans-billing-title">
         <div className="accountCardHeading">
           <h2 id="plans-billing-title">Plans and access</h2>
-          <span className="billingMode">{data ? isLive ? 'Live billing' : 'Test mode' : 'Checking…'}</span>
+          {data && !isLive && <span className="billingMode">Test mode</span>}
         </div>
-        {trialActive && (
-          <p>Your free trial ends {new Date(data.trialEndsAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}.</p>
-        )}
         {data?.monthly ? <p>Your monthly {isLive ? 'subscription' : 'test subscription'} is active.</p> : (
           <p>{data?.projectCredits || data?.projectIds?.length
             ? `${data.projectCredits} unused project ${data.projectCredits === 1 ? 'credit' : 'credits'} · ${data.projectIds.length} unlocked`
@@ -230,7 +226,7 @@ function BillingSettings({ portalUrl, access }) {
           </label>
         )}
         <div className="billingChoices">
-          <div className="billingChoice">
+          <div className="billingChoice" data-selected={query.get('plan') === 'project'}>
             <h3>Single project</h3>
             <p><strong>$10 USD</strong> once, for one original blueprint</p>
             <button className="primary" disabled={!data?.checkoutReady || !accepted || Boolean(pending)}
@@ -238,7 +234,7 @@ function BillingSettings({ portalUrl, access }) {
               {pending === 'project' ? 'Opening Stripe…' : 'Buy a project credit'}
             </button>
           </div>
-          <div className="billingChoice">
+          <div className="billingChoice" data-selected={query.get('plan') === 'monthly'}>
             <h3>Monthly plan</h3>
             <p><strong>$19 USD</strong> per month. Renews until canceled.</p>
             {data?.checkoutReady && !data.monthly && currentOffer && (
@@ -247,9 +243,6 @@ function BillingSettings({ portalUrl, access }) {
                 <span>{disclosure}</span>
               </label>
             )}
-            {currentOffer && !data?.monthly && (
-              <p><a className="accountTextLink" href="/support" target="_blank" rel="noopener noreferrer">Billing support</a></p>
-            )}
             {data?.checkoutReady && !data.monthly && !currentOffer && <p>Monthly checkout is being updated.</p>}
             <button className="primary" disabled={!data?.checkoutReady || !accepted || !currentOffer || !recurringAccepted || Boolean(pending) || data.monthly}
               onClick={() => visitStripe('monthly')}>
@@ -257,7 +250,7 @@ function BillingSettings({ portalUrl, access }) {
             </button>
           </div>
         </div>
-        {data && !data.checkoutReady && <p className="billingNotice">{isLive ? data.activationPending ? 'Payments are awaiting Stripe activation.' : 'Checkout is being set up.' : 'Sandbox checkout is being set up.'}</p>}
+        {data && !isLive && !data.checkoutReady && <p className="billingNotice">Sandbox checkout is being set up.</p>}
         {refresh && (
           <div className="accountActions billingNotice">
             {canOpenEditor(data) ? (
