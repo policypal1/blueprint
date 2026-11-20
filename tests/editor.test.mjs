@@ -129,6 +129,7 @@ globalThis.Image = class {
   naturalHeight = 700;
   width = 1000;
   height = 700;
+  async decode() {}
   set src(v) {
     queueMicrotask(() => this.onload?.());
   }
@@ -277,20 +278,19 @@ test('landing and pricing explain the product and lead to the editor', async () 
   render(React.createElement(Marketing, { page: 'home' }));
   const hero = screen.getByRole('region', { name: /Edit your existing floor plan/ });
   assert.ok(within(hero).getByRole('heading', { name: /Edit your existing floor plan/ }));
-  assert.ok(screen.getByText(/Upload a PDF or image, mark up walls/));
-  assert.equal(within(hero).getAllByRole('link').length, 1);
+  assert.ok(screen.getByText(/remodeling client.*PDF or image/));
+  assert.equal(within(hero).getByRole('link', { name: 'Try interactive demo' }).getAttribute('href'), '/demo');
   assert.equal(
     within(hero).getByRole('link', { name: 'Open editor' }).getAttribute('href'),
     '/#/editor',
   );
-  assert.equal(document.querySelector('video').getAttribute('src'), '/planpatch-demo.mp4');
   assert.equal(document.querySelector('.stickyEdit').getAttribute('aria-hidden'), 'true');
-  assert.ok(screen.getByRole('heading', { name: 'How it works' }));
   assert.equal(screen.queryByText('Bring your plan'), null);
   const pricing = screen.getByRole('heading', { name: 'One project or monthly access' });
-  const comparison = screen.getByRole('heading', { name: 'See what changed' });
+  const comparison = screen.getByRole('heading', { name: 'Give the hallway more clearance' });
   assert.ok(comparison.compareDocumentPosition(pricing) & Node.DOCUMENT_POSITION_FOLLOWING);
-  assert.ok(screen.getByRole('img', { name: /the old doorway is filled.*a window is added/i }));
+  assert.ok(screen.getByRole('img', { name: /the old doorway is filled.*leaving the hall clear/i }));
+  assert.equal(screen.getByRole('link', { name: 'Try this doorway revision' }).getAttribute('href'), '/demo');
   assert.ok(document.querySelector('.mobileMenu .siteNav a.navEditorLink[href="/#/editor"]'));
   const desktopNav = within(document.querySelector('.siteHeaderActions > nav'));
   assert.equal(desktopNav.queryByRole('link', { name: 'How it works' }), null);
@@ -1249,7 +1249,7 @@ test('guest landing opens the editor and exposes the same policy links in the mo
   assert.equal(hero.getByRole('link', { name: 'Open editor' }).getAttribute('href'), '/#/editor');
   assert.ok(hero.getByText('No credit card needed', { exact: true }).classList.contains('trialNoCard'));
   assert.equal(hero.queryByText(/ends automatically/i), null);
-  assert.equal(hero.getAllByRole('link').length, 1);
+  assert.equal(hero.getByRole('link', { name: 'Try interactive demo' }).getAttribute('href'), '/demo');
   const footer = within(screen.getByRole('navigation', { name: 'Footer' }));
   assert.deepEqual(footer.getAllByRole('link').map((link) => link.getAttribute('href')), [
     '/terms', '/privacy', '/refunds-and-cancellation', '/support', '/privacy#cookie-settings',
@@ -1275,8 +1275,76 @@ test('the PDF editing guide shows the video followed by three steps', () => {
   assert.ok(within(main).getByText(/up to 25 MB/));
   assert.equal(within(main).queryByRole('link', { name: 'Open editor' }), null);
   assert.deepEqual(within(main).getAllByRole('link').map((link) => link.getAttribute('href')), [
-    '/measure-a-floor-plan-pdf', '/print-a-floor-plan-pdf-to-scale',
+    '/demo', '/measure-a-floor-plan-pdf', '/print-a-floor-plan-pdf-to-scale',
   ]);
+});
+
+test('the original how-it-works link still opens the video and links to the interactive demo', async () => {
+  const previous = window.location.href;
+  try {
+    window.history.replaceState(null, '', '/#/how-it-works');
+    render(React.createElement(Root));
+    const section = await screen.findByRole('region', { name: 'How it works' });
+    assert.equal(section.querySelector('video').getAttribute('src'), '/planpatch-demo.mp4');
+    assert.equal(within(section).getByRole('link', { name: 'Try a guided edit' }).getAttribute('href'), '/demo');
+  } finally {
+    cleanup();
+    window.history.replaceState(null, '', previous);
+  }
+});
+
+test('a guest can revise the sample doorway, compare drawings, download and restart without opening project storage', async (t) => {
+  const previous = window.location.href;
+  const dbOpen = t.mock.method(globalThis.indexedDB, 'open');
+  const saved = { ...localStorage };
+  t.after(() => { window.history.replaceState(null, '', previous); });
+  window.history.replaceState(null, '', '/demo');
+  render(React.createElement(Root));
+  const tour = within(await screen.findByRole('region', { name: 'Move a laundry doorway.' }));
+  const toolbar = within(tour.getByRole('group', { name: 'Demo editor tools' }));
+  const guide = within(tour.getByRole('complementary', { name: 'Demo instructions' }));
+  const canvas = within(document.querySelector('.revisionCanvas'));
+  const press = (scope, name) => fireEvent.click(scope.getByRole('button', { name, exact: true }));
+  const stage = (label, sheet) => assert.ok(within(tour.getByRole('img', { name: label })).getByText(sheet));
+
+  stage(/existing laundry door opens into the hall/, 'EXISTING PLAN');
+  assert.ok(toolbar.getByRole('button', { name: 'Choose Door' }).disabled);
+  press(toolbar, 'Choose Clean up');
+  press(canvas, 'Cover old swing');
+  stage(/leaving the opening/, 'DOOR REMOVAL');
+  press(toolbar, 'Choose Wall');
+  press(canvas, 'Set wall start');
+  press(canvas, 'Finish wall');
+  stage(/the laundry wall is continuous/, 'DOORWAY INFILL');
+  press(toolbar, 'Choose Door');
+  press(canvas, 'Place new door');
+  stage(/relocated door opens into the laundry/, 'REVISED PLAN');
+  const compare = within(tour.getByRole('group', { name: 'Compare drawings' }));
+  press(compare, 'Original');
+  stage(/existing laundry door opens into the hall/, 'EXISTING PLAN');
+  assert.equal(tour.queryByRole('img', { name: /relocated door/ }), null);
+  press(compare, 'Revised');
+  stage(/relocated door opens into the laundry/, 'REVISED PLAN');
+
+  press(guide, 'Back');
+  stage(/the laundry wall is continuous/, 'DOORWAY INFILL');
+  press(canvas, 'Place new door');
+  press(toolbar, 'Choose Export');
+  assert.equal(guide.getByRole('link', { name: 'Edit my own plan' }).getAttribute('href'), '/#/editor');
+  press(within(tour.getByRole('group', { name: 'Compare drawings' })), 'Original');
+  press(guide, 'Download sample PDF');
+  await guide.findByText('Your sample PDF is ready to save.');
+  assert.equal(downloads.at(-1).name, 'laundry-doorway-revision.pdf');
+  assert.equal(downloads.at(-1).blob.type, 'application/pdf');
+  const sampleSvg = [...urlBlobs.values()].filter((blob) => blob.type.startsWith('image/svg+xml')).at(-1);
+  assert.match(await sampleSvg.text(), /REVISED PLAN/);
+
+  press(tour, 'Restart');
+  stage(/existing laundry door opens into the hall/, 'EXISTING PLAN');
+  assert.ok(tour.getByRole('button', { name: 'Restart' }).disabled);
+  assert.equal(tour.queryByRole('group', { name: 'Compare drawings' }), null);
+  assert.equal(dbOpen.mock.callCount(), 0);
+  assert.deepEqual({ ...localStorage }, saved);
 });
 
 test('each new guide has a public page and related navigation', async () => {

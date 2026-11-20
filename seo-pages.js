@@ -5,7 +5,13 @@ export const publicPages = {
   home: {
     path: '/',
     title: `Edit Floor Plan PDFs Online | ${SITE_NAME}`,
-    description: 'Edit an existing floor plan PDF or image in your browser. Mark up walls, doors and fixtures, then export a revised PDF or PNG.',
+    description: 'Mark proposed wall and doorway changes on your client’s existing floor plan PDF or image. Export a revised PDF or PNG for their remodel review.',
+    sitemap: true,
+  },
+  revisionDemo: {
+    path: '/demo',
+    title: `Interactive Floor Plan Editing Demo | ${SITE_NAME}`,
+    description: 'Try a guided remodel revision on a sample floor plan. Close the old doorway, move the laundry door and see how the change clears the hallway.',
     sitemap: true,
   },
   guide: {
