@@ -53,7 +53,7 @@ function walkthroughSteps(compact) {
   ];
 }
 
-export default function EditorGuide({ compact, mode, step, onStep, onReplay, onTry, onClose, startHref, startLabel }) {
+export default function EditorGuide({ compact, mode, step, onStep, onReplay, onTry, onClose, onReference, inEditor, startHref, startLabel }) {
   const steps = walkthroughSteps(compact);
   const [playing, setPlaying] = useState(() => typeof window !== 'undefined'
     && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
@@ -88,13 +88,14 @@ export default function EditorGuide({ compact, mode, step, onStep, onReplay, onT
           setPlaying(!playing);
         }}>{playing ? 'Pause walkthrough' : last ? 'Play again' : 'Play walkthrough'}</button>
         {onTry && <button type="button" onClick={() => onTry(current.action)}>{current.label}</button>}
+        {onReference && <button type="button" onClick={onReference}>Tool reference</button>}
         <button type="button" className="primary" data-dialog-focus onClick={last ? onClose : () => onStep(step + 1)}>
           {last ? 'Finish' : 'Next'}
         </button>
       </div>
     );
     return (
-      <Modal title="Editor walkthrough" onClose={onClose} className="editorGuide sampleWalkthrough" footer={actions}>
+      <Modal title="Editor walkthrough" onClose={onClose} className={`editorGuide sampleWalkthrough${inEditor ? ' inEditorWalkthrough' : ''}`} footer={actions}>
         <p className="sampleIntro">Follow a sample plan from first edit to export. Your own drawings stay unchanged.</p>
         <SampleEditorPreview key={`preview-${step}`} step={step} playing={playing && visible} />
         <div key={`instructions-${step}`} className="walkthroughStep" aria-live="polite">
