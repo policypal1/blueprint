@@ -162,7 +162,7 @@ export function SiteHeader({ page, account }) {
 function PriceOptions({ compact = false }) {
   return (
     <div className={compact ? 'priceOptions compactPrices' : 'priceOptions'}>
-      {plans.map(({ label, unit, amount, icon, description }) => (
+      {plans.map(({ label, unit, amount, icon, description }, index) => (
         <article className="priceCard" key={unit}>
           <span className="priceIcon"><Icon name={icon} size={22} /></span>
           <div>
@@ -170,6 +170,9 @@ function PriceOptions({ compact = false }) {
             <p className="price"><strong>${amount}</strong><span> USD {unit}</span></p>
             {!compact && <p className="priceDetail">{description}</p>}
           </div>
+          {!compact && <a className="button primary pricePurchase" href={`/?plan=${index === 0 ? 'project' : 'monthly'}#/account/billing`}>
+            {index === 0 ? 'Buy single project' : 'Get monthly access'}
+          </a>}
         </article>
       ))}
     </div>
@@ -199,7 +202,7 @@ function HomeContent({ trialOffer, signedIn }) {
           <p>Upload a PDF or image, mark up walls, doors and fixtures, and export a revised plan.</p>
           <div className="heroActions" ref={heroAction}>
             <EditorLink trial={showTrial} />
-            {showTrial && <p className="trialQualifier"><strong className="trialNoCard">No credit card needed</strong></p>}
+            {trialOffer && <p className="trialQualifier">{signedIn && <>3-day free trial · </>}<strong className="trialNoCard">No credit card needed</strong></p>}
           </div>
         </div>
       </section>
@@ -259,7 +262,7 @@ function PricingContent({ trialOffer, signedIn }) {
   return (
     <>
       <h1>Pricing</h1>
-      {trialOffer && !signedIn && (
+      {trialOffer && (
         <div className="pricingTrial">
           <EditorLink trial />
           <p className="trialQualifier"><strong className="trialNoCard">No credit card needed</strong>. Ends automatically.</p>
