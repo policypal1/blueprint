@@ -556,11 +556,13 @@ p {
 .profileTitle .accountAvatar { width: 42px; height: 42px; font-size: 18px; }
 .accountCard .accountError { color: var(--danger); }
 .billingChoices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.billingChoice { display: flex; flex-direction: column; gap: 10px; padding: 15px; border: 1px solid var(--line); border-radius: 8px; }
+.billingChoice { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: clamp(16px, 3vw, 22px); border: 1px solid var(--line); border-radius: 10px; }
 .billingChoice h3, .billingChoice p { margin: 0; }
-.billingChoice p { font-size: 13px; }
-.billingChoice p strong { color: var(--ink); font-size: 19px; }
-.billingChoice > button { min-width: 0; min-height: 44px; width: 100%; margin-top: auto; }
+.billingChoice h3 { font-size: 17px; font-weight: 600; }
+.billingChoice p { font-size: 14px; }
+.billingChoicePrice { display: flex; align-items: baseline; gap: 6px; }
+.billingChoicePrice strong { color: var(--ink); font-size: 30px; font-weight: 600; letter-spacing: -0.045em; line-height: 1.2; }
+.billingChoice > button { min-width: 0; min-height: 44px; width: 100%; margin-top: 6px; }
 .billingNotice { margin-block: 14px 0; }
 .deletionCard { border-color: #e9c8bd; }
 .accessPage { padding: clamp(24px, 5vw, 58px) var(--site-gutter) clamp(48px, 8vw, 84px); }
@@ -583,6 +585,24 @@ p {
   margin-top: 22px;
 }
 .accessActions :is(button, .button) { min-height: 44px; }
+.expiredTrialCard { text-align: start; }
+.expiredTrialCard p { margin: 0; }
+.expiredTrialOptions { display: grid; gap: 10px; margin-top: 22px; }
+.expiredTrialOptions a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 12px clamp(10px, 3vw, 18px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-weight: 600;
+}
+.expiredTrialOptions a:is(:focus-visible, :hover) { border-color: var(--accent); background: var(--panel); }
+.expiredTrialOptions svg { color: var(--accent); }
+.expiredTrialOptions small { display: block; margin-top: 3px; color: var(--muted); font-weight: 400; font-size: 13px; }
+.expiredTrialPrice { text-align: end; font-size: 22px; line-height: 1.15; }
 .notFoundCard .notFoundCode { margin-bottom: 6px; color: var(--accent); font-size: 14px; font-weight: 700; }
 @media (max-width: 560px) { .billingChoices { grid-template-columns: minmax(0, 1fr); } }
 
@@ -901,6 +921,47 @@ html:has(.authConfirmation) { overflow: hidden; }
 .siteFooter nav a:hover { text-decoration: underline; }
 .siteFooter > a:first-child { margin-right: auto; color: var(--ink); }
 .siteFooter small { font-size: 12px; }
+.footerMenu { display: none; }
+@media (max-width: 800px) {
+  .siteFooter {
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    gap: 8px;
+    padding-block: 6px max(6px, env(safe-area-inset-bottom));
+  }
+  .siteFooter .footerDesktop { display: none; }
+  .footerMenu { display: block; position: relative; }
+  .footerMenu summary {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    min-height: 44px;
+    padding-inline: 6px;
+    border-radius: 6px;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 500;
+    list-style: none;
+    cursor: pointer;
+  }
+  .footerMenu summary::-webkit-details-marker { display: none; }
+  .footerMenu[open] summary svg { transform: rotate(180deg); }
+  .footerMenuPanel {
+    position: absolute;
+    inset-inline-end: 0;
+    bottom: calc(100% + 4px);
+    z-index: 5;
+    min-width: 210px;
+    padding: 6px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 6px 24px #252a2b20;
+  }
+  .footerMenuPanel nav { display: grid; gap: 0; }
+  .footerMenuPanel a { padding-inline: 10px; font-size: 14px; }
+  .footerMenuPanel small { display: block; border-top: 1px solid var(--line); padding: 10px; }
+}
 .heroActions .trialQualifier, .trialQualifier {
   margin: 10px 0 0;
   color: var(--muted);
@@ -1001,9 +1062,9 @@ html:has(.authConfirmation) { overflow: hidden; }
 .policyAgreement input { flex: none; inline-size: 17px; block-size: 17px; margin: 2px 0 0; accent-color: var(--accent); }
 .authPolicyLinks { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; }
 .pricingPage {
-  max-width: 880px;
-  margin: auto;
-  padding: clamp(36px, 7vw, 74px) 5% clamp(48px, 8vw, 84px);
+  width: min(100%, 880px);
+  margin-inline: auto;
+  padding: clamp(26px, 7vw, 74px) var(--site-gutter) clamp(40px, 8vw, 84px);
 }
 .pricingPage > h1 {
   text-align: center;
@@ -1023,7 +1084,7 @@ html:has(.authConfirmation) { overflow: hidden; }
   padding: clamp(16px, 3vw, 28px);
 }
 .priceOptions:not(.compactPrices) .priceCard { display: flex; flex-direction: column; }
-.priceOptions:not(.compactPrices) .priceCard > div { flex: 1; }
+.priceOptions:not(.compactPrices) .priceDetail { flex: 1; }
 .pricePurchase { width: 100%; min-height: 48px; margin-top: 22px; }
 .billingChoice[data-selected='true'] { border-color: var(--accent); }
 .priceIcon {
@@ -1062,10 +1123,27 @@ html:has(.authConfirmation) { overflow: hidden; }
   background: var(--site);
 }
 .compactPrices .price strong { font-size: clamp(29px, 4.5vw, 42px); }
+@media (max-width: 640px) {
+  .pricingPage .priceOptions { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .pricingPage .priceCard { padding: 18px; }
+  .pricingPage .priceIcon { display: none; }
+  .pricingPage .priceCard > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+  .pricingPage .priceCard h2 { margin: 0; font-size: 20px; }
+  .pricingPage .price { margin-inline-start: auto; text-align: end; }
+  .pricingPage .price strong { font-size: 32px; }
+  .pricingPage .price span { display: block; }
+  .pricingPage .priceDetail { margin-top: 12px; }
+  .pricingPage .pricePurchase { margin-top: 16px; min-height: 44px; }
+}
 @media (max-width: 480px) {
-  .pricingPage .priceOptions { grid-template-columns: minmax(0, 1fr); }
-  .compactPrices .priceCard { display: grid; gap: 8px; }
-  .price span { display: block; margin-top: 4px; }
+  .compactPrices .priceIcon { display: none; }
+  .compactPrices .price span { display: block; margin-top: 4px; }
 }
 .faqSection { margin-top: clamp(36px, 6vw, 60px); }
 .faqSection h2 {
@@ -1483,6 +1561,9 @@ html:has(.authConfirmation) { overflow: hidden; }
   font-size: clamp(20px, 3vw, 25px);
   letter-spacing: -0.025em;
 }
+.canvasWelcome h2:has(+ p) { margin-bottom: 0; }
+.canvasWelcome .hint { margin: 8px 0 16px; }
+.canvasImportActions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .canvasWelcome button { min-height: 44px; min-width: 104px; flex-shrink: 0; }
 .canvasBusy {
   position: absolute;
