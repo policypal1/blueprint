@@ -10,7 +10,7 @@ import TrialStatus from './TrialStatus.jsx';
 import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
 import { removeDeviceProjects } from './useProjectStore.js';
 import { createProjectRepository } from './account-projects.js';
-import { useAccount } from './useAccount.js';
+import { accountReturnTarget, useAccount } from './useAccount.js';
 import usePlanPatchAccount, { useTrialOffer } from './usePlanPatchAccount.js';
 import { canOpenEditor, fullEditorAccess, timedAccessActive } from './access.js';
 import { publicPageAt, publicPages } from './seo-pages.js';
@@ -124,6 +124,7 @@ export default function Root() {
   const [visitedEditor, setVisitedEditor] = useState(() => isEditorRoute(route));
   const [signInDialog, setSignInDialog] = useState(false);
   const signInTarget = useRef('#/account');
+  const editOrigin = useRef(null);
   const showEditor = isEditorRoute(route);
   const policy = access.data;
   const requireSignIn = Boolean(import.meta.env?.PROD || account.enabled);
@@ -131,9 +132,10 @@ export default function Root() {
   const editorAvailable = !requireSignIn || (!account.loading && (!owner || (policy && !policy.deleting)));
   const previewOnly = editorAvailable && !editingAllowed;
   const viewingAccess = route === 'editorAccess' && Boolean(owner);
-  const showWorkspace = showEditor && !viewingAccess && editorAvailable;
   const editorReturn = route === 'signIn' ? editorAuthDestination() : null;
   const editorSignIn = Boolean(editorReturn);
+  const editorDialog = previewOnly && (viewingAccess || editorSignIn);
+  const showWorkspace = editorAvailable && (showEditor || editorDialog);
   const fullAccess = fullEditorAccess(policy);
   const createFromEditor = editorReturn === ACCESS_HASH;
   const showRecentPlans = route === 'recent' && !previewOnly;
@@ -146,18 +148,40 @@ export default function Root() {
 
   async function requestEditing() {
     const location = window.location.href;
+    const trigger = document.activeElement;
     const ready = await preview.prepareNavigation();
     if (ready && window.location.href === location) {
+      editOrigin.current = { location, trigger };
       navigateTo(owner ? `/${ACCESS_HASH}` : EDITOR_SIGN_UP);
     }
+  }
+
+  function closeEditorDialog() {
+    if (editorSignIn) preview.cancelSignIn();
+    if (editOrigin.current) window.history.back();
+    else navigateTo(`/${RECENT_HASH}`, true);
   }
 
   function backToPreview(event) {
     if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
-    if (editorSignIn) preview.cancelSignIn();
-    navigateTo(`/${RECENT_HASH}`);
+    closeEditorDialog();
   }
+
+  function chooseBillingPlan(event) {
+    if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    navigateTo(event.currentTarget.href);
+  }
+
+  useEffect(() => {
+    const origin = editOrigin.current;
+    if (editorDialog || !origin) return;
+    if (window.location.href === origin.location && showWorkspace && origin.trigger?.isConnected) {
+      origin.trigger.focus({ preventScroll: true });
+    }
+    if (showWorkspace || showAccount) editOrigin.current = null;
+  }, [editorDialog, showWorkspace, showAccount]);
 
   function openSignIn(mode = 'create') {
     if (showTrial) {
@@ -165,7 +189,7 @@ export default function Root() {
       setSignInDialog(mode);
       return;
     }
-    signInTarget.current = showAccount ? window.location.hash : '#/account';
+    signInTarget.current = showAccount ? accountReturnTarget(window.location.hash, window.location.search) : '#/account';
     window.location.hash = SIGN_IN_HASH;
   }
 
@@ -280,7 +304,7 @@ export default function Root() {
   }, [route, createFromEditor]);
   return (
     <>
-      {import.meta.env?.PROD && route !== 'revisionDemo' && <ConsentAnalytics path={analyticsPath} />}
+      {import.meta.env?.PROD && <ConsentAnalytics path={analyticsPath} />}
       {account.error && (!showAuthPage || route === 'resetPassword') && (
         <div className="accountAlert" role="alert">
           <span>{account.error}</span>
@@ -288,7 +312,7 @@ export default function Root() {
         </div>
       )}
       {!showEditor && !showAccount && !showAuthPage && !showTrial && (
-        <PublicPage page={route} account={accountNav} trialOffer={trialOffer && !account.loading && !owner} />
+        <PublicPage page={route} account={accountNav} trialOffer={trialOffer} />
       )}
       {showTrial && (
         <>
@@ -298,7 +322,7 @@ export default function Root() {
             onCheckOffer={trialStatus.refresh} onSignIn={openSignIn} />
         </>
       )}
-      {showAuthPage && (
+      {showAuthPage && !editorDialog && (
         <>
           <AuthHeader />
           {route === 'resetPassword' ? <ResetPasswordPage account={account} /> : (
@@ -317,21 +341,17 @@ export default function Root() {
             onSignOut={signOut} onDeleted={finishDeletion} />
         </>
       )}
-      {owner && preview.plan && preview.redirectWarning && (showEditor || showAccount || showTrial) && (
+      {owner && preview.plan && preview.redirectWarning && !editorDialog && (showEditor || showAccount || showTrial) && (
         <p role="status" className="accountAlert">{preview.redirectWarning}</p>
       )}
       {showEditor && !showWorkspace && (
         <>
           <SiteHeader page={route} account={accountNav} />
-          {viewingAccess && owner && policy?.canStartTrial && !policy.deleting && !account.loading ? (
-            <TrialPage account={account} access={access} offer={trialOffer}
-              offerChecking={trialStatus.checking} offerError={trialStatus.error}
-              onCheckOffer={trialStatus.refresh} onSignIn={openSignIn} />
-          ) : <EditorAccess access={access} accountLoading={account.loading} />}
+          <EditorAccess access={access} accountLoading={account.loading} />
         </>
       )}
-      {(showEditor || visitedEditor) && editorAvailable && (
-        <div className="editorRoot" hidden={!showWorkspace}>
+      {(showWorkspace || visitedEditor) && editorAvailable && (
+        <div className="editorRoot" hidden={!showWorkspace} inert={editorDialog ? '' : undefined} aria-hidden={editorDialog || undefined}>
           {showRecentPlans && <SiteHeader page={route} account={accountNav} />}
           {showRecentPlans && !policy?.monthly && timedAccessActive(policy?.trialEndsAt) && (
             <TrialStatus expiresAt={policy.trialEndsAt} />
@@ -349,7 +369,7 @@ export default function Root() {
                 <div className="loadingScreen" role="status">Opening your workspace…</div>
               ) : <Editor
                 key={`${owner || 'guest'}:${previewOnly ? 'preview' : 'edit'}`}
-                active={showWorkspace}
+                active={showWorkspace && !editorDialog}
                 previewOnly={previewOnly}
                 previewPlan={preview.plan}
                 onPreviewPlanChange={preview.setPlan}
@@ -379,7 +399,22 @@ export default function Root() {
           </div>
         </div>
       )}
-      {route !== 'privacy' && <PrivacyChoices banner />}
+      {editorDialog && (
+        <div className="editorAccessOverlay">
+          {editorSignIn ? (
+            <SignInPage {...signInProps} initialMode={createFromEditor ? 'create' : 'signIn'}
+              editorEntry trialOffer={trialOffer} previewWarning={preview.redirectWarning}
+              onClose={closeEditorDialog} />
+          ) : policy.canStartTrial ? (
+            <TrialPage account={account} access={access} offer={trialOffer}
+              onClose={closeEditorDialog} />
+          ) : (
+            <ExpiredTrialPlans expired={Boolean(policy.trialEndsAt)} onClose={closeEditorDialog}
+              onChoose={chooseBillingPlan} previewWarning={preview.redirectWarning} />
+          )}
+        </div>
+      )}
+      {route !== 'privacy' && !editorDialog && <PrivacyChoices banner />}
       {signInDialog && showTrial && (
         <SignInPage {...signInProps} initialMode={signInDialog} trialOffer={trialOffer}
           onClose={() => setSignInDialog(false)} />
