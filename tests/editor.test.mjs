@@ -226,7 +226,10 @@ test('live billing uses live consent and keeps purchases disabled during Stripe 
   const account = { user: { id: 'live-billing-ui' } };
   const access = { data: { billingMode: 'live', checkoutReady: false, activationPending: true,
     billingAvailable: true, monthlyOfferVersion: LIVE_MONTHLY_VERSION }, checkout: async (...args) => calls.push(args) };
-  const view = render(React.createElement(AccountPage, { account, access, billing: true }));
+  const view = render(React.createElement(AccountPage, { account, access: { ...access, data: null, loading: true }, billing: true }));
+  assert.equal(screen.queryByRole('link', { name: 'Open test billing portal' }), null);
+  assert.equal(screen.queryByRole('button', { name: 'Start test subscription' }), null);
+  view.rerender(React.createElement(AccountPage, { account, access, billing: true }));
   assert.equal(screen.queryByText('Payments are awaiting Stripe activation.'), null);
   assert.equal(screen.queryByText('Live billing'), null);
   assert.equal(screen.queryByText('Billing support', { exact: true }), null);
@@ -560,7 +563,7 @@ test('wall colors persist, new walls inherit the chosen style and matching is un
     fireEvent.pointerUp(svg(), { clientX: 400, clientY: y, pointerId: 43 });
   };
   select(first, 200);
-  fireEvent.change(screen.getByLabelText('Wall color'), { target: { value: '#777777' } });
+  fireEvent.input(screen.getByLabelText('Wall color'), { target: { value: '#777777' } });
   fireEvent.change(screen.getByLabelText('Wall thickness (inches)'), { target: { value: '6' } });
   fireEvent.blur(screen.getByLabelText('Wall thickness (inches)'));
   click('button', 'Wall'); draw(200, 400, 600, 400); click('button', 'Select');
