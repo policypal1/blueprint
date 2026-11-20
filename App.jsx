@@ -3000,6 +3000,11 @@ export function BlueprintApp({
                 <button className="primary" disabled={!hydrated} onClick={() => fileRef.current?.click()}>
                   Upload
                 </button>
+                {previewOnly && (
+                  <button type="button" disabled={!hydrated} onClick={() => loadSample()}>
+                    Try a sample plan
+                  </button>
+                )}
                 {previewOnly && navigator.clipboard?.read && (
                   <button disabled={!hydrated} onClick={pastePlan}>Paste image</button>
                 )}

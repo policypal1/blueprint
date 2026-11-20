@@ -1771,6 +1771,31 @@ test('mobile guest controls keep edits locked and ignore an import completed aft
   assert.equal(screen.queryByRole('dialog'), null);
 });
 
+for (const compact of [false, true]) {
+  test(`the ${compact ? 'mobile' : 'desktop'} blank preview opens a sample beside Upload and hands it to the edit gate`, (t) => {
+    const previous = window.matchMedia;
+    window.matchMedia = () => ({ matches: compact, addEventListener() {}, removeEventListener() {} });
+    t.after(() => { window.matchMedia = previous; });
+    const previews = [], editRequests = [];
+    render(React.createElement(Editor, {
+      previewOnly: true,
+      onPreviewPlanChange: plan => previews.push(plan),
+      onRequestEditing: plan => editRequests.push(plan),
+    }));
+    const canvas = screen.getByRole('main', { name: 'Drawing workspace' });
+    assert.ok(within(canvas).getByRole('button', { name: 'Upload', exact: true }));
+    fireEvent.click(within(canvas).getByRole('button', { name: 'Try a sample plan' }));
+    assert.equal(previews.length, 1);
+    assert.equal(count(), previews[0].elements.length);
+    assert.ok(svg().querySelector('[data-element-id]'));
+    assert.equal(screen.queryByRole('button', { name: 'Try a sample plan' }), null);
+    click('button', 'Zoom in');
+    assert.equal(editRequests.length, 0);
+    click('button', compact ? 'Edit' : 'Wall');
+    assert.deepEqual(editRequests, [previews[0]]);
+  });
+}
+
 test('the editor sign-up page uses the full account form and can return to the plan', () => {
   let returned = false;
   render(React.createElement(SignInPage, {
