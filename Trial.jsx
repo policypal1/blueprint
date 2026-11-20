@@ -1,7 +1,31 @@
 import React, { useState } from 'react';
-import { fullEditorAccess, timedAccessActive } from './access.js';
+import { canOpenEditor, fullEditorAccess, timedAccessActive } from './access.js';
+import { PRICING } from './Marketing.jsx';
 import { PolicyAgreement } from './Policies.jsx';
 import { Icon } from './ui.jsx';
+
+export function ExpiredTrialPlans() {
+  return (
+    <main className="accessPage">
+      <section className="accessCard expiredTrialCard" aria-labelledby="expired-trial-title">
+        <h1 id="expired-trial-title">Your free trial has ended</h1>
+        <p>Choose how you’d like to keep editing and downloading your plans.</p>
+        <nav className="expiredTrialOptions" aria-label="Choose a plan">
+          <a href="/?plan=project#/account/billing">
+            <Icon name="file" />
+            <span>Single project<small>One project credit</small></span>
+            <span className="expiredTrialPrice">${PRICING.project}<small>one time</small></span>
+          </a>
+          <a href="/?plan=monthly#/account/billing">
+            <Icon name="folder" />
+            <span>Monthly access<small>Multiple projects</small></span>
+            <span className="expiredTrialPrice">${PRICING.monthly}<small>per month</small></span>
+          </a>
+        </nav>
+      </section>
+    </main>
+  );
+}
 
 export default function TrialPage({ account, access, offer, offerChecking, offerError, onCheckOffer, onSignIn }) {
   const [accepted, setAccepted] = useState(false);
@@ -9,9 +33,10 @@ export default function TrialPage({ account, access, offer, offerChecking, offer
   const [notice, setNotice] = useState('');
   const data = access.data;
   const active = timedAccessActive(data?.trialEndsAt);
+  const expired = Boolean(data?.trialEndsAt && !active);
   const available = offer || data?.canStartTrial;
   const starting = available && !data?.trialEndsAt && (!account.user || data?.canStartTrial);
-  const title = active ? 'Your trial is active' : data?.trialEndsAt ? 'Your trial has ended'
+  const title = active ? 'Your trial is active' : expired ? 'Your editor access'
     : starting ? 'Try the editor free for 3 days' : 'Free trial';
 
   async function begin(event) {
@@ -28,6 +53,8 @@ export default function TrialPage({ account, access, offer, offerChecking, offer
     }
   }
 
+  if (expired && !canOpenEditor(data) && !account.loading) return <ExpiredTrialPlans />;
+
   return (
     <main className="trialPage">
       <section className="trialCard" aria-labelledby="trial-title">
@@ -42,11 +69,8 @@ export default function TrialPage({ account, access, offer, offerChecking, offer
           <p>Trial access ends {new Date(data.trialEndsAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}.</p>
           <a className="button primary" href="#/editor">Open editor</a>
         </>
-      ) : data?.trialEndsAt ? (
-        <>
-          <p>Choose a project credit or monthly access to edit and download your plans.</p>
-          <a className="button primary" href="#/account/billing">Choose a plan</a>
-        </>
+      ) : expired ? (
+        <a className="button primary" href="#/editor">Open editor</a>
       ) : !available && offerChecking ? (
         <p role="status">Checking trial availability…</p>
       ) : !available && offerError ? (

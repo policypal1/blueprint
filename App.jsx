@@ -935,6 +935,7 @@ export function BlueprintApp({
   active = true, showRecent = false, sampleRequested = false, onSampleOpened, onOpenWorkspace,
   repository, projectAccess, lockedProjectIds = [], owner, authBusy = false, onRegisterSave, canDownload,
   showMobileTip = false, showFirstUseGuide = false,
+  guestPreview = false, previewPlan, onGuestPlanChange, onRequestSignUp, onPreviewPlanOpened,
 }) {
   const svgRef = useRef(null);
   const fileRef = useRef(null);
@@ -949,8 +950,12 @@ export function BlueprintApp({
   const {
     projects, setProjects, project, setProject, addLocalProject, selectProject, hydrated,
     saveStatus, projectRef, cloud, accountId, accountIdRef, flush,
-  } = useProjectStore(() => emptyProject('Untitled project'), repository, active && showRecent, owner);
-  const showPlans = showRecent || Boolean(projectAccess && !accountId);
+  } = useProjectStore(
+    () => (guestPreview && previewPlan) || emptyProject('Untitled project'),
+    repository, active && showRecent, owner, guestPreview,
+  );
+  const singleProject = Boolean(projectAccess);
+  const showPlans = !guestPreview && (showRecent || (singleProject && !accountId));
   const canCreateProject = !projectAccess || projectAccess.credits > 0;
   const originalLocked = Boolean(accountId && (lockedProjectIds.includes(accountId) || projectAccess?.ids.includes(accountId)));
   const [accountNotice, setAccountNotice] = useState('');
@@ -993,6 +998,20 @@ export function BlueprintApp({
   const [eraseSize, setEraseSize] = useState(28);
   const [brushPoint, setBrushPoint] = useState(null);
   const [measurement, setMeasurement] = useState(null);
+
+  function requestEditing() {
+    if (busy || !active) return;
+    const plan = projectRef.current;
+    setEditorPanel(null);
+    setProjectMenu(false);
+    setGuideMode(null);
+    onRequestSignUp?.(plan.background || plan.elements.length ? plan : null);
+  }
+
+  function openToolPanel(panel) {
+    if (guestPreview && panel !== 'properties') requestEditing();
+    else setEditorPanel(panel);
+  }
 
   const cancelWallMatch = () => {
     matchRequest.current += 1;
@@ -1141,6 +1160,10 @@ export function BlueprintApp({
     updateElement(id, patch);
   };
   const changeTool = (next) => {
+    if (guestPreview && next !== 'pan' && next !== 'select') {
+      requestEditing();
+      return;
+    }
     if (next === 'wall' && selected?.type === 'wall') wallDefaults.current = wallStyle(selected);
     resetPointerInput();
     setCalibration(null);
@@ -1152,6 +1175,10 @@ export function BlueprintApp({
   };
 
   function tryWalkthroughTool(action) {
+    if (guestPreview && action !== 'pan' && action !== 'select') {
+      requestEditing();
+      return;
+    }
     setGuideMode('practice');
     if (action === 'export') setExportMenu(true);
     else if (['doors', 'cleanup', 'tools'].includes(action)) setEditorPanel(action);
@@ -1285,6 +1312,16 @@ export function BlueprintApp({
         ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) ||
         document.activeElement?.isContentEditable;
       const unmodified = !e.ctrlKey && !e.metaKey && !e.altKey;
+      if (guestPreview && !typing) {
+        const modifier = e.ctrlKey || e.metaKey;
+        const key = e.key.toLowerCase();
+        if ((modifier && ['z', 'y', 's'].includes(key)) ||
+            (selected && (['Delete', 'Backspace'].includes(e.key) || (unmodified && key === 'r') || (modifier && key === 'c')))) {
+          e.preventDefault();
+          requestEditing();
+          return;
+        }
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) {
         e.preventDefault();
         e.shiftKey ? redo() : undo();
@@ -1341,7 +1378,7 @@ export function BlueprintApp({
       }
     };
     const onPaste = (event) => {
-      if (!active || !showPlans || !canCreateProject || busy || !hydrated || document.querySelector('[role=dialog]')) return;
+      if (!active || (!showPlans && !guestPreview) || !canCreateProject || busy || !hydrated || document.querySelector('[role=dialog]')) return;
       const clipboard = event.clipboardData;
       const file = Array.from(clipboard?.files ?? []).find((item) =>
         CLIPBOARD_IMAGES.has(item.type),
@@ -1727,6 +1764,11 @@ export function BlueprintApp({
     if (draft?.type === 'clean') setDraft((d) => ({ ...d, b: raw }));
     if (calibration?.stage === 1) setCalibration((c) => ({ ...c, b: raw }));
 
+    if (guestPreview && drag?.kind === 'move') {
+      dragRef.current = null;
+      requestEditing();
+      return;
+    }
     if (drag?.kind === 'move') {
       const dx = raw.x - drag.start.x,
         dy = raw.y - drag.start.y;
@@ -1840,7 +1882,7 @@ export function BlueprintApp({
         setSelectedId(tap.id);
         setTool('select');
         setPhoneMode('view');
-        setStatus('Selected · drag the handles to resize, or open Properties');
+        setStatus(guestPreview ? 'Object selected' : 'Selected · drag the handles to resize, or open Properties');
       }
       return;
     }
@@ -1979,7 +2021,7 @@ export function BlueprintApp({
     setBusy(true);
     try {
       if (
-        !showPlans &&
+        !guestPreview && !showPlans &&
         (target.background || target.elements.length) &&
         !(await ask({
           title: 'Replace the background?',
@@ -2043,7 +2085,7 @@ export function BlueprintApp({
         backgroundOpacity: 1,
         calibrated: false,
       };
-      if (showPlans) {
+      if (guestPreview || showPlans) {
         const name = file.name.replace(/\.[^.]+$/, '').trim().slice(0, 100) || 'Untitled plan';
         if (!(await openNewPlan({ ...emptyProject(name), ...background }))) return;
       } else {
@@ -2072,6 +2114,24 @@ export function BlueprintApp({
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       importPending.current = false;
       setBusy(false);
+    }
+  }
+
+  async function pastePlan() {
+    const onSamePage = captureRoute();
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const type = item.types.find(type => CLIPBOARD_IMAGES.has(type));
+        if (type) {
+          const image = await item.getType(type);
+          if (onSamePage()) await handleImport(new File([image], `Pasted blueprint.${CLIPBOARD_IMAGES.get(type)}`, { type }));
+          return;
+        }
+      }
+      if (onSamePage()) await ask({ title: 'No plan image found', message: 'Copy a PNG, JPG or WebP image, then paste it here.', type: 'notice' });
+    } catch {
+      if (onSamePage()) await ask({ title: 'Paste your plan', message: 'Use your browser’s Paste command, or upload the PDF or image from your device.', type: 'notice' });
     }
   }
 
@@ -2360,6 +2420,12 @@ export function BlueprintApp({
     setPan({ x: 0, y: 0 });
   };
   const openNewPlan = async (plan, navigate = onOpenWorkspace, existingDeviceDraft = false) => {
+    if (guestPreview) {
+      chooseProject(plan, false);
+      onGuestPlanChange?.(plan);
+      navigate?.();
+      return true;
+    }
     if (!projectAccess) {
       chooseProject(plan, !existingDeviceDraft);
       navigate?.();
@@ -2405,6 +2471,16 @@ export function BlueprintApp({
       if (canCreateProject) void loadSample(onSampleOpened);
     }
   }, [hydrated, sampleRequested]);
+
+  // The same tab can carry a preview through sign-in and trial activation.
+  // Credit-based projects require an explicit purchase decision on Recent plans.
+  useEffect(() => {
+    if (!guestPreview && active && hydrated && previewPlan && !singleProject) {
+      chooseProject(previewPlan);
+      onPreviewPlanOpened?.();
+      onOpenWorkspace?.();
+    }
+  }, [guestPreview, active, hydrated, previewPlan, singleProject]);
 
   const deleteProject = async (id) => {
     if (
@@ -2584,11 +2660,11 @@ export function BlueprintApp({
       <Section title="Edit">
         <ToolButton tool={tool} id="wall" setTool={changeTool} label="Wall" />
         <button className={`tool${tool.startsWith('door-') ? ' active' : ''}`}
-          aria-haspopup="dialog" onClick={() => setEditorPanel('doors')}>
+          aria-haspopup="dialog" onClick={() => openToolPanel('doors')}>
           <Icon name="door" size={17} /> Door
         </button>
         <button className={`tool${['clean', 'erase'].includes(tool) ? ' active' : ''}`}
-          aria-haspopup="dialog" onClick={() => setEditorPanel('cleanup')}>
+          aria-haspopup="dialog" onClick={() => openToolPanel('cleanup')}>
           <Icon name="clean" size={17} /> Clean up
         </button>
         <ToolButton tool={tool} id="text" setTool={changeTool} label="Text" />
@@ -2600,17 +2676,23 @@ export function BlueprintApp({
         )}
       </Section>
       <div className="paletteActions">
-        <button className="tool" aria-haspopup="dialog" onClick={() => setEditorPanel('tools')}>
+        <button className="tool" aria-haspopup="dialog" onClick={() => openToolPanel('tools')}>
           <Icon name="more" size={17} /> More tools
         </button>
-        <button className="tool" aria-haspopup="dialog" onClick={() => setEditorPanel('settings')}>
+        <button className="tool" aria-haspopup="dialog" onClick={() => openToolPanel('settings')}>
           <Icon name="settings" size={17} /> Plan settings
         </button>
       </div>
     </>
   );
 
-  const objectProperties = selected ? (
+  const objectProperties = selected && guestPreview ? (
+    <div className="propStack">
+      <div className="badge">{selected.type.toUpperCase()}</div>
+      {wallLengthInches !== null && <div className="metric"><span>Wall length</span><strong>{inchesLabel(wallLengthInches)}</strong></div>}
+      <button className="wide" onClick={requestEditing}>Sign up to edit</button>
+    </div>
+  ) : selected ? (
     <Properties
       key={selected.id}
       selected={selected}
@@ -2682,6 +2764,7 @@ export function BlueprintApp({
 
   let toolHint = TOOL_HINTS[tool];
   if (compact && tool === 'pan') toolHint = 'Drag to move. Pinch to zoom. Tap an object to edit.';
+  if (guestPreview) toolHint = tool === 'pan' ? 'Drag to pan. Pinch to zoom.' : 'Tap or click an object to select it.';
   if (useWallTaps) {
     toolHint = awaitingWallEnd ? 'Tap the other endpoint.' : 'Tap the first endpoint.';
   } else if (tool === 'calibrate') {
@@ -2743,12 +2826,18 @@ export function BlueprintApp({
         <RecentPlans
           projects={projects}
           canCreate={canCreateProject}
-          singleProject={Boolean(projectAccess)}
+          singleProject={singleProject}
           hydrated={hydrated}
           busy={busy}
           saveStatus={saveStatus}
           onUpload={() => fileRef.current?.click()}
           onSelect={(plan) => openNewPlan(plan, onOpenWorkspace, true)}
+          preview={previewPlan?.background && projectAccess ? {
+            name: previewPlan.name,
+            onOpen: async () => {
+              if (await openNewPlan(previewPlan)) onPreviewPlanOpened?.();
+            },
+          } : null}
           account={repository ? {
             plans: projectAccess ? cloud.list.filter((plan) => projectAccess.ids.includes(plan.id)) : cloud.list,
             status: cloud.listStatus, notice: accountNotice,
@@ -2776,8 +2865,9 @@ export function BlueprintApp({
   return (
     <div className={`app${compact ? ' compactEditor' : ''}`}>
       <div className="topbar" role="group" aria-label="Project controls">
-        <a className="recentBack" href="#/editor" aria-label="Back to plans" title="Back to plans">
-          <Icon name="back" /> <span>Back to plans</span>
+        <a className="recentBack" href={guestPreview ? '/#/' : '#/editor'}
+          aria-label={guestPreview ? 'Back to home' : 'Back to plans'} title={guestPreview ? 'Back to home' : 'Back to plans'}>
+          <Icon name="back" /> <span>{guestPreview ? 'Back to home' : 'Back to plans'}</span>
         </a>
         <div className="projectTitleWrap">
           <button
@@ -2809,12 +2899,12 @@ export function BlueprintApp({
                 onClick={() => setProjectMenu(false)}
               />
               <div className="projectMenu">
-                {projectAccess
+                {!guestPreview && (projectAccess
                   ? <a className="button" href="#/editor"><Icon name="plus" /> Start another project</a>
-                  : <button onClick={createProject}><Icon name="plus" /> New project</button>}
-                <button onClick={() => renameProject(project)}>
+                  : <button onClick={createProject}><Icon name="plus" /> New project</button>)}
+                {!guestPreview && <button onClick={() => renameProject(project)}>
                   <Icon name="text" /> Rename current project
-                </button>
+                </button>}
                 {accountId && (
                   <button className="danger" onClick={removeAccountPlan}>
                     <Icon name="trash" /> Delete account plan
@@ -2826,15 +2916,15 @@ export function BlueprintApp({
                     <Icon name="upload" /> {project.background ? 'Replace blueprint' : 'Upload a plan'}
                   </button>
                 )}
-                <button disabled={!canCreateProject} onClick={() => { setProjectMenu(false); backupRef.current?.click(); }}>
+                {!guestPreview && <button disabled={!canCreateProject} onClick={() => { setProjectMenu(false); backupRef.current?.click(); }}>
                   <Icon name="folder" /> Import saved backup
-                </button>
-                {compact && (
+                </button>}
+                {!guestPreview && compact && (
                   <button disabled={!future.length} onClick={() => { redo(); setProjectMenu(false); }}>
                     <Icon name="redo" /> Redo
                   </button>
                 )}
-                <div className="projectMenuDivider" />
+                {!guestPreview && <div className="projectMenuDivider" />}
                 {!projectAccess && projects.map((p) => (
                   <div className="projectRow" key={p.id}>
                     <button onClick={() => chooseProject(p, false)}>{p.name}</button>
@@ -2887,7 +2977,7 @@ export function BlueprintApp({
             aria-label="Export"
             className="primary"
             disabled={exporting || busy || !hydrated}
-            onClick={() => setExportMenu(true)}
+            onClick={guestPreview ? requestEditing : () => setExportMenu(true)}
           >
             <Icon name="download" />
             <span>{exporting ? 'Exporting…' : 'Export'}</span>
@@ -2905,14 +2995,16 @@ export function BlueprintApp({
           </div>
           {!originalLocked && !project.background && !project.elements.length && !busy && ['select', 'pan'].includes(tool) && (
             <div className="canvasWelcome">
-              <h2>Start with a plan</h2>
-              <button
-                className="primary"
-                disabled={!hydrated}
-                onClick={() => fileRef.current?.click()}
-              >
-                Upload
-              </button>
+              <h2>{guestPreview ? 'Upload or paste your floor plan' : 'Start with a plan'}</h2>
+              {guestPreview && <p className="hint">Upload a PDF or image, or paste a copied image to view it here.</p>}
+              <div className="canvasImportActions">
+                <button className="primary" disabled={!hydrated} onClick={() => fileRef.current?.click()}>
+                  Upload
+                </button>
+                {guestPreview && navigator.clipboard?.read && (
+                  <button disabled={!hydrated} onClick={pastePlan}>Paste image</button>
+                )}
+              </div>
             </div>
           )}
           {busy && (
@@ -3028,7 +3120,7 @@ export function BlueprintApp({
                     displayScale={displayScale}
                   />
                 ))}
-              {!exporting && selected && tool === 'select' && !wallMatch && (
+              {!guestPreview && !exporting && selected && tool === 'select' && !wallMatch && (
                 <SelectionHandles el={selected} project={project} onResizeDown={startResize}
                   displayScale={displayScale} onOpenProperties={() => setEditorPanel('properties')} />
               )}
@@ -3103,7 +3195,7 @@ export function BlueprintApp({
           onCancelWall={wallMatch ? cancelWallMatch : awaitingWallEnd ? () => changeTool('wall') : undefined}
           canSetDistance={calibration?.stage === 2}
           onTool={changeTool}
-          onOpen={setEditorPanel}
+          onOpen={openToolPanel}
           onSetDistance={finishCalibration}
         />
       )}

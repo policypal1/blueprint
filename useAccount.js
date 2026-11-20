@@ -4,6 +4,7 @@ export const projectUrl = import.meta.env?.VITE_SUPABASE_URL?.trim();
 export const publishableKey = import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
 const enabled = Boolean(projectUrl && publishableKey);
 const RETURN_TO = 'planpatch-sign-in-return';
+const GOOGLE_PREVIEW_RETURN = 'editfloorplans-google-preview-return';
 const RECOVERY_OWNER = 'planpatch-recovery-owner';
 const EMAIL_CONFIRMATION_FLOW = 'confirm-email';
 const RETURN_ROUTES = new Set([
@@ -21,6 +22,7 @@ const AUTH_ERRORS = {
   over_request_rate_limit: 'Too many attempts. Wait a moment and try again.',
   weak_password: PASSWORD_HINT,
   same_password: 'Choose a password different from your current one.',
+  preview_redirect_unavailable: 'This browser couldn’t keep your plan for the redirect. Sign in with email here, or choose Google again and upload your plan afterward.',
   draft_unsaved: 'Your draft could not be saved. Download a backup before signing in.',
 };
 let connection;
@@ -73,6 +75,8 @@ async function connect() {
   if (!code && !rejected) return { client };
 
   const returnTo = sessionValue(RETURN_TO);
+  const googlePreview = sessionValue(GOOGLE_PREVIEW_RETURN) === '1';
+  writeSessionValue(GOOGLE_PREVIEW_RETURN, null);
   writeSessionValue(RETURN_TO, null);
   const exchange = code && !rejected
     ? await client.auth.exchangeCodeForSession(code).catch((error) => ({ error }))
@@ -94,7 +98,9 @@ async function connect() {
   if (confirmationLink) url.searchParams.delete('auth');
   window.history.replaceState(window.history.state, '', url);
   window.dispatchEvent(new Event('hashchange'));
-  return { client, callbackError, recovered, confirmedWithoutSession };
+  const oauthReturnOwner = googlePreview && !confirmationLink && !recovered && !exchange?.error
+    ? exchange?.data?.session?.user?.id : null;
+  return { client, callbackError, recovered, confirmedWithoutSession, oauthReturnOwner };
 }
 
 export function useAccount() {
@@ -105,6 +111,7 @@ export function useAccount() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [emailConfirmed, setEmailConfirmed] = useState(false);
+  const [oauthReturnOwner, setOauthReturnOwner] = useState(null);
   const recovering = Boolean(user && recoveryOwner === user.id);
 
   useEffect(() => {
@@ -112,9 +119,10 @@ export function useAccount() {
     let active = true;
     let subscription;
     connection ??= connect();
-    connection.then(({ client: connected, callbackError, recovered, confirmedWithoutSession }) => {
+    connection.then(({ client: connected, callbackError, recovered, confirmedWithoutSession, oauthReturnOwner }) => {
       if (!active) return;
       setClient(connected);
+      setOauthReturnOwner(oauthReturnOwner ?? null);
       if (callbackError) setError(callbackError);
       if (confirmedWithoutSession) setEmailConfirmed(true);
       if (recovered !== undefined) setRecoveryOwner(recovered ?? null);
@@ -123,6 +131,7 @@ export function useAccount() {
         setLoading(false);
         if (event === 'SIGNED_OUT') {
           setRecoveryOwner(null);
+          setOauthReturnOwner(null);
           writeSessionValue(RECOVERY_OWNER, null);
         }
         if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
@@ -141,7 +150,7 @@ export function useAccount() {
     };
   }, []);
 
-  async function signInWithGoogle(beforeLeaving, returnTo) {
+  async function signInWithGoogle(beforeLeaving, returnTo, resumePreview = false) {
     await saveDraft(beforeLeaving);
     const data = authResult(await client.auth.signInWithOAuth({
       provider: 'google',
@@ -149,10 +158,12 @@ export function useAccount() {
     }));
     if (!data?.url) throw new Error('Missing Google authorization URL.');
     writeSessionValue(RETURN_TO, RETURN_ROUTES.has(returnTo) ? returnTo : '#/account');
+    writeSessionValue(GOOGLE_PREVIEW_RETURN, resumePreview ? '1' : null);
     window.location.assign(data.url);
   }
 
   async function authenticate(mode, email, password, { beforeLeaving, returnTo, displayName }) {
+    writeSessionValue(GOOGLE_PREVIEW_RETURN, null);
     if (mode === 'forgot') {
       await requestPasswordReset(email);
       return false;
@@ -218,7 +229,7 @@ export function useAccount() {
   }
 
   return {
-    enabled, client, user, loading, busy, error, recovering, emailConfirmed,
+    enabled, client, user, loading, busy, error, recovering, emailConfirmed, oauthReturnOwner,
     authenticate, signInWithGoogle, signOut, requestPasswordReset, completePasswordReset,
     updateEmail, updateDisplayName, clearError: () => setError(''),
   };

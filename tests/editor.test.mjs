@@ -225,7 +225,7 @@ test('live billing uses live consent and keeps purchases disabled during Stripe 
   const calls = [];
   const account = { user: { id: 'live-billing-ui' } };
   const access = { data: { billingMode: 'live', checkoutReady: false, activationPending: true,
-    billingAvailable: true, monthlyOfferVersion: LIVE_MONTHLY_VERSION }, checkout: async (...args) => calls.push(args) };
+    billingAvailable: true, monthlyOfferVersion: LIVE_MONTHLY_VERSION }, refresh: async () => {}, checkout: async (...args) => calls.push(args) };
   const view = render(React.createElement(AccountPage, { account, access: { ...access, data: null, loading: true }, billing: true }));
   assert.equal(screen.queryByRole('link', { name: 'Open test billing portal' }), null);
   assert.equal(screen.queryByRole('button', { name: 'Start test subscription' }), null);
@@ -233,6 +233,7 @@ test('live billing uses live consent and keeps purchases disabled during Stripe 
   assert.equal(screen.queryByText('Payments are awaiting Stripe activation.'), null);
   assert.equal(screen.queryByText('Live billing'), null);
   assert.equal(screen.queryByText('Billing support', { exact: true }), null);
+  assert.equal(screen.queryByRole('button', { name: 'Refresh access' }), null);
   assert.equal(screen.getByRole('button', { name: 'Buy a project credit' }).disabled, true);
   assert.equal(screen.queryByRole('link', { name: 'Open test billing portal' }), null);
   access.data.checkoutReady = true;
@@ -245,6 +246,33 @@ test('live billing uses live consent and keeps purchases disabled during Stripe 
   assert.deepEqual(calls[0][2], { accepted: true, version: LIVE_MONTHLY_VERSION });
 });
 
+test('a Stripe return rechecks access automatically until the delayed webhook can be observed', () => {
+  const previous = window.location.href;
+  const schedule = window.setTimeout;
+  const cancel = window.clearTimeout;
+  const pending = new Map();
+  let refreshed = 0;
+  try {
+    window.history.replaceState(null, '', '/?checkout=returned#/account/billing');
+    window.setTimeout = (fn, delay) => { pending.set(delay, fn); return delay; };
+    window.clearTimeout = (key) => pending.delete(key);
+    const view = render(React.createElement(AccountPage, {
+      account: { user: { id: 'returning-customer' } }, billing: true,
+      access: { data: { billingMode: 'live', paymentsRequired: true }, refresh: () => refreshed++ },
+    }));
+    assert.match(screen.getByRole('status').textContent, /updates automatically/);
+    assert.ok(pending.size > 0);
+    act([...pending.values()][0]);
+    assert.equal(refreshed, 1);
+    view.unmount();
+    assert.equal(pending.size, 0);
+  } finally {
+    window.setTimeout = schedule;
+    window.clearTimeout = cancel;
+    window.history.replaceState(null, '', previous);
+  }
+});
+
 test('landing and pricing explain the product and lead to the editor', async () => {
   render(React.createElement(Marketing, { page: 'home' }));
   const hero = screen.getByRole('region', { name: /Edit your existing floor plan/ });
@@ -252,7 +280,7 @@ test('landing and pricing explain the product and lead to the editor', async () 
   assert.ok(screen.getByText(/Upload a PDF or image, mark up walls/));
   assert.equal(within(hero).getAllByRole('link').length, 1);
   assert.equal(
-    within(hero).getByRole('link', { name: 'Edit your blueprint' }).getAttribute('href'),
+    within(hero).getByRole('link', { name: 'Open editor' }).getAttribute('href'),
     '/#/editor',
   );
   assert.equal(document.querySelector('video').getAttribute('src'), '/planpatch-demo.mp4');
@@ -864,7 +892,7 @@ test('reopening shows saved plans and uploading from the list creates a new plan
   render(React.createElement(Root));
   await screen.findByRole('heading', { name: 'Recent plans' });
   await waitForUpload();
-  assert.ok(within(screen.getByRole('banner')).getByRole('link', { name: 'Blueprint home' }));
+  assert.ok(within(screen.getByRole('banner')).getByRole('link', { name: 'editfloorplans.com home' }));
   assert.equal(window.location.hash, '#/editor');
   assert.equal(screen.queryByRole('button', { name: 'Restore backup' }), null);
   assert.equal(screen.queryByRole('button', { name: 'Try a sample plan' }), null);
@@ -1206,8 +1234,8 @@ test('reduced-motion visitors control sample playback and pricing keeps billing 
     view.unmount();
     render(React.createElement(Marketing, { page: 'pricing', trialOffer: true, account: { signedIn: true, user: { email: 'demo@example.test' } } }));
     assert.equal(screen.queryByRole('link', { name: 'View billing' }), null);
-    assert.ok(screen.getByRole('link', { name: 'Start 3-day free trial' }));
-    assert.ok(screen.getByText('No credit card needed', { exact: true }));
+    assert.doesNotMatch(screen.getByRole('main').textContent, /free trial|no credit card needed/i);
+    assert.equal(screen.queryByRole('link', { name: 'Start 3-day free trial' }), null);
     assert.ok(document.querySelector('.accountMenuLinks a[href="#/account/billing"]'));
   } finally {
     cleanup();
@@ -1215,10 +1243,10 @@ test('reduced-motion visitors control sample playback and pricing keeps billing 
   }
 });
 
-test('trial landing prominently offers the account-based trial and links to all customer policies', () => {
-  render(React.createElement(Marketing, { page: 'home', trialOffer: true }));
+test('guest landing opens the editor and exposes the same policy links in the mobile footer', () => {
+  const view = render(React.createElement(Marketing, { page: 'home', trialOffer: true }));
   const hero = within(screen.getByRole('region', { name: /Edit your existing floor plan/ }));
-  assert.equal(hero.getByRole('link', { name: 'Start 3-day free trial' }).getAttribute('href'), '/#/trial');
+  assert.equal(hero.getByRole('link', { name: 'Open editor' }).getAttribute('href'), '/#/editor');
   assert.ok(hero.getByText('No credit card needed', { exact: true }).classList.contains('trialNoCard'));
   assert.equal(hero.queryByText(/ends automatically/i), null);
   assert.equal(hero.getAllByRole('link').length, 1);
@@ -1226,6 +1254,14 @@ test('trial landing prominently offers the account-based trial and links to all 
   assert.deepEqual(footer.getAllByRole('link').map((link) => link.getAttribute('href')), [
     '/terms', '/privacy', '/refunds-and-cancellation', '/support', '/privacy#cookie-settings',
   ]);
+  const mobileFooter = document.querySelector('.footerMenu');
+  fireEvent.click(mobileFooter.querySelector('summary'));
+  assert.deepEqual(within(mobileFooter).getAllByRole('link').map(link => link.getAttribute('href')),
+    footer.getAllByRole('link').map(link => link.getAttribute('href')));
+  fireEvent.keyDown(mobileFooter, { key: 'Escape' });
+  assert.equal(mobileFooter.open, false);
+  view.rerender(React.createElement(Marketing, { page: 'home', trialOffer: true, account: { signedIn: true } }));
+  assert.doesNotMatch(screen.getByRole('main').textContent, /free trial|no credit card needed/i);
 });
 
 test('the PDF editing guide shows the video followed by three steps', () => {
@@ -1237,7 +1273,7 @@ test('the PDF editing guide shows the video followed by three steps', () => {
     'Upload the original drawing', 'Mark up the layout', 'Export a revised plan',
   ]);
   assert.ok(within(main).getByText(/up to 25 MB/));
-  assert.equal(within(main).queryByRole('link', { name: 'Edit your blueprint' }), null);
+  assert.equal(within(main).queryByRole('link', { name: 'Open editor' }), null);
   assert.deepEqual(within(main).getAllByRole('link').map((link) => link.getAttribute('href')), [
     '/measure-a-floor-plan-pdf', '/print-a-floor-plan-pdf-to-scale',
   ]);
@@ -1293,6 +1329,19 @@ test('trial starts only after accepting terms, and expired access cannot downloa
     cleanup();
     window.history.replaceState(null, '', old);
   }
+});
+
+test('expired trials link to each billing option and keep purchased plans accessible', () => {
+  const account = { user: { id: 'expired-trial' } };
+  const data = { trialEndsAt: '2020-01-01T00:00:00Z', paymentsRequired: true };
+  const view = render(React.createElement(TrialPage, { account, access: { data }, offer: true }));
+  assert.ok(screen.getByRole('heading', { name: 'Your free trial has ended' }));
+  const options = within(screen.getByRole('navigation', { name: 'Choose a plan' }));
+  assert.equal(options.getByRole('link', { name: /Single project.*\$10/i }).getAttribute('href'), '/?plan=project#/account/billing');
+  assert.equal(options.getByRole('link', { name: /Monthly access.*\$19/i }).getAttribute('href'), '/?plan=monthly#/account/billing');
+  assert.equal(screen.queryByRole('button', { name: /start free trial/i }), null);
+  view.rerender(React.createElement(TrialPage, { account, access: { data: { ...data, projectCredits: 1 } }, offer: true }));
+  assert.equal(screen.getByRole('link', { name: 'Open editor' }).getAttribute('href'), '#/editor');
 });
 
 test('trial availability distinguishes a failed check from an off switch and allows a signed-in signup check', () => {
@@ -1392,7 +1441,7 @@ test('the desktop header shows the account name and keeps the menu available fro
   const header = screen.getByRole('banner');
   const nav = within(header.querySelector('.siteHeaderActions > .siteNav'));
   assert.ok(nav.getByRole('link', { name: 'Pricing' }));
-  const editorLink = nav.getByRole('link', { name: 'Edit your blueprint' });
+  const editorLink = nav.getByRole('link', { name: 'Open editor' });
   assert.equal(editorLink.querySelector('svg'), null);
   assert.equal(editorLink.classList.contains('button'), false);
   assert.equal(header.querySelector('.accountMenuName').textContent, 'Morgan Lee');
@@ -1401,7 +1450,7 @@ test('the desktop header shows the account name and keeps the menu available fro
   const details = header.querySelector('.accountMenu');
   assert.equal(details.querySelector('summary').getAttribute('aria-label'), 'Account menu for Morgan Lee');
   assert.equal(details.querySelector('summary .accountAvatar').textContent, 'M');
-  assert.equal(within(header).queryByRole('link', { name: 'Edit your blueprint' }), null);
+  assert.equal(within(header).queryByRole('link', { name: 'Open editor' }), null);
   fireEvent.click(details.querySelector('summary'));
   assert.equal(within(header).getByRole('link', { name: 'Profile settings' }).getAttribute('href'), '#/account');
   assert.equal(within(header).getByRole('link', { name: 'Billing & payment methods' }).getAttribute('href'), '#/account/billing');
@@ -1417,9 +1466,9 @@ test('the sign-in path and legacy bookmark both open the account page', async ()
     for (const path of ['/sign-in', '/#/sign-in']) {
       window.history.replaceState(null, '', path);
       const view = render(React.createElement(Root));
-      await screen.findByRole('heading', { name: 'Sign in to Blueprint', level: 1 });
+      await screen.findByRole('heading', { name: 'Sign in to editfloorplans.com', level: 1 });
       assert.ok(screen.getByText('Account sign-in is currently unavailable.'));
-      assert.equal(screen.getByRole('link', { name: 'Blueprint home' }).getAttribute('href'), '/');
+      assert.equal(screen.getByRole('link', { name: 'editfloorplans.com home' }).getAttribute('href'), '/');
       view.unmount();
     }
   } finally {
@@ -1607,4 +1656,117 @@ test('monthly checkout requires its own agreement and only confirmed purchases o
   view.rerender(React.createElement(AccountPage, { billing: true, account: { user: { id: 'new-user' } }, access }));
   assert.ok(screen.getAllByRole('checkbox').every(box => !box.checked));
   assert.equal(screen.queryByRole('link', { name: 'Save subscription confirmation' }), null);
+});
+
+test('guest preview opens a pasted plan in memory and requires sign-up for tools, shortcuts and exports', async (t) => {
+  const db = new IDBFactory();
+  t.mock.method(db, 'open');
+  const previous = globalThis.indexedDB;
+  globalThis.indexedDB = db;
+  t.after(() => { globalThis.indexedDB = previous; });
+  const key = 'blueprint-studio-current-v1';
+  const original = localStorage.getItem(key);
+  const requests = [];
+  const previews = [];
+  render(React.createElement(Editor, {
+    guestPreview: true,
+    onGuestPlanChange: plan => previews.push(plan),
+    onRequestSignUp: plan => requests.push(plan),
+  }));
+  assert.ok(screen.getByRole('heading', { name: 'Upload or paste your floor plan' }));
+  const image = new File(['test'], 'plan.png', { type: 'image/png' });
+  fireEvent.paste(document.body, { clipboardData: { files: [image] } });
+  await waitFor(() => assert.equal(previews.length, 1));
+  assert.equal(svg().querySelector('image').getAttribute('href'), png);
+  click('button', 'Pan');
+  click('button', 'Zoom in');
+  click('button', 'Select');
+  assert.equal(requests.length, 0);
+  click('button', 'Wall');
+  fireEvent.keyDown(window, { key: 'w' });
+  click('button', 'Export');
+  assert.deepEqual(requests, [previews[0], previews[0], previews[0]]);
+  assert.equal(screen.queryByRole('dialog'), null);
+  assert.equal(screen.getByRole('button', { name: 'Select' }).getAttribute('aria-pressed'), 'true');
+
+  fireEvent.click(document.querySelector('.projectButton'));
+  click('button', 'Open sample project');
+  const wall = svg().querySelector('[data-element-id]');
+  const start = { button: 0, pointerId: 2, clientX: 500, clientY: 140 };
+  fireEvent.pointerDown(wall, start);
+  fireEvent.pointerUp(svg(), start);
+  assert.ok(screen.getByText('WALL'));
+  assert.equal(requests.length, 3);
+  const before = wall.outerHTML;
+  fireEvent.pointerDown(wall, start);
+  fireEvent.pointerMove(svg(), { ...start, clientX: 590 });
+  fireEvent.pointerUp(svg(), start);
+  fireEvent.keyDown(window, { key: 'Delete' });
+  assert.equal(requests.length, 5);
+  assert.equal(wall.outerHTML, before);
+  assert.equal(count(), 20);
+  cleanup();
+  assert.equal(db.open.mock.callCount(), 0);
+  assert.equal(localStorage.getItem(key), original);
+});
+
+test('a preview resumes with full access and requires an explicit credit action for single-project access', async () => {
+  const preview = {
+    id: 'preview-handoff', name: 'Kitchen preview', unitsPerInch: 4, elements: [],
+    createdAt: Date.now(), updatedAt: Date.now(), background: png, showBackground: true,
+  };
+  let opened = 0;
+  window.history.replaceState(null, '', '#/editor');
+  render(React.createElement(AccountEditor, { owner: 'preview-monthly', previewPlan: preview, onPreviewPlanOpened: () => opened++ }));
+  await screen.findByRole('button', { name: preview.name });
+  assert.equal(svg().querySelector('image').getAttribute('href'), png);
+  assert.equal(opened, 1);
+  click('button', 'Wall');
+  draw(100, 100, 400, 100);
+  assert.equal(count(), 1);
+  await waitSaved();
+  cleanup();
+
+  let writes = 0;
+  const repository = { list: async () => [], save: async (project, record) => {
+    writes++;
+    assert.equal(project.background, preview.background);
+    return { ...record, revision: 1 };
+  } };
+  window.history.replaceState(null, '', '#/editor');
+  render(React.createElement(AccountEditor, {
+    owner: 'preview-credit', repository, previewPlan: preview, onPreviewPlanOpened: () => opened++,
+    projectAccess: { credits: 1, ids: [], refresh: () => {} },
+  }));
+  const confirmCredit = await screen.findByRole('button', { name: 'Use one project credit to edit this plan' });
+  await waitFor(() => assert.equal(confirmCredit.disabled, false));
+  assert.equal(writes, 0);
+  assert.equal(opened, 1);
+  fireEvent.click(confirmCredit);
+  await screen.findByRole('main', { name: 'Drawing workspace' });
+  assert.equal(writes, 1);
+  assert.equal(opened, 2);
+  assert.equal(svg().querySelector('image').getAttribute('href'), png);
+});
+
+test('mobile guest controls keep edits locked and ignore an import completed after leaving', async (t) => {
+  const previous = window.matchMedia;
+  window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
+  t.after(() => { window.matchMedia = previous; });
+  let requests = 0, previews = 0;
+  const props = { guestPreview: true, onRequestSignUp: () => requests++, onGuestPlanChange: () => previews++ };
+  const view = render(React.createElement(Editor, props));
+  click('button', 'Select');
+  click('button', 'Edit');
+  click('button', 'Measure');
+  assert.equal(requests, 2);
+  assert.equal(screen.getByRole('button', { name: 'View' }).getAttribute('aria-pressed'), 'true');
+  const file = { name: 'Delayed plan.pdf', size: 512 };
+  let finishReading;
+  file.arrayBuffer = () => new Promise(resolve => { finishReading = resolve; });
+  fireEvent.change(document.querySelector('input[type=file]'), { target: { files: [file] } });
+  view.rerender(React.createElement(Editor, { ...props, active: false }));
+  await act(async () => finishReading(new ArrayBuffer(4)));
+  assert.equal(previews, 0);
+  assert.equal(screen.queryByRole('dialog'), null);
 });

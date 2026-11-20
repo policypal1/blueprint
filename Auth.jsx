@@ -44,7 +44,7 @@ function AuthLayout({ title, onClose, inert, children }) {
 
 export function SignInPage({
   account, onAuthenticate, onGoogle, onAuthenticated, onClose, initialMode = 'signIn',
-  editorEntry = false, trialOffer = false,
+  editorEntry = false, trialOffer = false, previewWarning = '',
 }) {
   const [mode, setMode] = useState(initialMode);
   const [name, setName] = useState('');
@@ -60,7 +60,8 @@ export function SignInPage({
   const creating = mode === 'create';
   const credentialForm = mode === 'signIn' || creating;
   const waiting = account.loading || Boolean(pending);
-  const title = editorEntry && mode === 'signIn' ? 'Sign in to use the editor' : copy.title;
+  const title = editorEntry && creating ? 'Create an account to edit your plan'
+    : editorEntry && mode === 'signIn' ? 'Sign in to use the editor' : copy.title;
 
   function selectMode(next) {
     setMode(next);
@@ -164,6 +165,12 @@ export function SignInPage({
     <AuthLayout title={title} inert={Boolean(confirmation)} onClose={onClose && (() => { if (!pending) onClose(); })}>
       {account.loading || account.client ? (
         <>
+          {previewWarning && !error && <p role="status">{previewWarning}</p>}
+          {creating && editorEntry && (
+            <p>{trialOffer
+              ? 'Start a free 3-day trial to draw, make changes, and export your plan. No credit card needed.'
+              : 'Sign up to choose editing access for your plan.'}</p>
+          )}
           {mode === 'signIn' && account.emailConfirmed && (
             <p className="authConfirmed" role="status">Email confirmed. You can now sign in on any device.</p>
           )}
@@ -219,12 +226,13 @@ export function SignInPage({
               onClick={resendConfirmation}>{pending === 'resend' ? 'Sending…' : 'Resend confirmation'}</button>
           )}
           <div className="authAlternate">
+            {creating && editorEntry && <span>Already have an account?</span>}
             {mode === 'signIn' && (
               <span>{trialOffer && editorEntry ? '3-day free trial. No credit card needed.' : `New to ${PRODUCT_NAME}?`}</span>
             )}
             <button className="authTextButton" type="button" disabled={waiting}
               onClick={() => selectMode(mode === 'signIn' ? 'create' : 'signIn')}>
-              {mode === 'signIn' ? 'Create an account' : 'Back to sign in'}
+              {mode === 'signIn' ? 'Create an account' : creating && editorEntry ? 'Sign in' : 'Back to sign in'}
             </button>
           </div>
           {creating && (

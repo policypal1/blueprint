@@ -51,7 +51,7 @@ function RemodelGuide() {
         </li>
       </ol>
       <h2>Check permit requirements with your city or county</h2>
-      <p>States adopt different building codes and amendments. Local permit checklists, zoning rules and professional seal requirements also depend on the property and scope of work. Blueprint helps communicate revisions; it does not check the design against those rules or provide a professional seal.</p>
+      <p>States adopt different building codes and amendments. Local permit checklists, zoning rules and professional seal requirements also depend on the property and scope of work. The editor helps communicate revisions. It does not check the design against those rules or provide a professional seal.</p>
       <p>Start with your local building department. State resources include <a className="accountTextLink" href="https://www.oregon.gov/bcd/lbdd/Pages/oregon-permits.aspx">Oregon permit guidance</a>, the <a className="accountTextLink" href="https://www.dgs.ca.gov/BSC">California Building Standards Commission</a> and the <a className="accountTextLink" href="https://sbcc.wa.gov/state-codes-regulations-guidelines/state-building-code">Washington State Building Code Council</a>.</p>
       <p>Plan submission rules depend on the project and local authority. For example, Austin asks for existing and proposed plans for certain changes to walls, doors, windows, or plumbing fixtures. Review the local checklist before submitting a revision. <a className="accountTextLink" href="https://www.austintexas.gov/development-services/residential-plan-review">Austin residential plan review</a></p>
     </>
@@ -110,10 +110,8 @@ export default function FloorPlanGuides({ page, showTrial }) {
         <h1>{publicPages[page].heading}</h1>
         <Body />
         <div className="resourceAction">
-          <a className="button primary" href={showTrial ? '/#/trial' : '/#/editor'}>
-            {showTrial ? 'Start 3-day free trial' : 'Edit your blueprint'}
-          </a>
-          {showTrial && <p>No credit card needed.</p>}
+          <a className="button primary" href="/#/editor">Open editor</a>
+          {showTrial && <p>3-day free trial · No credit card needed</p>}
         </div>
       </article>
       <nav className="relatedGuides" aria-label="Related floor plan guides">

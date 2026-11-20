@@ -22,7 +22,7 @@ export default function PublicPage({ page, account, trialOffer }) {
           <section className="accessCard notFoundCard">
             <p className="notFoundCode">404</p>
             <h1 id="not-found-title">Page not found</h1>
-            <p>Double-check the address or head back to Blueprint.</p>
+            <p>Double-check the address or return to the home page.</p>
             <div className="accessActions">
               <a href="/" className="button primary">Back to home</a>
               <a href="/#/editor" className="button">Open the editor</a>

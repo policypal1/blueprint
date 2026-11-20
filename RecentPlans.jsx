@@ -5,7 +5,7 @@ const formatDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 
 export default function RecentPlans({
   projects, hydrated, busy, saveStatus, onUpload, onSelect,
-  account, canCreate = true, singleProject = false,
+  account, canCreate = true, singleProject = false, preview,
 }) {
   const disabled = !hydrated || busy;
   const saveWarning = /failed|unavailable/.test(saveStatus);
@@ -42,6 +42,12 @@ export default function RecentPlans({
               </div>
             )}
           </div>
+        )}
+        {preview && canCreate && (
+          <section className="recentMessages" aria-label="Previewed floor plan">
+            <strong>{preview.name}</strong>
+            <button disabled={disabled} onClick={preview.onOpen}>Use one project credit to edit this plan</button>
+          </section>
         )}
         {plans.length > 0 ? (
           <ul className="recentList">

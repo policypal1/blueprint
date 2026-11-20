@@ -3,6 +3,7 @@ import { AccountAvatar, profileName } from './AccountMenu.jsx';
 import { Icon, Modal, PRODUCT_NAME } from './ui.jsx';
 import { authErrorText, MAX_DISPLAY_NAME_LENGTH } from './useAccount.js';
 import { canOpenEditor } from './access.js';
+import { PRICING } from './Marketing.jsx';
 import { MONTHLY_VERSION, MONTHLY_DISCLOSURE, LIVE_MONTHLY_VERSION, LIVE_MONTHLY_DISCLOSURE, MONTHLY_CANCELLATION_URL } from './supabase/functions/planpatch-account/monthly-offer.js';
 import { PolicyAgreement } from './Policies.jsx';
 
@@ -175,7 +176,7 @@ function BillingSettings({ portalUrl, access }) {
   const [accepted, setAccepted] = useState(false);
   const [recurringAccepted, setRecurringAccepted] = useState(false);
   const attempts = useRef({});
-  const { data, loading, refresh } = access ?? {};
+  const { data, refresh } = access ?? {};
   const isLive = data?.billingMode === 'live';
   const testMode = data?.billingMode === 'test' || (!data?.billingMode && data?.monthlyOfferVersion === MONTHLY_VERSION);
   const offerVersion = isLive ? LIVE_MONTHLY_VERSION : MONTHLY_VERSION;
@@ -183,7 +184,24 @@ function BillingSettings({ portalUrl, access }) {
   const currentOffer = data?.monthlyOfferVersion === offerVersion;
   const backupPortal = !access && STRIPE_TEST_PORTAL.test(portalUrl);
   const query = new URLSearchParams(window.location.search);
-  const returned = query.has('checkout') || query.has('sandbox_checkout');
+  const returned = query.get('checkout') === 'returned' || query.get('sandbox_checkout') === 'returned';
+
+  useEffect(() => {
+    if (!refresh) return;
+    const restore = (event) => {
+      if (event.persisted) {
+        setPending('');
+        void refresh();
+      }
+    };
+    window.addEventListener('pageshow', restore);
+    // The webhook can arrive after the customer returns from Stripe Checkout.
+    const timers = returned ? [2500, 6500, 15000].map(delay => window.setTimeout(refresh, delay)) : [];
+    return () => {
+      window.removeEventListener('pageshow', restore);
+      timers.forEach(id => window.clearTimeout(id));
+    };
+  }, [returned, refresh]);
 
   async function visitStripe(action) {
     const openPortal = action === 'portal' || action === 'cancel';
@@ -211,13 +229,13 @@ function BillingSettings({ portalUrl, access }) {
           <h2 id="plans-billing-title">Plans and access</h2>
           {testMode && <span className="billingMode">Test mode</span>}
         </div>
-        {data?.monthly ? <p>Your monthly {isLive ? 'subscription' : 'test subscription'} is active.</p> : (
-          <p>{data?.projectCredits || data?.projectIds?.length
-            ? `${data.projectCredits} unused project ${data.projectCredits === 1 ? 'credit' : 'credits'} · ${data.projectIds.length} unlocked`
-            : testMode ? 'A test purchase unlocks editing.' : 'Choose a project credit or monthly access.'}</p>
+        {data?.monthly ? <p>Your monthly {isLive ? 'subscription' : 'test subscription'} is active.</p> : (data?.projectCredits > 0 || data?.projectIds?.length > 0) ? (
+          <p>{data.projectCredits ?? 0} unused project {data.projectCredits === 1 ? 'credit' : 'credits'} · {data.projectIds?.length ?? 0} unlocked</p>
+        ) : testMode && (
+          <p>A test purchase unlocks editing.</p>
         )}
         {returned && !data?.monthly && !data?.projectCredits && !data?.projectIds?.length && (
-          <p role="status">Stripe is confirming {isLive ? 'your payment' : 'the test payment'}. Check again in a moment.</p>
+          <p role="status">Waiting for Stripe to confirm {testMode ? 'the test payment' : 'your payment'}. This page updates automatically.</p>
         )}
         {access?.error && <p role="alert" className="accountError">{access.error}</p>}
         {data?.checkoutReady && (
@@ -229,15 +247,17 @@ function BillingSettings({ portalUrl, access }) {
         <div className="billingChoices">
           <div className="billingChoice" data-selected={query.get('plan') === 'project'}>
             <h3>Single project</h3>
-            <p><strong>$10 USD</strong> once, for one original blueprint</p>
+            <p className="billingChoicePrice"><strong>${PRICING.project}</strong> USD once</p>
+            <p>Edit and download one original floor plan.</p>
             <button className="primary" disabled={!data?.checkoutReady || !accepted || Boolean(pending)}
               onClick={() => visitStripe('project')}>
               {pending === 'project' ? 'Opening Stripe…' : 'Buy a project credit'}
             </button>
           </div>
           <div className="billingChoice" data-selected={query.get('plan') === 'monthly'}>
-            <h3>Monthly plan</h3>
-            <p><strong>$19 USD</strong> per month. Renews until canceled.</p>
+            <h3>Monthly access</h3>
+            <p className="billingChoicePrice"><strong>${PRICING.monthly}</strong> USD / month</p>
+            <p>Edit multiple projects. Renews until canceled.</p>
             {data?.checkoutReady && !data.monthly && currentOffer && (
               <label className="policyAgreement">
                 <input type="checkbox" checked={recurringAccepted} onChange={(event) => setRecurringAccepted(event.target.checked)} />
@@ -252,14 +272,9 @@ function BillingSettings({ portalUrl, access }) {
           </div>
         </div>
         {data && !isLive && !data.checkoutReady && <p className="billingNotice">Sandbox checkout is being set up.</p>}
-        {refresh && (
+        {canOpenEditor(data) && (
           <div className="accountActions billingNotice">
-            {canOpenEditor(data) ? (
-              <a className="button" href="#/editor">Open editor</a>
-            ) : null}
-            <button type="button" onClick={refresh} disabled={loading}>
-              {loading ? 'Checking…' : 'Refresh access'}
-            </button>
+            <a className="button" href="#/editor">Open editor</a>
           </div>
         )}
       </section>
