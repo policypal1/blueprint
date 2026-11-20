@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.test-build/
+.seo-build-*/
+.env
+.env.*
+!.env.example
+.vercel/
+*.log
