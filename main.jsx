@@ -6,6 +6,7 @@ import '@fontsource/inter/latin-600.css';
 import '@fontsource/inter/latin-700.css';
 import Root from './Root.jsx';
 import './styles.css';
+import './revision-demo.css';
 class ErrorBoundary extends React.Component {
   state = { failed: false };
   static getDerivedStateFromError() {
