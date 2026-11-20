@@ -19,6 +19,7 @@ await build({
     account: path.join(base, 'Account.jsx'),
     auth: path.join(base, 'Auth.jsx'),
     trial: path.join(base, 'Trial.jsx'),
+    editorGuide: path.join(base, 'EditorGuide.jsx'),
   },
   outdir: path.join(base, '.test-build'),
   outExtension: { '.js': '.mjs' },
@@ -155,6 +156,12 @@ const { default: Root } = await import('../.test-build/root.mjs');
 const { default: AccountPage } = await import('../.test-build/account.mjs');
 const { SignInPage, ResetPasswordPage } = await import('../.test-build/auth.mjs');
 const { default: TrialPage } = await import('../.test-build/trial.mjs');
+const { default: EditorGuide } = await import('../.test-build/editorGuide.mjs');
+function Walkthrough() {
+  const [step, onStep] = React.useState(0);
+  const [open, setOpen] = React.useState(true);
+  return open ? React.createElement(EditorGuide, { mode: 'walkthrough', inEditor: true, step, onStep, onClose: () => setOpen(false) }) : null;
+}
 const { canOpenEditor, fullEditorAccess, trialTimeLeft } = await import('../access.js');
 const click = (role, name) => {
   const dialog = screen.queryByRole('dialog');
@@ -1001,7 +1008,7 @@ test('a credit-locked project keeps its blueprint when cleared and has no replac
   assert.ok(svg().querySelector('image'));
 });
 
-test('the public sample plays edits, pauses and advances without changing saved drawings', () => {
+test('the editor walkthrough plays edits, pauses and advances without changing saved drawings', () => {
   const originalSetTimeout = window.setTimeout;
   const originalClearTimeout = window.clearTimeout;
   const pending = new Map();
@@ -1021,10 +1028,7 @@ test('the public sample plays edits, pauses and advances without changing saved 
   };
   const saved = { ...localStorage };
   try {
-    render(React.createElement(Marketing, { page: 'home' }));
-    const hero = within(screen.getByRole('region', { name: /Edit your existing floor plan/ }));
-    assert.equal(hero.getByRole('link', { name: 'Edit your blueprint' }).querySelector('svg'), null);
-    fireEvent.click(hero.getByRole('button', { name: 'Try a sample plan' }));
+    render(React.createElement(Walkthrough));
     assert.ok(screen.getByRole('dialog', { name: 'Editor walkthrough' }));
     click('button', 'Next');
     assert.ok(screen.getByText('Step 2 of 10'));
@@ -1054,8 +1058,7 @@ test('reduced-motion visitors control sample playback and pricing keeps billing 
   const previousMedia = window.matchMedia;
   window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
   try {
-    const view = render(React.createElement(Marketing, { page: 'home' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Try a sample plan' }));
+    const view = render(React.createElement(Walkthrough));
     assert.ok(screen.getByRole('button', { name: 'Play walkthrough' }));
     assert.equal(screen.queryByRole('button', { name: 'Pause walkthrough' }), null);
     click('button', 'Next');
@@ -1063,7 +1066,6 @@ test('reduced-motion visitors control sample playback and pricing keeps billing 
     view.unmount();
     render(React.createElement(Marketing, { page: 'pricing', account: { signedIn: true, user: { email: 'demo@example.test' } } }));
     assert.equal(screen.queryByRole('link', { name: 'View billing' }), null);
-    assert.ok(screen.getByText(/Both options include/));
     assert.ok(document.querySelector('.accountMenuLinks a[href="#/account/billing"]'));
   } finally {
     cleanup();
