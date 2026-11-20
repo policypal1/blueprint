@@ -227,7 +227,9 @@ test('live billing uses live consent and keeps purchases disabled during Stripe 
   const access = { data: { billingMode: 'live', checkoutReady: false, activationPending: true,
     billingAvailable: true, monthlyOfferVersion: LIVE_MONTHLY_VERSION }, checkout: async (...args) => calls.push(args) };
   const view = render(React.createElement(AccountPage, { account, access, billing: true }));
-  assert.ok(screen.getByText('Payments are awaiting Stripe activation.'));
+  assert.equal(screen.queryByText('Payments are awaiting Stripe activation.'), null);
+  assert.equal(screen.queryByText('Live billing'), null);
+  assert.equal(screen.queryByText('Billing support', { exact: true }), null);
   assert.equal(screen.getByRole('button', { name: 'Buy a project credit' }).disabled, true);
   assert.equal(screen.queryByRole('link', { name: 'Open test billing portal' }), null);
   access.data.checkoutReady = true;
@@ -271,6 +273,8 @@ test('landing and pricing explain the product and lead to the editor', async () 
   assert.ok(screen.getByRole('heading', { name: 'Pricing', level: 1 }));
   assert.ok(screen.getByText('$10'));
   assert.ok(screen.getByText('$19'));
+  assert.equal(screen.getByRole('link', { name: 'Buy single project' }).getAttribute('href'), '/?plan=project#/account/billing');
+  assert.equal(screen.getByRole('link', { name: 'Get monthly access' }).getAttribute('href'), '/?plan=monthly#/account/billing');
   assert.ok(screen.getByRole('heading', { name: 'FAQs' }));
   assert.doesNotMatch(screen.getByRole('main').textContent, /\bbeta\b/i);
   assert.equal(screen.getAllByRole('article').length, 2);
@@ -518,6 +522,91 @@ test('phone editor reaches the core drawing tools and keeps pinch gestures in Vi
   }
 });
 
+test('wall endpoints and width resize by touch with one undo per drag', async () => {
+  render(React.createElement(Editor));
+  await waitSaved(); await newProject('Touch wall resizing');
+  click('button', 'Wall'); draw(200, 200, 600, 200); click('button', 'Select');
+  const wall = svg().querySelector('line[stroke="#000"]');
+  fireEvent.pointerDown(wall, { button: 0, clientX: 400, clientY: 200, pointerId: 41 });
+  fireEvent.pointerUp(svg(), { clientX: 400, clientY: 200, pointerId: 41 });
+  const end = screen.getByRole('button', { name: 'Resize wall end' });
+  const pointer = { button: 0, pointerId: 42, pointerType: 'touch' };
+  fireEvent.pointerDown(end, { ...pointer, clientX: 600, clientY: 200 });
+  fireEvent.pointerMove(svg(), { ...pointer, clientX: 800, clientY: 200 });
+  fireEvent.pointerUp(svg(), { ...pointer, clientX: 800, clientY: 200 });
+  assert.equal(wall.getAttribute('x2'), '800');
+  const width = screen.getByRole('button', { name: 'Resize wall thickness' });
+  const x = Number(width.getAttribute('cx')), y = Number(width.getAttribute('cy'));
+  fireEvent.pointerDown(width, { ...pointer, clientX: x, clientY: y });
+  fireEvent.pointerMove(svg(), { ...pointer, clientX: x, clientY: y + 6 });
+  fireEvent.pointerUp(svg(), { ...pointer, clientX: x, clientY: y + 6 });
+  assert.equal(screen.getByLabelText('Wall thickness (inches)').value, '7.5');
+  assert.equal(wall.getAttribute('stroke-width'), '30');
+  click('button', 'Undo');
+  assert.equal(svg().querySelector('line[stroke="#000"]').getAttribute('stroke-width'), '18');
+  assert.equal(svg().querySelector('line[stroke="#000"]').getAttribute('x2'), '800');
+  click('button', 'Undo');
+  assert.equal(svg().querySelector('line[stroke="#000"]').getAttribute('x2'), '600');
+  await waitSaved();
+});
+
+test('wall colors persist, new walls inherit the chosen style and matching is undoable', async () => {
+  render(React.createElement(Editor));
+  await waitSaved(); await newProject('Wall appearance matching');
+  click('button', 'Wall'); draw(200, 200, 600, 200); click('button', 'Select');
+  const first = svg().querySelector('line[stroke="#000"]');
+  const select = (node, y) => {
+    fireEvent.pointerDown(node, { button: 0, clientX: 400, clientY: y, pointerId: 43 });
+    fireEvent.pointerUp(svg(), { clientX: 400, clientY: y, pointerId: 43 });
+  };
+  select(first, 200);
+  fireEvent.change(screen.getByLabelText('Wall color'), { target: { value: '#777777' } });
+  fireEvent.change(screen.getByLabelText('Wall thickness (inches)'), { target: { value: '6' } });
+  fireEvent.blur(screen.getByLabelText('Wall thickness (inches)'));
+  click('button', 'Wall'); draw(200, 400, 600, 400); click('button', 'Select');
+  const walls = svg().querySelectorAll('line[stroke="#777777"]');
+  assert.equal(walls.length, 2);
+  assert.equal(walls[1].getAttribute('stroke-width'), '24');
+  select(walls[1], 400);
+  fireEvent.change(screen.getByLabelText('Wall color'), { target: { value: '#222222' } });
+  fireEvent.change(screen.getByLabelText('Wall thickness (inches)'), { target: { value: '2' } });
+  fireEvent.blur(screen.getByLabelText('Wall thickness (inches)'));
+  click('button', 'Match another wall');
+  select(first, 200);
+  await waitFor(() => assert.equal(screen.getByLabelText('Wall color').value, '#777777'));
+  assert.equal(screen.getByLabelText('Wall thickness (inches)').value, '6');
+  click('button', 'Undo');
+  assert.ok(svg().querySelector('line[stroke="#222222"][stroke-width="8"]'));
+  await waitSaved(); cleanup(); render(React.createElement(Editor)); await waitSaved();
+  assert.ok(svg().querySelector('line[stroke="#777777"][stroke-width="24"]'));
+  assert.ok(svg().querySelector('line[stroke="#222222"][stroke-width="8"]'));
+});
+
+test('phone users can pan past a wall, tap it to select, and zoom directly to 500 percent', async () => {
+  const previousMedia = window.matchMedia;
+  window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
+  try {
+    render(React.createElement(Editor)); await waitSaved(); await newProject('Phone selection and zoom');
+    click('button', 'Edit'); tap(200, 200); tap(600, 200); click('button', 'View');
+    const wall = svg().querySelector('.wallTouchTarget');
+    const pointer = { button: 0, pointerId: 44, pointerType: 'touch' };
+    fireEvent.pointerDown(wall, { ...pointer, clientX: 400, clientY: 200 });
+    fireEvent.pointerMove(svg(), { ...pointer, clientX: 450, clientY: 230 });
+    fireEvent.pointerUp(svg(), { ...pointer, clientX: 450, clientY: 230 });
+    assert.equal(screen.queryByRole('button', { name: 'Resize wall end' }), null);
+    assert.equal(screen.getByRole('button', { name: 'Pan', exact: true }).getAttribute('aria-pressed'), 'true');
+    fireEvent.pointerDown(wall, { ...pointer, clientX: 400, clientY: 200 });
+    fireEvent.pointerUp(svg(), { ...pointer, clientX: 400, clientY: 200 });
+    assert.ok(screen.getByRole('button', { name: 'Resize wall end' }));
+    assert.equal(screen.getByRole('button', { name: 'Select', exact: true }).getAttribute('aria-pressed'), 'true');
+    fireEvent.change(screen.getByLabelText('Zoom level'), { target: { value: '500' } });
+    assert.match(document.querySelector('.canvasChrome').style.transform, /scale\(5\)/);
+    assert.equal(screen.getByRole('button', { name: 'Zoom in' }).disabled, true);
+    click('button', 'Fit'); assert.equal(screen.getByLabelText('Zoom level').value, '100');
+    await waitSaved();
+  } finally { cleanup(); window.matchMedia = previousMedia; }
+});
+
 test('the desktop tip returns on a new mobile editor visit unless opted out', async () => {
   const previousMedia = window.matchMedia;
   const key = 'editfloorplans-hide-desktop-tip';
@@ -527,7 +616,7 @@ test('the desktop tip returns on a new mobile editor visit unless opted out', as
   try {
     const view = render(editor());
     await screen.findByRole('dialog', tip);
-    click('button', 'Close');
+    click('button', 'Continue on phone');
     view.rerender(editor({ showRecent: false }));
     assert.equal(screen.queryByRole('dialog', tip), null);
     assert.equal(localStorage.getItem(key), null);
@@ -1112,8 +1201,10 @@ test('reduced-motion visitors control sample playback and pricing keeps billing 
     click('button', 'Next');
     assert.ok(screen.getByText('Step 2 of 10'));
     view.unmount();
-    render(React.createElement(Marketing, { page: 'pricing', account: { signedIn: true, user: { email: 'demo@example.test' } } }));
+    render(React.createElement(Marketing, { page: 'pricing', trialOffer: true, account: { signedIn: true, user: { email: 'demo@example.test' } } }));
     assert.equal(screen.queryByRole('link', { name: 'View billing' }), null);
+    assert.ok(screen.getByRole('link', { name: 'Start 3-day free trial' }));
+    assert.ok(screen.getByText('No credit card needed', { exact: true }));
     assert.ok(document.querySelector('.accountMenuLinks a[href="#/account/billing"]'));
   } finally {
     cleanup();
@@ -1273,7 +1364,7 @@ test('the billing route requires sign-in and the sandbox portal is labeled', asy
   const portal = screen.getByRole('link', { name: 'Open test billing portal' });
   assert.match(portal.href, /^https:\/\/billing\.stripe\.com\/p\/login\/test_/);
   assert.equal(portal.rel, 'noopener noreferrer');
-  assert.ok(screen.getByText('Checking…'));
+  assert.equal(document.querySelector('.billingMode'), null);
   const sections = within(screen.getByRole('navigation', { name: 'Account' }));
   assert.deepEqual(sections.getAllByRole('link').map((link) => link.getAttribute('href')), [
     '#/account', '#/account/security', '#/account/billing',
