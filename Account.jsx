@@ -3,7 +3,7 @@ import { AccountAvatar, profileName } from './AccountMenu.jsx';
 import { Icon, Modal, PRODUCT_NAME } from './ui.jsx';
 import { authErrorText, MAX_DISPLAY_NAME_LENGTH } from './useAccount.js';
 import { canOpenEditor, timedAccessActive } from './access.js';
-import { MONTHLY_VERSION, MONTHLY_DISCLOSURE, MONTHLY_CANCELLATION_URL } from './supabase/functions/planpatch-account/monthly-offer.js';
+import { MONTHLY_VERSION, MONTHLY_DISCLOSURE, LIVE_MONTHLY_VERSION, LIVE_MONTHLY_DISCLOSURE, MONTHLY_CANCELLATION_URL } from './supabase/functions/planpatch-account/monthly-offer.js';
 import { PolicyAgreement } from './Policies.jsx';
 
 const SANDBOX_PORTAL_URL = 'https://billing.stripe.com/p/login/test_00w8wIf8fdke23P1oO4ZG00';
@@ -142,16 +142,17 @@ function SecuritySettings({ account }) {
   );
 }
 
-function SubscriptionConfirmation({ receipt }) {
+function SubscriptionConfirmation({ receipt, live = false }) {
   const paidDate = new Date(receipt.paid_at).toISOString();
   const periodEnd = new Date(receipt.first_period_end).toISOString();
   const amount = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(receipt.amount_paid_cents / 100);
   const configuredSupport = import.meta.env?.VITE_PLANPATCH_SUPPORT_EMAIL?.trim();
   const support = configuredSupport && !configuredSupport.endsWith('.example') ? configuredSupport : 'https://www.editfloorplans.com/support';
   const text = [
-    'Blueprint | Test subscription confirmation', 'Test mode. No real money was charged.', '',
-    'Initial test payment: ' + amount + ' USD on ' + paidDate,
-    'First paid period ends: ' + periodEnd, 'Stripe test invoice: ' + receipt.invoice_id, '',
+    live ? 'Blueprint | Subscription confirmation' : 'Blueprint | Test subscription confirmation',
+    ...(live ? [] : ['Test mode. No real money was charged.']), '',
+    (live ? 'Initial payment: ' : 'Initial test payment: ') + amount + ' USD on ' + paidDate,
+    'First paid period ends: ' + periodEnd, (live ? 'Stripe invoice: ' : 'Stripe test invoice: ') + receipt.invoice_id, '',
     'Accepted on ' + new Date(receipt.accepted_at).toISOString() + ' | Offer ' + receipt.offer_version,
     receipt.offer_text, '', 'Manage or cancel your subscription: ' + MONTHLY_CANCELLATION_URL,
     'Refunds and cancellation: https://www.editfloorplans.com/refunds-and-cancellation',
@@ -159,11 +160,11 @@ function SubscriptionConfirmation({ receipt }) {
   ].join('\n');
   return (
     <section className="accountCard" aria-labelledby="subscription-confirmation-title">
-      <h2 id="subscription-confirmation-title">Test subscription confirmation</h2>
-      <p>Stripe confirmed your first test payment of {amount} USD on {new Date(paidDate).toLocaleDateString()}.</p>
+      <h2 id="subscription-confirmation-title">{live ? 'Subscription confirmation' : 'Test subscription confirmation'}</h2>
+      <p>Stripe confirmed your first {live ? 'payment' : 'test payment'} of {amount} USD on {new Date(paidDate).toLocaleDateString()}.</p>
       <p>{receipt.offer_text}</p>
       <a className="accountTextLink" href={'data:text/plain;charset=utf-8,' + encodeURIComponent(text)}
-        download="Blueprint-test-subscription-confirmation.txt">Save subscription confirmation</a>
+        download={live ? 'Blueprint-subscription-confirmation.txt' : 'Blueprint-test-subscription-confirmation.txt'}>Save subscription confirmation</a>
     </section>
   );
 }
@@ -175,9 +176,13 @@ function BillingSettings({ portalUrl, access }) {
   const [recurringAccepted, setRecurringAccepted] = useState(false);
   const attempts = useRef({});
   const { data, loading, refresh } = access ?? {};
-  const currentOffer = data?.monthlyOfferVersion === MONTHLY_VERSION;
-  const backupPortal = STRIPE_TEST_PORTAL.test(portalUrl);
-  const returned = new URLSearchParams(window.location.search).has('sandbox_checkout');
+  const isLive = data?.billingMode === 'live';
+  const offerVersion = isLive ? LIVE_MONTHLY_VERSION : MONTHLY_VERSION;
+  const disclosure = isLive ? LIVE_MONTHLY_DISCLOSURE : MONTHLY_DISCLOSURE;
+  const currentOffer = data?.monthlyOfferVersion === offerVersion;
+  const backupPortal = !isLive && STRIPE_TEST_PORTAL.test(portalUrl);
+  const query = new URLSearchParams(window.location.search);
+  const returned = query.has('checkout') || query.has('sandbox_checkout');
   const trialActive = timedAccessActive(data?.trialEndsAt);
 
   async function visitStripe(action) {
@@ -190,7 +195,7 @@ function BillingSettings({ portalUrl, access }) {
         await access.portal(action === 'cancel');
       } else {
         attempts.current[action] ??= crypto.randomUUID();
-        const consent = action === 'monthly' ? { accepted: true, version: MONTHLY_VERSION } : undefined;
+        const consent = action === 'monthly' ? { accepted: true, version: offerVersion } : undefined;
         await access.checkout(action, attempts.current[action], consent);
       }
     } catch (problem) {
@@ -204,18 +209,18 @@ function BillingSettings({ portalUrl, access }) {
       <section className="accountCard" aria-labelledby="plans-billing-title">
         <div className="accountCardHeading">
           <h2 id="plans-billing-title">Plans and access</h2>
-          <span className="billingMode">Test mode</span>
+          <span className="billingMode">{data ? isLive ? 'Live billing' : 'Test mode' : 'Checking…'}</span>
         </div>
         {trialActive && (
           <p>Your free trial ends {new Date(data.trialEndsAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}.</p>
         )}
-        {data?.monthly ? <p>Your monthly test subscription is active.</p> : (
+        {data?.monthly ? <p>Your monthly {isLive ? 'subscription' : 'test subscription'} is active.</p> : (
           <p>{data?.projectCredits || data?.projectIds?.length
             ? `${data.projectCredits} unused project ${data.projectCredits === 1 ? 'credit' : 'credits'} · ${data.projectIds.length} unlocked`
-            : 'A test purchase unlocks editing.'}</p>
+            : isLive ? 'Choose a project credit or monthly access.' : 'A test purchase unlocks editing.'}</p>
         )}
         {returned && !data?.monthly && !data?.projectCredits && !data?.projectIds?.length && (
-          <p role="status">Stripe is confirming the test payment. Check again in a moment.</p>
+          <p role="status">Stripe is confirming {isLive ? 'your payment' : 'the test payment'}. Check again in a moment.</p>
         )}
         {access?.error && <p role="alert" className="accountError">{access.error}</p>}
         {data?.checkoutReady && (
@@ -239,7 +244,7 @@ function BillingSettings({ portalUrl, access }) {
             {data?.checkoutReady && !data.monthly && currentOffer && (
               <label className="policyAgreement">
                 <input type="checkbox" checked={recurringAccepted} onChange={(event) => setRecurringAccepted(event.target.checked)} />
-                <span>{MONTHLY_DISCLOSURE}</span>
+                <span>{disclosure}</span>
               </label>
             )}
             {currentOffer && !data?.monthly && (
@@ -248,11 +253,11 @@ function BillingSettings({ portalUrl, access }) {
             {data?.checkoutReady && !data.monthly && !currentOffer && <p>Monthly checkout is being updated.</p>}
             <button className="primary" disabled={!data?.checkoutReady || !accepted || !currentOffer || !recurringAccepted || Boolean(pending) || data.monthly}
               onClick={() => visitStripe('monthly')}>
-              {data?.monthly ? 'Active subscription' : pending === 'monthly' ? 'Opening Stripe…' : 'Start test subscription'}
+              {data?.monthly ? 'Active subscription' : pending === 'monthly' ? 'Opening Stripe…' : isLive ? 'Start subscription' : 'Start test subscription'}
             </button>
           </div>
         </div>
-        {data && !data.checkoutReady && <p className="billingNotice">Sandbox checkout is being set up.</p>}
+        {data && !data.checkoutReady && <p className="billingNotice">{isLive ? data.activationPending ? 'Payments are awaiting Stripe activation.' : 'Checkout is being set up.' : 'Sandbox checkout is being set up.'}</p>}
         {refresh && (
           <div className="accountActions billingNotice">
             {canOpenEditor(data) ? (
@@ -264,19 +269,19 @@ function BillingSettings({ portalUrl, access }) {
           </div>
         )}
       </section>
-      {data?.monthlyConfirmation && <SubscriptionConfirmation receipt={data.monthlyConfirmation} />}
+      {data?.monthlyConfirmation && <SubscriptionConfirmation receipt={data.monthlyConfirmation} live={isLive} />}
       <section className="accountCard" aria-labelledby="manage-billing-title">
         <h2 id="manage-billing-title">Payment methods and invoices</h2>
         {data?.billingAvailable ? (
           <>
-            <p>Stripe manages saved payment methods, test invoices, and subscriptions.</p>
+            <p>Stripe manages saved payment methods, {isLive ? 'invoices' : 'test invoices'}, and subscriptions.</p>
             {data.monthly && (
               <button disabled={Boolean(pending)} onClick={() => visitStripe('cancel')}>
-                {pending === 'cancel' ? 'Opening cancellation…' : 'Cancel test subscription'}
+                {pending === 'cancel' ? 'Opening cancellation…' : isLive ? 'Cancel subscription' : 'Cancel test subscription'}
               </button>
             )}
             <button disabled={Boolean(pending)} onClick={() => visitStripe('portal')}>
-              {pending === 'portal' ? 'Opening Stripe…' : 'Manage test billing'}
+              {pending === 'portal' ? 'Opening Stripe…' : isLive ? 'Manage billing' : 'Manage test billing'}
             </button>
           </>
         ) : backupPortal ? (
