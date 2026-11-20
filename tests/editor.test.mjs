@@ -519,6 +519,9 @@ test('the walkthrough opens once and the complete editor guide stays available',
     await waitSaved();
     assert.equal(screen.queryByRole('dialog', walkthrough), null);
     click('button', 'Editor guide');
+    assert.ok(screen.getByRole('dialog', walkthrough));
+    assert.ok(document.querySelector('.inEditorWalkthrough .sampleDemoCursor'));
+    click('button', 'Tool reference');
     assert.ok(screen.getByRole('dialog', { name: 'Editor guide' }));
     click('button', 'Replay walkthrough');
     assert.ok(screen.getByRole('dialog', walkthrough));
@@ -714,7 +717,7 @@ test('reopening shows saved plans and uploading from the list creates a new plan
   render(React.createElement(Root));
   await screen.findByRole('heading', { name: 'Recent plans' });
   await waitForUpload();
-  assert.ok(within(screen.getByRole('banner')).getByRole('link', { name: 'EditFloorPlans.com home' }));
+  assert.ok(within(screen.getByRole('banner')).getByRole('link', { name: 'Blueprint home' }));
   assert.equal(window.location.hash, '#/editor');
   assert.equal(screen.queryByRole('button', { name: 'Restore backup' }), null);
   assert.equal(screen.queryByRole('button', { name: 'Try a sample plan' }), null);
@@ -998,6 +1001,76 @@ test('a credit-locked project keeps its blueprint when cleared and has no replac
   assert.ok(svg().querySelector('image'));
 });
 
+test('the public sample plays edits, pauses and advances without changing saved drawings', () => {
+  const originalSetTimeout = window.setTimeout;
+  const originalClearTimeout = window.clearTimeout;
+  const pending = new Map();
+  let nextId = 100000;
+  window.setTimeout = (callback, delay, ...args) => {
+    if (![1300, 6500].includes(delay)) return originalSetTimeout(callback, delay, ...args);
+    const id = nextId++;
+    pending.set(id, { callback, delay });
+    return id;
+  };
+  window.clearTimeout = (id) => pending.delete(id) || originalClearTimeout(id);
+  const tick = (delay) => {
+    const timer = [...pending.entries()].find(([, entry]) => entry.delay === delay);
+    assert.ok(timer, `expected a ${delay} ms playback timer`);
+    pending.delete(timer[0]);
+    act(() => timer[1].callback());
+  };
+  const saved = { ...localStorage };
+  try {
+    render(React.createElement(Marketing, { page: 'home' }));
+    const hero = within(screen.getByRole('region', { name: /Edit your existing floor plan/ }));
+    assert.equal(hero.getByRole('link', { name: 'Edit your blueprint' }).querySelector('svg'), null);
+    fireEvent.click(hero.getByRole('button', { name: 'Try a sample plan' }));
+    assert.ok(screen.getByRole('dialog', { name: 'Editor walkthrough' }));
+    click('button', 'Next');
+    assert.ok(screen.getByText('Step 2 of 10'));
+    assert.equal(screen.getByLabelText('Wall thickness (inches)').value, '4.5');
+    tick(1300);
+    tick(1300);
+    assert.equal(screen.getByLabelText('Wall thickness (inches)').value, '6');
+    assert.equal(document.querySelectorAll('.sampleEditor').length, 1);
+    assert.ok(document.querySelector('.sampleDrawing line[stroke-width="24"]'));
+    click('button', 'Pause walkthrough');
+    assert.equal(pending.size, 0);
+    click('button', 'Play walkthrough');
+    tick(6500);
+    assert.ok(screen.getByText('Step 3 of 10'));
+    assert.equal(document.querySelectorAll('.sampleEditor').length, 1);
+    click('button', 'Close dialog');
+    assert.equal(pending.size, 0);
+    assert.deepEqual({ ...localStorage }, saved);
+  } finally {
+    cleanup();
+    window.setTimeout = originalSetTimeout;
+    window.clearTimeout = originalClearTimeout;
+  }
+});
+
+test('reduced-motion visitors control sample playback and pricing keeps billing in the account menu', () => {
+  const previousMedia = window.matchMedia;
+  window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
+  try {
+    const view = render(React.createElement(Marketing, { page: 'home' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try a sample plan' }));
+    assert.ok(screen.getByRole('button', { name: 'Play walkthrough' }));
+    assert.equal(screen.queryByRole('button', { name: 'Pause walkthrough' }), null);
+    click('button', 'Next');
+    assert.ok(screen.getByText('Step 2 of 10'));
+    view.unmount();
+    render(React.createElement(Marketing, { page: 'pricing', account: { signedIn: true, user: { email: 'demo@example.test' } } }));
+    assert.equal(screen.queryByRole('link', { name: 'View billing' }), null);
+    assert.ok(screen.getByText(/Both options include/));
+    assert.ok(document.querySelector('.accountMenuLinks a[href="#/account/billing"]'));
+  } finally {
+    cleanup();
+    window.matchMedia = previousMedia;
+  }
+});
+
 test('trial landing prominently offers the account-based trial and links to all customer policies', () => {
   render(React.createElement(Marketing, { page: 'home', trialOffer: true }));
   const hero = within(screen.getByRole('region', { name: /Edit your existing floor plan/ }));
@@ -1007,7 +1080,7 @@ test('trial landing prominently offers the account-based trial and links to all 
   assert.equal(hero.getAllByRole('link').length, 1);
   const footer = within(screen.getByRole('navigation', { name: 'Footer' }));
   assert.deepEqual(footer.getAllByRole('link').map((link) => link.getAttribute('href')), [
-    '/how-to-edit-a-floor-plan-pdf', '/floor-plan-guides', '/pricing', '/terms', '/privacy', '/refunds-and-cancellation', '/support', '/privacy#cookie-settings',
+    '/terms', '/privacy', '/refunds-and-cancellation', '/support', '/privacy#cookie-settings',
   ]);
 });
 
@@ -1176,7 +1249,7 @@ test('the desktop header shows the account name and keeps the menu available fro
   const nav = within(header.querySelector('.siteHeaderActions > .siteNav'));
   assert.ok(nav.getByRole('link', { name: 'Pricing' }));
   const editorLink = nav.getByRole('link', { name: 'Edit your blueprint' });
-  assert.ok(editorLink.querySelector('svg'));
+  assert.equal(editorLink.querySelector('svg'), null);
   assert.equal(editorLink.classList.contains('button'), false);
   assert.equal(header.querySelector('.accountMenuName').textContent, 'Morgan Lee');
 
@@ -1200,9 +1273,9 @@ test('the sign-in path and legacy bookmark both open the account page', async ()
     for (const path of ['/sign-in', '/#/sign-in']) {
       window.history.replaceState(null, '', path);
       const view = render(React.createElement(Root));
-      await screen.findByRole('heading', { name: 'Sign in to EditFloorPlans.com', level: 1 });
+      await screen.findByRole('heading', { name: 'Sign in to Blueprint', level: 1 });
       assert.ok(screen.getByText('Account sign-in is currently unavailable.'));
-      assert.equal(screen.getByRole('link', { name: 'EditFloorPlans.com home' }).getAttribute('href'), '/');
+      assert.equal(screen.getByRole('link', { name: 'Blueprint home' }).getAttribute('href'), '/');
       view.unmount();
     }
   } finally {

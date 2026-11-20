@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Icon, Modal } from './ui.jsx';
+import SampleEditorPreview from './SampleEditorPreview.jsx';
 
 function walkthroughSteps(compact) {
   return [
@@ -12,8 +13,8 @@ function walkthroughSteps(compact) {
     {
       title: 'Select and edit an object', icon: 'select', action: 'select', label: 'Try Select',
       text: compact
-        ? 'Open View, choose Select, and tap an object. Tap Properties to change its size, rotation, or other settings.'
-        : 'Choose Select and click an object you added. The Properties panel on the right shows its settings, such as wall length, door type, or text.',
+        ? 'Open View, choose Select, and tap a wall you added. Tap Properties to change Exact wall length or Wall thickness (inches). Watch the sample change from 4.5 to 6 inches.'
+        : 'Choose Select and click a wall you added. In Object properties, change Exact wall length or Wall thickness (inches). Watch the sample change from 4.5 to 6 inches.',
     },
     {
       title: 'Draw a wall', icon: 'wall', action: 'wall', label: 'Try Wall',
@@ -52,23 +53,52 @@ function walkthroughSteps(compact) {
   ];
 }
 
-export default function EditorGuide({ compact, mode, step, onStep, onReplay, onTry, onClose }) {
+export default function EditorGuide({ compact, mode, step, onStep, onReplay, onTry, onClose, onReference, inEditor, startHref, startLabel }) {
   const steps = walkthroughSteps(compact);
+  const [playing, setPlaying] = useState(() => typeof window !== 'undefined'
+    && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+  const [visible, setVisible] = useState(() => typeof document === 'undefined' || !document.hidden);
+  useEffect(() => {
+    const query = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    const motionChanged = () => { if (query.matches) setPlaying(false); };
+    const visibilityChanged = () => setVisible(!document.hidden);
+    query?.addEventListener('change', motionChanged);
+    document.addEventListener('visibilitychange', visibilityChanged);
+    return () => {
+      query?.removeEventListener('change', motionChanged);
+      document.removeEventListener('visibilitychange', visibilityChanged);
+    };
+  }, []);
+  useEffect(() => {
+    if (mode !== 'walkthrough' || !playing || !visible) return;
+    const timer = window.setTimeout(() => {
+      if (step === steps.length - 1) setPlaying(false);
+      else onStep(step + 1);
+    }, 6500);
+    return () => window.clearTimeout(timer);
+  }, [mode, step, playing, visible, onStep, steps.length]);
   if (mode === 'walkthrough') {
     const current = steps[step];
     const last = step === steps.length - 1;
     const actions = (
       <div className="modalActions">
         <button type="button" onClick={step ? () => onStep(step - 1) : onClose}>{step ? 'Back' : 'Skip'}</button>
-        <button type="button" onClick={() => onTry(current.action)}>{current.label}</button>
+        <button type="button" onClick={() => {
+          if (!playing && last) onStep(0);
+          setPlaying(!playing);
+        }}>{playing ? 'Pause walkthrough' : last ? 'Play again' : 'Play walkthrough'}</button>
+        {onTry && <button type="button" onClick={() => onTry(current.action)}>{current.label}</button>}
+        {onReference && <button type="button" onClick={onReference}>Tool reference</button>}
         <button type="button" className="primary" data-dialog-focus onClick={last ? onClose : () => onStep(step + 1)}>
           {last ? 'Finish' : 'Next'}
         </button>
       </div>
     );
     return (
-      <Modal title="Editor walkthrough" onClose={onClose} className="editorGuide" footer={actions}>
-        <div key={step} className="walkthroughStep" aria-live="polite">
+      <Modal title="Editor walkthrough" onClose={onClose} className={`editorGuide sampleWalkthrough${inEditor ? ' inEditorWalkthrough' : ''}`} footer={actions}>
+        <p className="sampleIntro">Follow a sample plan from first edit to export. Your own drawings stay unchanged.</p>
+        <SampleEditorPreview key={`preview-${step}`} step={step} playing={playing && visible} />
+        <div key={`instructions-${step}`} className="walkthroughStep" aria-live="polite">
           <div className="guideStepIntro">
             <span className="guideStepIcon"><Icon name={current.icon} size={24} /></span>
             <p>Step {step + 1} of {steps.length}</p>
@@ -76,6 +106,7 @@ export default function EditorGuide({ compact, mode, step, onStep, onReplay, onT
           <h3>{current.title}</h3>
           <p>{current.text}</p>
         </div>
+        {last && startHref && <a className="button primary sampleStart" href={startHref}>{startLabel}</a>}
       </Modal>
     );
   }

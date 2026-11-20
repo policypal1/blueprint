@@ -4,6 +4,7 @@ import AccountMenu from './AccountMenu.jsx';
 import PlanIllustration, { DoorPlan } from './PlanIllustration.jsx';
 import { POLICY_LINKS } from './Policies.jsx';
 import { publicPages } from './seo-pages.js';
+import EditorGuide from './EditorGuide.jsx';
 
 export const PRICING = { project: 10, monthly: 19 };
 export const DEMO_HASH = '#/how-it-works';
@@ -20,11 +21,13 @@ const faqs = [
   ['Can I use my existing blueprint?', 'Yes. Upload a PDF, PNG, JPG or WebP up to 25 MB. Choose the sheet you want when a PDF has more than one page.'],
   ['What can I download?', 'Export your revised plan as a PDF or PNG while you have editing access.'],
   ['Where are my plans saved?', 'New drafts stay in this browser. Plans unlocked with a project credit are saved to your account.'],
+  ['Can I edit walls in an uploaded PDF?', 'Your imported sheet stays as a background. Use Clean up to cover an old detail, then draw editable walls, doors, fixtures and labels over it. Blueprint does not convert the PDF into CAD objects.'],
+  ['Do building requirements vary by state?', 'Yes. Adopted codes, local amendments, permit checklists and professional seal requirements depend on the location and project. Blueprint produces working markups and does not check code compliance or certify permit-ready plans. Confirm requirements with your local building department and use a licensed professional when required.'],
 ];
 
 const EditorLink = ({ tabIndex, trial = false }) => (
   <a href={trial ? '/#/trial' : '/#/editor'} className="button primary" tabIndex={tabIndex}>
-    {trial ? 'Start 3-day free trial' : 'Edit your blueprint'} <Icon name="arrow" size={17} />
+    {trial ? 'Start 3-day free trial' : 'Edit your blueprint'}
   </a>
 );
 
@@ -117,7 +120,7 @@ function SiteNav({ page, account, onNavigate }) {
       {account && !account.signedIn && (
         <a href={publicPages.signIn.path} aria-current={page === 'signIn' ? 'page' : undefined}>Sign in</a>
       )}
-      <a href="/#/editor" className="navEditorLink">Edit your blueprint <Icon name="arrow" size={16} /></a>
+      <a href="/#/editor" className="navEditorLink">Edit your blueprint</a>
     </nav>
   );
 }
@@ -179,6 +182,8 @@ function PriceOptions({ compact = false }) {
 function HomeContent({ trialOffer, signedIn }) {
   const heroAction = useRef(null);
   const [showSticky, setShowSticky] = useState(false);
+  const [sampleOpen, setSampleOpen] = useState(false);
+  const [sampleStep, setSampleStep] = useState(0);
   const showTrial = trialOffer && !signedIn;
 
   useEffect(() => {
@@ -198,12 +203,17 @@ function HomeContent({ trialOffer, signedIn }) {
           <h1 id="blueprint-hero-title">Edit your <span className="heroEmphasis">existing floor plan</span>.</h1>
           <p>Upload a PDF or image, mark up walls, doors and fixtures, and export a revised plan.</p>
           <div className="heroActions" ref={heroAction}>
-            <EditorLink trial={showTrial} />
+            <div className="heroActionButtons">
+              <EditorLink trial={showTrial} />
+              <button type="button" className="sampleDemoButton" onClick={() => { setSampleStep(0); setSampleOpen(true); }}>Try a sample plan</button>
+            </div>
             {showTrial && <p className="trialQualifier"><strong className="trialNoCard">No credit card needed</strong></p>}
+            <p className="heroFileNote">PDF, PNG, JPG or WebP · Up to 25 MB · No CAD experience needed</p>
           </div>
         </div>
       </section>
       <BlueprintDemo />
+      <p className="demoGuideLink"><a className="accountTextLink" href={publicPages.guides.path}>Explore floor plan editing guides</a></p>
       <section className="homeSection" aria-labelledby="comparison-title">
         <h2 id="comparison-title">See what changed</h2>
         <p className="comparisonIntro">Close the old doorway, move the entry, and add a window.</p>
@@ -221,13 +231,16 @@ function HomeContent({ trialOffer, signedIn }) {
       <section className="homeSection" aria-labelledby="project-pricing-title">
         <div className="priceSectionHeading">
           <h2 id="project-pricing-title">One project or monthly access</h2>
-          <a className="detailsLink" href={publicPages.pricing.path}>See pricing <Icon name="arrow" size={17} /></a>
+          <a className="detailsLink" href={publicPages.pricing.path}>See pricing</a>
         </div>
         <PriceOptions compact />
       </section>
       <aside className="stickyEdit" aria-label="Blueprint editor shortcut" aria-hidden={!showSticky} data-visible={showSticky}>
         <EditorLink trial={showTrial} tabIndex={showSticky ? undefined : -1} />
       </aside>
+      {sampleOpen && <EditorGuide mode="walkthrough" step={sampleStep} onStep={setSampleStep}
+        onClose={() => setSampleOpen(false)} startHref={showTrial ? '/#/trial' : '/#/editor'}
+        startLabel={showTrial ? 'Start 3-day free trial' : 'Edit your blueprint'} />}
     </>
   );
 }
@@ -266,7 +279,7 @@ function PricingContent({ trialOffer, signedIn }) {
         </div>
       )}
       <PriceOptions />
-      {signedIn && <div className="pricingAccount"><a className="button primary" href="/#/account/billing">View billing</a></div>}
+      <p className="pricingIncludes">Both options include the editing tools and PDF or PNG exports. A single project does not require a subscription.</p>
       <section className="faqSection" aria-labelledby="faq-title">
         <h2 id="faq-title">FAQs</h2>
         <div className="faqList">
@@ -293,9 +306,6 @@ export function SiteFooter() {
     <footer className="siteFooter">
       <a href="/" aria-label={`${PRODUCT_NAME} home`}><Brand /></a>
       <nav aria-label="Footer">
-        <a href={publicPages.guide.path}>How it works</a>
-        <a href={publicPages.guides.path}>Floor plan guides</a>
-        <a href={publicPages.pricing.path}>Pricing</a>
         {Object.entries(POLICY_LINKS).map(([page, label]) => (
           <a key={page} href={publicPages[page].path}>{label}</a>
         ))}

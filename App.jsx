@@ -2664,7 +2664,7 @@ export function BlueprintApp({
                   </button>
                 )}
                 <button disabled={!canCreateProject} onClick={() => { setProjectMenu(false); backupRef.current?.click(); }}>
-                  <Icon name="folder" /> Restore backup
+                  <Icon name="folder" /> Import saved backup
                 </button>
                 {compact && (
                   <button disabled={!future.length} onClick={() => { redo(); setProjectMenu(false); }}>
@@ -2713,7 +2713,10 @@ export function BlueprintApp({
             className="iconButton editorGuideButton"
             aria-label={guideMode === 'practice' ? 'Resume walkthrough' : 'Editor guide'}
             title={guideMode === 'practice' ? 'Resume walkthrough' : 'Editor guide'}
-            onClick={() => setGuideMode(guideMode === 'practice' ? 'walkthrough' : 'controls')}
+            onClick={() => {
+              if (guideMode !== 'practice') setWalkthroughStep(0);
+              setGuideMode('walkthrough');
+            }}
           >
             <Icon name="help" /> <span>{guideMode === 'practice' ? 'Resume guide' : 'Guide'}</span>
           </button>
@@ -2979,8 +2982,10 @@ export function BlueprintApp({
       {desktopTip}
       {guideMode && guideMode !== 'practice' && (
         <EditorGuide compact={compact} mode={guideMode} step={walkthroughStep}
+          inEditor
           onStep={setWalkthroughStep}
           onReplay={() => { setWalkthroughStep(0); setGuideMode('walkthrough'); }}
+          onReference={() => setGuideMode('controls')}
           onTry={tryWalkthroughTool}
           onClose={() => setGuideMode(null)} />
       )}
