@@ -11,18 +11,17 @@ export const POLICY_LINKS = {
 
 const configuredEmail = import.meta.env?.VITE_PLANPATCH_SUPPORT_EMAIL?.trim() ?? '';
 const supportEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(configuredEmail) && !configuredEmail.endsWith('.example')
-  ? configuredEmail : '';
+  ? configuredEmail : 'support@editfloorplans.com';
 
 export function SupportContact() {
-  return supportEmail ? <a className="accountTextLink" href={`mailto:${supportEmail}`}>{supportEmail}</a>
-    : <span>support@editfloorplans.example <small>(placeholder)</small></span>;
+  return <a className="accountTextLink" href={`mailto:${supportEmail}`}>{supportEmail}</a>;
 }
 
 const mailingAddress = import.meta.env?.VITE_PLANPATCH_MAILING_ADDRESS?.trim();
 
 function SellerContact() {
   return (
-    <p>Samuel Kumpula, an Oregon sole proprietor, operates EditFloorPlans.com.
+    <p>Samuel Kumpula, an Oregon sole proprietor, operates Blueprint at EditFloorPlans.com.
       {mailingAddress && <> You can write to the operator at {mailingAddress}.</>}
       {' '}Email <a className="accountTextLink" href="mailto:support@editfloorplans.com">support@editfloorplans.com</a> for account, billing or privacy requests.</p>
   );
@@ -47,6 +46,7 @@ function Terms() {
       <p>Deleting your account cancels its subscription and ends access immediately, including access to purchased projects. Before deleting your account, export the plans you want to keep and save any subscription confirmation from <a className="accountTextLink" href="/#/account/billing">Billing</a>.</p>
       <h2>Using your revisions</h2>
       <p>Exports are working markups. Scale, dimensions and edits can contain errors. Verify measurements against the site and have a qualified professional review plans used for construction, permitting or structural changes. The editor does not certify code compliance or provide architectural or engineering approval. Keep backups of important plans. These terms preserve rights and remedies that applicable law does not allow us to limit.</p>
+      <p>Building codes, local amendments, permit submission rules and requirements for a licensed architect or engineer vary by state, locality and project. Confirm the applicable rules with the building department where the property is located. Editing a drawing does not replace any required professional review or seal.</p>
       <p>See <a className="accountTextLink" href="/refunds-and-cancellation">Refunds &amp; cancellation</a> for billing terms. Contact <a className="accountTextLink" href="/support">Support</a> for account and service questions.</p>
     </>
   );
