@@ -5,6 +5,7 @@ import { SITE_NAME } from './seo-pages.js';
 export const PRODUCT_NAME = SITE_NAME;
 
 const paths = {
+  desktop: 'M3 4h18v13H3ZM8 21h8m-4-4v4',
   user: 'M20 21v-2a5 5 0 0 0-5-5H9a5 5 0 0 0-5 5v2M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
   lock: 'M6 10h12v11H6ZM9 10V7a3 3 0 0 1 6 0v3m-3 4v3',
   card: 'M3 5h18v14H3Zm0 5h18M7 15h4',
