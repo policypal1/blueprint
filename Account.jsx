@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AccountAvatar, profileName } from './AccountMenu.jsx';
 import { Icon, Modal, PRODUCT_NAME } from './ui.jsx';
-import { authErrorText, MAX_DISPLAY_NAME_LENGTH } from './useAccount.js';
+import { authErrorText, MAX_DISPLAY_NAME_LENGTH, selectedBillingPlan } from './useAccount.js';
 import { canOpenEditor } from './access.js';
 import { PRICING } from './Marketing.jsx';
 import { MONTHLY_VERSION, MONTHLY_DISCLOSURE, LIVE_MONTHLY_VERSION, LIVE_MONTHLY_DISCLOSURE, MONTHLY_CANCELLATION_URL } from './supabase/functions/planpatch-account/monthly-offer.js';
@@ -170,9 +170,10 @@ function SubscriptionConfirmation({ receipt, live = false }) {
   );
 }
 
-function BillingSettings({ portalUrl, access }) {
+function BillingSettings({ portalUrl, access, plan }) {
   const [pending, setPending] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
+  const [checkedAgain, setCheckedAgain] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [recurringAccepted, setRecurringAccepted] = useState(false);
   const attempts = useRef({});
@@ -185,6 +186,12 @@ function BillingSettings({ portalUrl, access }) {
   const backupPortal = !access && STRIPE_TEST_PORTAL.test(portalUrl);
   const query = new URLSearchParams(window.location.search);
   const returned = query.get('checkout') === 'returned' || query.get('sandbox_checkout') === 'returned';
+  const policyAgreement = data?.checkoutReady && (
+    <label className="policyAgreement">
+      <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
+      <span><PolicyAgreement /></span>
+    </label>
+  );
 
   useEffect(() => {
     if (!refresh) return;
@@ -207,7 +214,7 @@ function BillingSettings({ portalUrl, access }) {
     const openPortal = action === 'portal' || action === 'cancel';
     if (pending || (!openPortal && !accepted) || (action === 'monthly' && (!recurringAccepted || !currentOffer))) return;
     setPending(action);
-    setError('');
+    setError(null);
     try {
       if (openPortal) {
         await access.portal(action === 'cancel');
@@ -217,7 +224,20 @@ function BillingSettings({ portalUrl, access }) {
         await access.checkout(action, attempts.current[action], consent);
       }
     } catch (problem) {
-      setError(problem.message);
+      setError({ area: openPortal ? 'portal' : 'checkout', message: problem.message || 'Could not open Stripe. Try again.' });
+      setPending('');
+    }
+  }
+
+  async function checkAvailability() {
+    setPending('refresh');
+    setError(null);
+    try {
+      await refresh();
+      setCheckedAgain(true);
+    } catch {
+      setError({ area: 'checkout', message: 'Could not check checkout availability. Try again.' });
+    } finally {
       setPending('');
     }
   }
@@ -226,7 +246,7 @@ function BillingSettings({ portalUrl, access }) {
     <div className="accountStack">
       <section className="accountCard" aria-labelledby="plans-billing-title">
         <div className="accountCardHeading">
-          <h2 id="plans-billing-title">Plans and access</h2>
+          <h2 id="plans-billing-title">{plan ? 'Your order' : 'Plans and access'}</h2>
           {testMode && <span className="billingMode">Test mode</span>}
         </div>
         {data?.monthly ? <p>Your monthly {isLive ? 'subscription' : 'test subscription'} is active.</p> : (data?.projectCredits > 0 || data?.projectIds?.length > 0) ? (
@@ -238,26 +258,35 @@ function BillingSettings({ portalUrl, access }) {
           <p role="status">Waiting for Stripe to confirm {testMode ? 'the test payment' : 'your payment'}. This page updates automatically.</p>
         )}
         {access?.error && <p role="alert" className="accountError">{access.error}</p>}
-        {data?.checkoutReady && (
-          <label className="policyAgreement">
-            <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
-            <span><PolicyAgreement /></span>
-          </label>
+        {access?.loading && !data && <p role="status">Checking checkout availability…</p>}
+        {access && !data?.checkoutReady && (data || access.error) && (
+          <div className="checkoutStatus">
+            {data && <p aria-live="polite">{checkedAgain ? 'Checkout is still unavailable. Please try again later.' : 'Checkout is temporarily unavailable.'}</p>}
+            <div className="accountActions">
+              {refresh && <button type="button" onClick={checkAvailability} disabled={Boolean(pending) || access.loading}>
+                {pending === 'refresh' ? 'Checking…' : 'Check again'}
+              </button>}
+              {data?.canStartTrial && <a className="accountTextLink" href="/#/trial">Try 3 days free without a credit card</a>}
+            </div>
+          </div>
         )}
+        {!plan && policyAgreement}
         <div className="billingChoices">
-          <div className="billingChoice" data-selected={query.get('plan') === 'project'}>
+          {plan !== 'monthly' && <div className="billingChoice" data-selected={plan === 'project'}>
             <h3>Single project</h3>
             <p className="billingChoicePrice"><strong>${PRICING.project}</strong> USD once</p>
             <p>Edit and download one original floor plan.</p>
+            {plan && policyAgreement}
             <button className="primary" disabled={!data?.checkoutReady || !accepted || Boolean(pending)}
               onClick={() => visitStripe('project')}>
               {pending === 'project' ? 'Opening Stripe…' : 'Buy a project credit'}
             </button>
-          </div>
-          <div className="billingChoice" data-selected={query.get('plan') === 'monthly'}>
+          </div>}
+          {plan !== 'project' && <div className="billingChoice" data-selected={plan === 'monthly'}>
             <h3>Monthly access</h3>
             <p className="billingChoicePrice"><strong>${PRICING.monthly}</strong> USD / month</p>
             <p>Edit multiple projects. Renews until canceled.</p>
+            {plan && policyAgreement}
             {data?.checkoutReady && !data.monthly && currentOffer && (
               <label className="policyAgreement">
                 <input type="checkbox" checked={recurringAccepted} onChange={(event) => setRecurringAccepted(event.target.checked)} />
@@ -269,9 +298,10 @@ function BillingSettings({ portalUrl, access }) {
               onClick={() => visitStripe('monthly')}>
               {data?.monthly ? 'Active subscription' : pending === 'monthly' ? 'Opening Stripe…' : testMode ? 'Start test subscription' : 'Start subscription'}
             </button>
-          </div>
+          </div>}
         </div>
-        {data && !isLive && !data.checkoutReady && <p className="billingNotice">Sandbox checkout is being set up.</p>}
+        {error?.area === 'checkout' && <p role="alert" className="accountError billingNotice">{error.message}</p>}
+        {plan && <p className="billingNotice"><a className="accountTextLink" href="/#/account/billing">View both plans</a></p>}
         {canOpenEditor(data) && (
           <div className="accountActions billingNotice">
             <a className="button" href="#/editor">Open editor</a>
@@ -299,7 +329,7 @@ function BillingSettings({ portalUrl, access }) {
             <a className="button" href={portalUrl} target="_blank" rel="noopener noreferrer">Open test billing portal</a>
           </>
         ) : <p>Billing is currently unavailable.</p>}
-        {error && <p role="alert" className="accountError">{error}</p>}
+        {error?.area === 'portal' && <p role="alert" className="accountError">{error.message}</p>}
       </section>
     </div>
   );
@@ -368,6 +398,7 @@ export default function AccountPage({
   billing, security, account, access, onSignIn, onSignOut, onDeleted, portalUrl = BILLING_PORTAL_URL,
 }) {
   const title = useRef(null);
+  const plan = billing ? selectedBillingPlan(window.location.search) : null;
   useEffect(() => { title.current?.focus(); }, [billing, security]);
 
   return (
@@ -393,7 +424,7 @@ export default function AccountPage({
             </a>
           </nav>
           {billing
-            ? <BillingSettings key={account.user.id} portalUrl={portalUrl} access={access} />
+            ? <BillingSettings key={account.user.id} portalUrl={portalUrl} access={access} plan={plan} />
             : security
               ? <div className="accountStack">
                 <SecuritySettings key={account.user.id} account={account} />
@@ -404,10 +435,13 @@ export default function AccountPage({
       ) : (
         <section className="accountCard accountSignIn" aria-labelledby="account-sign-in-title">
           <h2 id="account-sign-in-title">Sign in to continue</h2>
-          <p>{account.client ? 'Sign in with email or Google to manage your account.' : 'Account sign-in is currently unavailable.'}</p>
+          <p>{!account.client ? 'Account sign-in is currently unavailable.'
+            : plan === 'project' ? `Sign in to buy one project for $${PRICING.project} USD. You’ll review your order before paying.`
+              : plan === 'monthly' ? `Sign in for monthly access at $${PRICING.monthly} USD per month. You’ll review your order before subscribing.`
+                : 'Sign in with email or Google to manage your account.'}</p>
           <div className="accountActions">
             {account.client && (
-              <button className="primary" onClick={onSignIn} disabled={account.busy}>Open sign in</button>
+              <button className="primary" onClick={() => onSignIn('signIn')} disabled={account.busy}>{plan ? 'Continue to sign in' : 'Open sign in'}</button>
             )}
             <a className="button" href="#/editor">Open editor</a>
           </div>
