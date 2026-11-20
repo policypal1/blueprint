@@ -1,4 +1,4 @@
-export const SITE_NAME = 'EditFloorPlans.com';
+export const SITE_NAME = 'Blueprint';
 export const SITE_ORIGIN = 'https://www.editfloorplans.com';
 
 export const publicPages = {
@@ -59,7 +59,7 @@ export const publicPages = {
   notFound: {
     path: '/404',
     title: `Page not found | ${SITE_NAME}`,
-    description: 'Find your way back to EditFloorPlans.com or open your workspace.',
+    description: 'Find your way back to Blueprint or open your workspace.',
     noindex: true,
   },
   terms: {
