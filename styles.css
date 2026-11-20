@@ -556,11 +556,11 @@ p {
 .profileTitle .accountAvatar { width: 42px; height: 42px; font-size: 18px; }
 .accountCard .accountError { color: var(--danger); }
 .billingChoices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.billingChoice { display: grid; align-content: start; gap: 10px; padding: 15px; border: 1px solid var(--line); border-radius: 8px; }
+.billingChoice { display: flex; flex-direction: column; gap: 10px; padding: 15px; border: 1px solid var(--line); border-radius: 8px; }
 .billingChoice h3, .billingChoice p { margin: 0; }
 .billingChoice p { font-size: 13px; }
 .billingChoice p strong { color: var(--ink); font-size: 19px; }
-.billingChoice button { min-width: 0; }
+.billingChoice > button { min-width: 0; min-height: 44px; width: 100%; margin-top: auto; }
 .billingNotice { margin-block: 14px 0; }
 .deletionCard { border-color: #e9c8bd; }
 .accessPage { padding: clamp(24px, 5vw, 58px) var(--site-gutter) clamp(48px, 8vw, 84px); }
@@ -1973,8 +1973,10 @@ hr {
 .helpSteps p { margin: 3px 0 0; color: var(--muted); }
 .editorGuide { width: min(470px, 100%); }
 .sampleWalkthrough { width: min(900px, 100%); }
+.inEditorWalkthrough { width: min(1140px, 100%); }
+.inEditorWalkthrough .sampleEditorBody { height: min(43vh, 430px); }
 .sampleIntro { margin: 0 0 15px; font-size: 14px; color: var(--muted); }
-.sampleEditor { overflow: hidden; border: 1px solid var(--line); border-radius: 9px; margin-bottom: 20px; background: var(--paper); }
+.sampleEditor { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; margin-bottom: 20px; background: var(--paper); }
 .sampleEditorBar { display: flex; justify-content: space-between; gap: 12px; padding: 11px 14px; color: var(--chromeText); background: var(--chrome); font-size: 14px; }
 .sampleEditorBar > span:first-child { display: inline-flex; align-items: center; gap: 8px; }
 .sampleEditorBar > span:last-child { color: var(--chromeMuted); }
@@ -1984,6 +1986,10 @@ hr {
 .sampleEditorBody { display: flex; min-height: 230px; height: min(36vh, 325px); background: #e8e2d7; }
 .sampleDrawing { width: 100%; min-width: 0; flex: 1; }
 .samplePlan { transition: transform 1000ms ease; }
+.sampleDemoCursor { position: absolute; z-index: 2; width: 30px; height: 36px; pointer-events: none; transition: left 1000ms ease-in-out, top 1000ms ease-in-out; filter: drop-shadow(0 2px 2px #0004); }
+.sampleDemoCursor svg { width: 26px; height: 32px; }
+.sampleDemoCursor[data-click='true']::after { content: ''; position: absolute; left: -7px; top: -7px; width: 28px; height: 28px; border: 2px solid var(--accent); border-radius: 50%; animation: sampleClick 900ms ease-out 1; }
+@keyframes sampleClick { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
 .sampleProperties { flex: 0 0 184px; border-left: 1px solid var(--line); background: var(--paper); padding: 13px; font-size: 14px; overflow: auto; }
 .sampleProperties > strong { display: block; margin-bottom: 13px; }
 .sampleObjectType { display: block; color: var(--muted); font-size: 12px; margin-bottom: 10px; }
@@ -1996,7 +2002,7 @@ hr {
 .sampleEditorStatus { display: flex; justify-content: space-between; gap: 10px; padding: 9px 12px; border-top: 1px solid var(--line); font-size: 13px; line-height: 1.4; color: var(--muted); background: var(--paper); }
 .sampleEditorStatus > span:last-child { white-space: nowrap; }
 .sampleStart { margin-top: 10px; }
-@media (prefers-reduced-motion: reduce) { .samplePlan { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .samplePlan, .sampleDemoCursor { transition: none; } .sampleDemoCursor::after { animation: none; } }
 @media (max-width: 620px) {
   .sampleProperties { flex-basis: 142px; padding: 9px; }
   .sampleToolbar { gap: 2px; padding: 5px; }
