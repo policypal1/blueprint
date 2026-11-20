@@ -22,10 +22,8 @@ const faqs = [
   ['Where are my plans saved?', 'New drafts stay in this browser. Plans unlocked with a project credit are saved to your account.'],
 ];
 
-const EditorLink = ({ tabIndex, trial = false }) => (
-  <a href={trial ? '/#/trial' : '/#/editor'} className="button primary" tabIndex={tabIndex}>
-    {trial ? 'Start 3-day free trial' : 'Edit your blueprint'}
-  </a>
+const EditorLink = ({ tabIndex }) => (
+  <a href="/#/editor" className="button primary" tabIndex={tabIndex}>Open editor</a>
 );
 
 function scrollToDemo() {
@@ -117,7 +115,7 @@ function SiteNav({ page, account, onNavigate }) {
       {account && !account.signedIn && (
         <a href={publicPages.signIn.path} aria-current={page === 'signIn' ? 'page' : undefined}>Sign in</a>
       )}
-      <a href="/#/editor" className="navEditorLink">Edit your blueprint</a>
+      <a href="/#/editor" className="navEditorLink">Open editor</a>
     </nav>
   );
 }
@@ -168,8 +166,8 @@ function PriceOptions({ compact = false }) {
           <div>
             {compact ? <p className="compactPriceLabel">{label}</p> : <h2>{label}</h2>}
             <p className="price"><strong>${amount}</strong><span> USD {unit}</span></p>
-            {!compact && <p className="priceDetail">{description}</p>}
           </div>
+          {!compact && <p className="priceDetail">{description}</p>}
           {!compact && <a className="button primary pricePurchase" href={`/?plan=${index === 0 ? 'project' : 'monthly'}#/account/billing`}>
             {index === 0 ? 'Buy single project' : 'Get monthly access'}
           </a>}
@@ -179,10 +177,9 @@ function PriceOptions({ compact = false }) {
   );
 }
 
-function HomeContent({ trialOffer, signedIn }) {
+function HomeContent({ showTrial }) {
   const heroAction = useRef(null);
   const [showSticky, setShowSticky] = useState(false);
-  const showTrial = trialOffer && !signedIn;
 
   useEffect(() => {
     if (!window.IntersectionObserver) return;
@@ -201,8 +198,8 @@ function HomeContent({ trialOffer, signedIn }) {
           <h1 id="blueprint-hero-title">Edit your <span className="heroEmphasis">existing floor plan</span>.</h1>
           <p>Upload a PDF or image, mark up walls, doors and fixtures, and export a revised plan.</p>
           <div className="heroActions" ref={heroAction}>
-            <EditorLink trial={showTrial} />
-            {trialOffer && <p className="trialQualifier">{signedIn && <>3-day free trial · </>}<strong className="trialNoCard">No credit card needed</strong></p>}
+            <EditorLink />
+            {showTrial && <p className="trialQualifier">3-day free trial · <strong className="trialNoCard">No credit card needed</strong></p>}
           </div>
         </div>
       </section>
@@ -228,8 +225,8 @@ function HomeContent({ trialOffer, signedIn }) {
         </div>
         <PriceOptions compact />
       </section>
-      <aside className="stickyEdit" aria-label="Blueprint editor shortcut" aria-hidden={!showSticky} data-visible={showSticky}>
-        <EditorLink trial={showTrial} tabIndex={showSticky ? undefined : -1} />
+      <aside className="stickyEdit" aria-label="Floor plan editor shortcut" aria-hidden={!showSticky} data-visible={showSticky}>
+        <EditorLink tabIndex={showSticky ? undefined : -1} />
       </aside>
     </>
   );
@@ -258,21 +255,21 @@ function GuideContent() {
   );
 }
 
-function PricingContent({ trialOffer, signedIn }) {
+function PricingContent({ showTrial }) {
   return (
     <>
       <h1>Pricing</h1>
-      {trialOffer && (
+      {showTrial && (
         <div className="pricingTrial">
-          <EditorLink trial />
-          <p className="trialQualifier"><strong className="trialNoCard">No credit card needed</strong>. Ends automatically.</p>
+          <EditorLink />
+          <p className="trialQualifier">3-day free trial · <strong className="trialNoCard">No credit card needed</strong></p>
         </div>
       )}
       <PriceOptions />
       <section className="faqSection" aria-labelledby="faq-title">
         <h2 id="faq-title">FAQs</h2>
         <div className="faqList">
-          {trialOffer && (
+          {showTrial && (
             <details>
               <summary>What happens when the free trial ends?<Icon name="chevron" size={20} /></summary>
               <p>The trial ends automatically after 72 hours. Choose a plan if you want to keep editing and downloading your work.</p>
@@ -290,17 +287,37 @@ function PricingContent({ trialOffer, signedIn }) {
   );
 }
 
+function FooterLinks() {
+  return (
+    <>
+      {Object.entries(POLICY_LINKS).map(([page, label]) => (
+        <a key={page} href={publicPages[page].path}>{label}</a>
+      ))}
+      <a href="/privacy#cookie-settings">Cookie settings</a>
+    </>
+  );
+}
+
 export function SiteFooter() {
+  const copyright = `© ${new Date().getFullYear()} ${PRODUCT_NAME}`;
   return (
     <footer className="siteFooter">
       <a href="/" aria-label={`${PRODUCT_NAME} home`}><Brand /></a>
-      <nav aria-label="Footer">
-        {Object.entries(POLICY_LINKS).map(([page, label]) => (
-          <a key={page} href={publicPages[page].path}>{label}</a>
-        ))}
-        <a href="/privacy#cookie-settings">Cookie settings</a>
-      </nav>
-      <small>© {new Date().getFullYear()} {PRODUCT_NAME}</small>
+      <nav className="footerDesktop" aria-label="Footer"><FooterLinks /></nav>
+      <small className="footerDesktop">{copyright}</small>
+      <details className="footerMenu" onKeyDown={(event) => {
+        if (event.key !== 'Escape' || !event.currentTarget.open) return;
+        event.currentTarget.open = false;
+        event.currentTarget.querySelector('summary').focus();
+      }} onBlur={(event) => {
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+      }}>
+        <summary>Site links <Icon name="chevron" size={16} /></summary>
+        <div className="footerMenuPanel">
+          <nav aria-label="Site links"><FooterLinks /></nav>
+          <small>{copyright}</small>
+        </div>
+      </details>
     </footer>
   );
 }
@@ -308,6 +325,7 @@ export function SiteFooter() {
 export default function Marketing({ page, account, trialOffer = false }) {
   const pricing = page === 'pricing';
   const guide = page === 'guide';
+  const showTrial = trialOffer && !account?.signedIn;
 
   useEffect(() => {
     if (page === 'demo') scrollToDemo();
@@ -329,9 +347,9 @@ export default function Marketing({ page, account, trialOffer = false }) {
       </a>
       <SiteHeader page={page} account={account} />
       <main id="main-content" className={pricing ? 'pricingPage' : guide ? 'guidePage' : undefined} tabIndex={-1}>
-        {pricing && <PricingContent trialOffer={trialOffer} signedIn={account?.signedIn} />}
+        {pricing && <PricingContent showTrial={showTrial} />}
         {guide && <GuideContent />}
-        {!guide && !pricing && <HomeContent trialOffer={trialOffer} signedIn={account?.signedIn} />}
+        {!guide && !pricing && <HomeContent showTrial={showTrial} />}
       </main>
       <SiteFooter />
     </div>
