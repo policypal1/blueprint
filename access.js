@@ -5,15 +5,12 @@ export function timedAccessActive(expiresAt, now = Date.now()) {
 }
 
 export function trialTimeLeft(expiresAt, now = Date.now()) {
-  const minutes = Math.ceil((Date.parse(expiresAt ?? '') - now) / 60_000);
-  if (!(minutes > 0)) return '';
-
-  const days = Math.floor(minutes / 1440);
-  const hours = Math.floor(minutes / 60) % 24;
-  const rest = minutes % 60;
-  if (days) return `${days} ${days === 1 ? 'day' : 'days'}${hours ? ` ${hours} hr` : ''}`;
-  if (hours) return `${hours} hr${rest ? ` ${rest} min` : ''}`;
-  return `${minutes} min`;
+  const seconds = Math.ceil((Date.parse(expiresAt ?? '') - now) / 1000);
+  if (!(seconds > 0)) return '';
+  const days = Math.floor(seconds / 86400);
+  const clock = [Math.floor(seconds / 3600) % 24, Math.floor(seconds / 60) % 60, seconds % 60]
+    .map((part) => String(part).padStart(2, '0')).join(':');
+  return days ? `${days}d ${clock}` : clock;
 }
 
 export function fullEditorAccess(policy) {
