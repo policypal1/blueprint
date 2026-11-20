@@ -341,7 +341,7 @@ test('landing and pricing explain the product and lead to the editor', async () 
   render(React.createElement(Marketing, { page: 'home' }));
   const hero = screen.getByRole('region', { name: /Edit your existing floor plan/ });
   assert.ok(within(hero).getByRole('heading', { name: /Edit your existing floor plan/ }));
-  assert.ok(screen.getByText(/existing PDF or image.*revised plan for your client/));
+  assert.ok(within(hero).getByText(/remodeling client.*PDF or image/));
   assert.equal(within(hero).getByRole('link', { name: 'Try the demo below' }).getAttribute('href'), '#doorway-demo');
   assert.equal(
     within(hero).getByRole('link', { name: 'Open editor' }).getAttribute('href'),

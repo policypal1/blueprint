@@ -4,7 +4,6 @@
   background: var(--site);
   font-synthesis: none;
   font-weight: 400;
-  --display-type: 'Barlow Semi Condensed', 'Arial Narrow', Inter, sans-serif;
   --ink: #252a2b;
   --muted: #555b5b;
   --line: #ded7cb;
@@ -727,82 +726,71 @@ html:has(.authConfirmation) { overflow: hidden; }
 }
 
 .marketingHome { background: var(--paper); }
-.marketing :is(h1, h2), .editorAccessDialog h2 {
-  font-family: var(--display-type);
-  font-weight: 700;
-}
 .hero {
   position: relative;
   isolation: isolate;
   overflow: hidden;
   display: grid;
-  grid-template-columns: minmax(0, 1.04fr) minmax(0, 1fr);
-  align-items: center;
-  gap: clamp(12px, 4vw, 70px);
-  padding: clamp(36px, 4.4vw, 64px) max(5%, calc((100% - 1152px) / 2));
-  color: #fffaf2;
-  background-color: #193535;
-  background-image: linear-gradient(90deg, #193535 9%, #193535c9 46%, transparent 100%),
-    linear-gradient(#a4d2c314 1px, transparent 1px),
-    linear-gradient(90deg, #a4d2c314 1px, transparent 1px);
-  background-size: 100% 100%, 28px 28px, 28px 28px;
-  border-bottom: 4px solid #e6a46e;
+  place-items: center;
+  min-height: 540px;
+  min-height: min(640px, calc(100svh - 72px));
+  padding: clamp(58px, 9vw, 115px) max(5%, 16px);
+  text-align: center;
 }
-.heroBlueprint { grid-column: 2; grid-row: 1; pointer-events: none; }
-.planIllustration { display: block; width: 100%; height: auto; }
-.heroBlueprint .planIllustration { overflow: visible; }
-.heroBlueprint svg > rect { fill: transparent; }
-.heroBlueprint svg [stroke]:not([stroke="none"]) { stroke: #bfdbcd; }
-.heroBlueprint svg g[fill="#fffaf3"] { fill: #294746; }
-.heroBlueprint svg [fill="#efeee8"] { fill: #335352; }
-.heroBlueprint svg g[stroke-width="1.5"] { stroke: #e2a777; }
-.heroBlueprint .planDimensions { fill: #f3c193; }
-.heroBlueprint .planDoorSwing { fill: #3e4e43; stroke: #ffbb85; }
-.heroCopy { grid-column: 1; grid-row: 1; min-width: 0; }
+.heroBlueprint {
+  position: absolute;
+  z-index: -1;
+  top: 52%;
+  left: 50%;
+  width: min(1460px, max(690px, 112%));
+  transform: translate(-50%, -50%) rotate(-12deg);
+  opacity: 0.13;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: auto 0 0;
+  height: clamp(90px, 18vw, 210px);
+  background: linear-gradient(transparent, var(--paper));
+  pointer-events: none;
+}
+.planIllustration {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.heroCopy { width: min(100%, 780px); }
 .hero h1 {
-  max-width: 14ch;
-  margin: 0 0 16px;
-  font-size: clamp(48px, 6.1vw, 84px);
-  line-height: .99;
-  letter-spacing: -.026em;
+  max-width: 15ch;
+  margin: 0 auto 19px;
+  font-size: clamp(39px, 8.4vw, 83px);
+  line-height: 1.05;
+  letter-spacing: -0.055em;
   text-wrap: balance;
 }
-.heroEmphasis { color: #ffc092; }
+.heroEmphasis {
+  text-decoration: underline;
+  text-decoration-color: var(--orange);
+  text-decoration-thickness: 0.075em;
+  text-underline-offset: 0.12em;
+}
 .heroCopy > p {
-  max-width: 45ch;
-  margin: 0;
-  font-size: clamp(15px, 1.35vw, 18px);
+  max-width: 44ch;
+  margin: 0 auto;
+  font-size: clamp(16px, 3.5vw, 21px);
   line-height: 1.55;
-  color: #e1ebe4;
+  color: var(--muted);
   text-wrap: pretty;
 }
-.heroActions {
-  display: grid;
-  grid-template-columns: max-content max-content;
-  align-items: center;
-  justify-content: start;
-  gap: 10px 22px;
-  margin-top: 22px;
-}
-.heroActions > .button { min-height: 47px; padding-inline: 24px; font-size: 15px; }
-.heroActions > div { grid-column: 2; grid-row: 1; }
-.hero .heroActions .demoScrollLink { margin: 0; color: #fffaf2; }
-.hero .heroActions .trialQualifier { grid-column: 1 / -1; margin: 0; color: #d4e2da; justify-content: flex-start; font-size: 13px; }
-.hero .trialNoCard { color: #fffaf2; }
-.hero a:focus-visible { outline-color: #ffba7d; }
-@media (max-width: 720px) {
-  .hero {
-    display: block;
-    padding: 34px max(6%, 18px);
-    background-size: 100% 100%, 24px 24px, 24px 24px;
-  }
-  .heroBlueprint { position: absolute; z-index: -1; width: 440px; right: -246px; top: -42px; opacity: .17; }
-  .heroCopy { max-width: 490px; }
-  .hero h1 { max-width: 14ch; }
-}
-@media (max-width: 380px) {
-  .heroActions { column-gap: 10px; }
-  .heroActions > .button { padding-inline: 15px; }
+.heroActions { margin-top: 28px; }
+.heroActions > .button {
+  width: min(100%, 292px);
+  min-height: 54px;
+  padding-inline: 18px;
+  font-size: 16px;
 }
 .blueprintDemo {
   max-width: 1100px;
