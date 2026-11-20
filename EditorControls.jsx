@@ -75,6 +75,7 @@ export function PhoneControls({
   onCancelWall,
   canSetDistance,
   onTool,
+  onMode,
   onOpen,
   onSetDistance,
 }) {
@@ -117,7 +118,7 @@ export function PhoneControls({
           <button
             key={id}
             aria-pressed={mode === id}
-            onClick={() => onTool(modeTools[id])}
+            onClick={() => onMode ? onMode(id) : onTool(modeTools[id])}
           >
             <Icon name={icon} size={18} />
             <span>{label}</span>
