@@ -9,7 +9,7 @@ let writeQueue = Promise.resolve();
 const projectListKey = (owner) => owner ? `projects:${owner}` : 'projects';
 const currentProjectKey = (owner) => owner ? `${CURRENT_KEY}:${owner}` : CURRENT_KEY;
 
-function openDB() {
+export function openDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
     request.onupgradeneeded = () => {
@@ -61,12 +61,12 @@ export async function removeDeviceProjects(owner) {
   localStorage.removeItem(currentProjectKey(owner));
 }
 
-export function useProjectStore(makeEmpty, repository, showRecent, owner) {
-  const cloud = useAccountProjects(repository, showRecent);
+export function useProjectStore(makeEmpty, repository, showRecent, owner, memoryOnly = false) {
+  const cloud = useAccountProjects(memoryOnly ? null : repository, showRecent);
   const [project, setActiveState] = useState(makeEmpty);
   const [projects, setListState] = useState([]);
-  const [hydrated, setHydrated] = useState(false);
-  const [saveStatus, setSaveStatus] = useState('Opening projects…');
+  const [hydrated, setHydrated] = useState(memoryOnly);
+  const [saveStatus, setSaveStatus] = useState(memoryOnly ? 'Guest preview' : 'Opening projects…');
   const [accountId, setAccountId] = useState(null);
   const accountIdRef = useRef(null);
   const projectRef = useRef(project),
@@ -77,6 +77,7 @@ export function useProjectStore(makeEmpty, repository, showRecent, owner) {
     persistedRevision = useRef(0);
 
   const setProjects = (fn) => {
+    if (memoryOnly) return;
     const next = typeof fn === 'function' ? fn(listRef.current) : fn;
     listRef.current = next;
     setListState(next);
@@ -88,7 +89,7 @@ export function useProjectStore(makeEmpty, repository, showRecent, owner) {
     setAccountId(nextAccountId);
     projectRef.current = next;
     setActiveState(next);
-    if (nextAccountId) return;
+    if (memoryOnly || nextAccountId) return;
     try {
       localStorage.setItem(currentProjectKey(owner), next.id);
     } catch {
@@ -105,6 +106,7 @@ export function useProjectStore(makeEmpty, repository, showRecent, owner) {
     );
   };
   const setProject = (fn) => {
+    if (memoryOnly) return;
     const next = typeof fn === 'function' ? fn(projectRef.current) : fn;
     const id = accountIdRef.current;
     if (id) {
@@ -131,6 +133,7 @@ export function useProjectStore(makeEmpty, repository, showRecent, owner) {
   };
 
   useEffect(() => {
+    if (memoryOnly) return;
     let alive = true;
     // Older unassigned drafts stay on the device. We cannot infer their owner.
     readProjects(owner)
@@ -166,7 +169,7 @@ export function useProjectStore(makeEmpty, repository, showRecent, owner) {
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || memoryOnly) return;
     if (failedLoad.current) {
       setSaveStatus('Storage unavailable · download backups');
       return;
@@ -176,6 +179,7 @@ export function useProjectStore(makeEmpty, repository, showRecent, owner) {
   }, [projects, hydrated]);
 
   useEffect(() => {
+    if (memoryOnly) return;
     const onHide = () => {
       if (document.visibilityState === 'hidden') {
         void flush();
