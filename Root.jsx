@@ -19,10 +19,13 @@ const Editor = lazy(() => import('./App.jsx'));
 const RECENT_HASH = '#/editor';
 const WORKSPACE_HASH = '#/editor/workspace';
 const SIGN_IN_HASH = '#/sign-in';
+const ACCESS_HASH = '#/editor/access';
+const EDITOR_SIGN_UP = '/sign-in?next=editor&mode=create';
 const APP_ROUTE_HASHES = {
   recent: RECENT_HASH,
   workspace: WORKSPACE_HASH,
   sample: '#/editor/sample',
+  editorAccess: ACCESS_HASH,
   account: '#/account',
   security: '#/account/security',
   billing: '#/account/billing',
@@ -35,6 +38,7 @@ const PAGE_TITLES = {
   recent: 'Recent plans',
   workspace: 'Editor',
   sample: 'Editor',
+  editorAccess: 'Editing access',
   account: 'Account',
   security: 'Sign-in & security',
   billing: 'Billing',
@@ -52,12 +56,18 @@ function readRoute() {
   return hash.startsWith('#/') ? publicPageAt(hash.slice(1)) || 'notFound' : page;
 }
 function isEditorRoute(route) {
-  return ['recent', 'workspace', 'sample'].includes(route);
+  return ['recent', 'workspace', 'sample', 'editorAccess'].includes(route);
 }
-function editorSignInLocation() {
-  return publicPageAt(window.location.pathname) === 'signIn'
-    && new URLSearchParams(window.location.search).get('next') === 'editor';
+function editorAuthDestination() {
+  const params = new URLSearchParams(window.location.search);
+  if (publicPageAt(window.location.pathname) !== 'signIn' || params.get('next') !== 'editor') return null;
+  return params.get('mode') === 'create' ? ACCESS_HASH : RECENT_HASH;
 }
+function navigateTo(url, replace = false) {
+  window.history[replace ? 'replaceState' : 'pushState'](window.history.state, '', url);
+  window.dispatchEvent(new Event('popstate'));
+}
+
 function EditorAccess({ access, accountLoading }) {
   const loading = accountLoading || access.loading;
   let title, message, action;
@@ -77,16 +87,8 @@ function EditorAccess({ access, accountLoading }) {
         <a className="button" href="/#/account">Account settings</a>
       </>
     );
-  } else if (access.data.canStartTrial) {
-    title = 'Try the editor free for 3 days';
-    message = 'Edit and export your floor plan. No credit card needed.';
-    action = <a className="button primary" href="/#/trial">Start free trial</a>;
-  } else if (access.data.trialEndsAt) {
-    return <ExpiredTrialPlans />;
   } else {
-    title = 'Unlock the editor';
-    message = 'Choose a $10 project credit or a $19 monthly plan to edit and download your plans.';
-    action = <a className="button primary" href="/#/account/billing">View plans</a>;
+    return <ExpiredTrialPlans expired={Boolean(access.data.trialEndsAt)} />;
   }
 
   return (
@@ -125,21 +127,36 @@ export default function Root() {
   const showEditor = isEditorRoute(route);
   const policy = access.data;
   const requireSignIn = Boolean(import.meta.env?.PROD || account.enabled);
-  const guestPreview = requireSignIn && !owner && !account.loading;
-  const editorSignIn = route === 'signIn' && editorSignInLocation();
+  const editingAllowed = !requireSignIn || Boolean(owner && canOpenEditor(policy));
+  const editorAvailable = !requireSignIn || (!account.loading && (!owner || (policy && !policy.deleting)));
+  const previewOnly = editorAvailable && !editingAllowed;
+  const viewingAccess = route === 'editorAccess' && Boolean(owner);
+  const showWorkspace = showEditor && !viewingAccess && editorAvailable;
+  const editorReturn = route === 'signIn' ? editorAuthDestination() : null;
+  const editorSignIn = Boolean(editorReturn);
   const fullAccess = fullEditorAccess(policy);
-  const editorAllowed = guestPreview || !requireSignIn || Boolean(owner && canOpenEditor(policy));
-  const showRecentPlans = route === 'recent' && !guestPreview;
-  const projectAccess = policy?.paymentsRequired && !fullAccess
+  const createFromEditor = editorReturn === ACCESS_HASH;
+  const showRecentPlans = route === 'recent' && !previewOnly;
+  const projectAccess = editingAllowed && policy?.paymentsRequired && !fullAccess
     ? { credits: policy.projectCredits, ids: policy.projectIds, refresh: access.refresh }
     : null;
   const showAccount = ['account', 'security', 'billing'].includes(route);
   const showAuthPage = route === 'signIn' || route === 'resetPassword';
   const showTrial = route === 'trial';
 
-  function requestEditorSignUp() {
-    signInTarget.current = RECENT_HASH;
-    setSignInDialog('create');
+  async function requestEditing() {
+    const location = window.location.href;
+    const ready = await preview.prepareNavigation();
+    if (ready && window.location.href === location) {
+      navigateTo(owner ? `/${ACCESS_HASH}` : EDITOR_SIGN_UP);
+    }
+  }
+
+  function backToPreview(event) {
+    if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (editorSignIn) preview.cancelSignIn();
+    navigateTo(`/${RECENT_HASH}`);
   }
 
   function openSignIn(mode = 'create') {
@@ -154,7 +171,7 @@ export default function Root() {
 
   const finishSignIn = useCallback(() => {
     if (readRoute() === 'signIn') {
-      const target = editorSignInLocation() ? RECENT_HASH : signInTarget.current;
+      const target = editorAuthDestination() || signInTarget.current;
       window.history.replaceState(window.history.state, '', `/${target}`);
       window.dispatchEvent(new Event('hashchange'));
     }
@@ -169,28 +186,29 @@ export default function Root() {
     await account.signOut();
     window.location.hash = '#/';
   };
+  const authReturn = editorReturn || signInTarget.current;
   const signInProps = {
     account,
     onAuthenticate: async (mode, email, password, displayName) => {
-      if (showEditor && mode !== 'forgot') await preview.prepareSignIn(mode, email);
+      if (editorSignIn && mode !== 'forgot') await preview.prepareSignIn(mode, email);
       try {
         return await account.authenticate(mode, email, password, {
           beforeLeaving: beforeLeaving.current,
-          returnTo: editorSignIn ? RECENT_HASH : signInTarget.current,
+          returnTo: authReturn,
           displayName,
         });
       } catch (error) {
-        if (showEditor) preview.cancelSignIn();
+        if (editorSignIn) preview.cancelSignIn();
         throw error;
       }
     },
     onGoogle: async () => {
-      if (showEditor) await preview.prepareSignIn('google');
+      if (editorSignIn) await preview.prepareSignIn('google');
       try {
         return await account.signInWithGoogle(beforeLeaving.current,
-          editorSignIn ? RECENT_HASH : signInTarget.current, showEditor && Boolean(preview.plan));
+          authReturn, editorSignIn && Boolean(preview.plan));
       } catch (error) {
-        if (showEditor) preview.cancelSignIn();
+        if (editorSignIn) preview.cancelSignIn();
         throw error;
       }
     },
@@ -247,10 +265,19 @@ export default function Root() {
     }
   }, [route, fullAccess]);
   useEffect(() => {
+    if (viewingAccess && !account.loading && editingAllowed) {
+      navigateTo(`/${RECENT_HASH}`, true);
+    }
+  }, [viewingAccess, account.loading, editingAllowed]);
+  useEffect(() => {
+    if (createFromEditor) {
+      document.title = `Create an account · ${PRODUCT_NAME}`;
+      return;
+    }
     const title = PAGE_TITLES[route];
     document.title = publicPages[route]?.title
       ?? (title ? `${title} · ${PRODUCT_NAME}` : publicPages.home.title);
-  }, [route]);
+  }, [route, createFromEditor]);
   return (
     <>
       {import.meta.env?.PROD && <ConsentAnalytics path={analyticsPath} />}
@@ -275,7 +302,10 @@ export default function Root() {
         <>
           <AuthHeader />
           {route === 'resetPassword' ? <ResetPasswordPage account={account} /> : (
-            <SignInPage {...signInProps} editorEntry={editorSignIn} trialOffer={trialOffer} />
+            <SignInPage key={createFromEditor ? 'editor-create' : 'sign-in'} {...signInProps}
+              initialMode={createFromEditor ? 'create' : 'signIn'} editorEntry={editorSignIn}
+              trialOffer={trialOffer} previewWarning={editorSignIn ? preview.redirectWarning : ''}
+              onBackToPreview={editorSignIn ? backToPreview : undefined} />
           )}
         </>
       )}
@@ -290,18 +320,18 @@ export default function Root() {
       {owner && preview.plan && preview.redirectWarning && (showEditor || showAccount || showTrial) && (
         <p role="status" className="accountAlert">{preview.redirectWarning}</p>
       )}
-      {showEditor && !editorAllowed && (
+      {showEditor && !showWorkspace && (
         <>
           <SiteHeader page={route} account={accountNav} />
-          {preview.plan && policy?.canStartTrial && !policy.deleting && !account.loading ? (
+          {viewingAccess && owner && policy?.canStartTrial && !policy.deleting && !account.loading ? (
             <TrialPage account={account} access={access} offer={trialOffer}
               offerChecking={trialStatus.checking} offerError={trialStatus.error}
               onCheckOffer={trialStatus.refresh} onSignIn={openSignIn} />
           ) : <EditorAccess access={access} accountLoading={account.loading} />}
         </>
       )}
-      {(showEditor || visitedEditor) && editorAllowed && (
-        <div className="editorRoot" hidden={!showEditor} inert={signInDialog ? '' : undefined}>
+      {(showEditor || visitedEditor) && editorAvailable && (
+        <div className="editorRoot" hidden={!showWorkspace}>
           {showRecentPlans && <SiteHeader page={route} account={accountNav} />}
           {showRecentPlans && !policy?.monthly && timedAccessActive(policy?.trialEndsAt) && (
             <TrialStatus expiresAt={policy.trialEndsAt} />
@@ -318,19 +348,19 @@ export default function Root() {
               {account.loading || preview.restoring ? (
                 <div className="loadingScreen" role="status">Opening your workspace…</div>
               ) : <Editor
-                key={owner || 'guest'}
-                active={showEditor && !signInDialog}
-                guestPreview={guestPreview}
+                key={`${owner || 'guest'}:${previewOnly ? 'preview' : 'edit'}`}
+                active={showWorkspace}
+                previewOnly={previewOnly}
                 previewPlan={preview.plan}
-                onGuestPlanChange={preview.setGuestPlan}
+                onPreviewPlanChange={preview.setPlan}
                 onPreviewPlanOpened={preview.clear}
-                onRequestSignUp={requestEditorSignUp}
-                repository={repository}
+                onRequestEditing={requestEditing}
+                repository={previewOnly ? null : repository}
                 projectAccess={projectAccess}
                 lockedProjectIds={policy?.lockedProjectIds}
                 owner={owner}
-                showMobileTip={!guestPreview}
-                showFirstUseGuide={!guestPreview}
+                showMobileTip={!previewOnly}
+                showFirstUseGuide={!previewOnly}
                 canDownload={policy?.paymentsRequired ? access.canDownload : undefined}
                 authBusy={account.busy}
                 onRegisterSave={registerSave}
@@ -350,13 +380,9 @@ export default function Root() {
         </div>
       )}
       {route !== 'privacy' && <PrivacyChoices banner />}
-      {signInDialog && (showTrial || (showEditor && guestPreview)) && (
-        <SignInPage {...signInProps} initialMode={signInDialog} editorEntry={showEditor}
-          trialOffer={trialOffer} previewWarning={showEditor ? preview.redirectWarning : ''}
-          onClose={() => {
-            if (showEditor) preview.cancelSignIn();
-            setSignInDialog(false);
-          }} />
+      {signInDialog && showTrial && (
+        <SignInPage {...signInProps} initialMode={signInDialog} trialOffer={trialOffer}
+          onClose={() => setSignInDialog(false)} />
       )}
     </>
   );

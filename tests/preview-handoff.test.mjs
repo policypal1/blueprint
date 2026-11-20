@@ -23,7 +23,7 @@ afterEach(cleanup);
 
 test('email handoff survives sign-in and a billing redirect, and stays with that owner', async () => {
   let view = open();
-  act(() => view.result.current.setGuestPlan(plan));
+  act(() => view.result.current.setPlan(plan));
   assert.equal(pendingTicket(), null);
   await act(() => view.result.current.prepareSignIn('create', ' Morgan@Example.Test '));
   assert.equal(JSON.parse(pendingTicket()).target.email, user.email);
@@ -42,7 +42,7 @@ test('email handoff survives sign-in and a billing redirect, and stays with that
 test('an email mismatch or unrelated Google sign-in cannot claim the guest plan', async () => {
   for (const mode of ['signIn', 'google']) {
     const view = open();
-    act(() => view.result.current.setGuestPlan(plan));
+    act(() => view.result.current.setPlan(plan));
     await act(() => view.result.current.prepareSignIn(mode, 'other@example.test'));
     view.rerender({ account: user });
     assert.equal(view.result.current.plan, null);
@@ -50,7 +50,7 @@ test('an email mismatch or unrelated Google sign-in cannot claim the guest plan'
     view.unmount();
   }
   const view = open();
-  act(() => view.result.current.setGuestPlan(plan));
+  act(() => view.result.current.setPlan(plan));
   await act(() => view.result.current.prepareSignIn('google'));
   view.unmount();
   const callback = open({ account: user, oauthOwner: user.id });
@@ -60,7 +60,7 @@ test('an email mismatch or unrelated Google sign-in cannot claim the guest plan'
 
 test('canceling a sign-in keeps the preview in memory and disarms the account handoff', async () => {
   const view = open();
-  act(() => view.result.current.setGuestPlan(plan));
+  act(() => view.result.current.setPlan(plan));
   await act(() => view.result.current.prepareSignIn('signIn', user.email));
   act(() => view.result.current.cancelSignIn());
   assert.equal(view.result.current.plan, plan);
@@ -71,10 +71,10 @@ test('canceling a sign-in keeps the preview in memory and disarms the account ha
 
 test('canceled asynchronous writes cannot replace a newer plan or leave its ticket armed', async () => {
   const view = open();
-  act(() => view.result.current.setGuestPlan(plan));
+  act(() => view.result.current.setPlan(plan));
   await act(async () => {
     const saving = view.result.current.prepareSignIn('create', user.email);
-    view.result.current.setGuestPlan({ ...plan, id: 'new' });
+    view.result.current.setPlan({ ...plan, id: 'new' });
     await assert.rejects(saving, /preview changed/i);
   });
   assert.equal(view.result.current.plan.id, 'new');
@@ -84,7 +84,7 @@ test('canceled asynchronous writes cannot replace a newer plan or leave its tick
 test('storage failure allows email in memory and requires a second Google attempt per drawing', async () => {
   globalThis.indexedDB = { open() { throw new Error('Storage unavailable'); } };
   const view = open();
-  act(() => view.result.current.setGuestPlan(plan));
+  act(() => view.result.current.setPlan(plan));
   await act(async () => {
     await assert.rejects(view.result.current.prepareSignIn('google'), { code: 'preview_redirect_unavailable' });
   });
@@ -92,12 +92,39 @@ test('storage failure allows email in memory and requires a second Google attemp
   assert.equal(pendingTicket(), null);
   act(() => view.result.current.cancelSignIn());
   await act(() => view.result.current.prepareSignIn('google'));
-  act(() => view.result.current.setGuestPlan({ ...plan, id: 'next' }));
+  act(() => view.result.current.setPlan({ ...plan, id: 'next' }));
   await act(async () => {
     await assert.rejects(view.result.current.prepareSignIn('google'), { code: 'preview_redirect_unavailable' });
   });
   await act(() => view.result.current.prepareSignIn('signIn', user.email));
   view.rerender({ account: user });
   assert.equal(view.result.current.plan.id, 'next');
+  assert.equal(pendingTicket(), null);
+});
+
+test('signed-in previews survive the billing page and stay private when the account changes', async () => {
+  let view = open({ account: user });
+  act(() => view.result.current.setPlan(plan));
+  assert.equal(view.result.current.plan.id, plan.id);
+  await act(() => view.result.current.prepareNavigation());
+  assert.deepEqual(JSON.parse(pendingTicket()).target, { owner: user.id });
+  view.unmount();
+  view = open({ account: user });
+  await waitFor(() => assert.equal(view.result.current.plan?.id, plan.id));
+  view.rerender({ account: null });
+  assert.equal(view.result.current.plan, null);
+  assert.equal(pendingTicket(), null);
+});
+
+test('opening the full registration page preserves the preview without assigning it to any account', async () => {
+  let view = open();
+  act(() => view.result.current.setPlan(plan));
+  await act(() => view.result.current.prepareNavigation());
+  assert.equal(JSON.parse(pendingTicket()).target, null);
+  view.unmount();
+  view = open();
+  await waitFor(() => assert.equal(view.result.current.plan?.id, plan.id));
+  view.rerender({ account: user });
+  assert.equal(view.result.current.plan, null);
   assert.equal(pendingTicket(), null);
 });

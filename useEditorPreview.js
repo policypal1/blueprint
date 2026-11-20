@@ -69,21 +69,49 @@ export default function useEditorPreview(user, accountLoading, oauthReturnOwner)
     return () => { revision.current++; };
   }, []);
 
-  const setGuestPlan = useCallback((plan) => {
+  const setPlan = useCallback((plan) => {
     revision.current++;
     forgetTicket();
     warnedGooglePlan.current = null;
     setRedirectWarning('');
     setRestoring(false);
-    setPreview(plan ? { plan, target: null } : null);
-  }, []);
-  const clear = useCallback(() => setGuestPlan(null), [setGuestPlan]);
+    setPreview(plan ? { plan, target: owner ? { owner } : null } : null);
+  }, [owner]);
+  const clear = useCallback(() => setPlan(null), [setPlan]);
   const cancelSignIn = useCallback(() => {
     revision.current++;
     forgetTicket();
     setRestoring(false);
     setPreview(current => current && ({ plan: current.plan, target: null }));
   }, []);
+
+  async function keepForReturn(plan, target, version) {
+    const until = Date.now() + DAY;
+    let key;
+    try {
+      key = PREFIX + until + ':' + crypto.randomUUID();
+      await previewRecord(key, 'save', plan);
+      if (version !== revision.current) {
+        removeRecord(key);
+        return false;
+      }
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ key, until, target }));
+      setRedirectWarning('');
+      return true;
+    } catch {
+      removeRecord(key);
+      if (version === revision.current) setRedirectWarning(STORAGE_WARNING);
+      return false;
+    }
+  }
+
+  async function prepareNavigation() {
+    if (!preview?.plan) return true;
+    const version = ++revision.current;
+    forgetTicket();
+    await keepForReturn(preview.plan, preview.target, version);
+    return version === revision.current;
+  }
 
   async function prepareSignIn(mode, address) {
     if (!preview?.plan || owner || mode === 'forgot') return;
@@ -92,28 +120,12 @@ export default function useEditorPreview(user, accountLoading, oauthReturnOwner)
     const version = ++revision.current;
     forgetTicket();
     setPreview(current => current?.target ? { plan: current.plan, target: null } : current);
-    const until = Date.now() + DAY;
-    let key;
-    try {
-      key = PREFIX + until + ':' + crypto.randomUUID();
-      await previewRecord(key, 'save', preview.plan);
-      if (version === revision.current) {
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify({ key, until, target }));
-        setRedirectWarning('');
-      } else {
-        removeRecord(key);
-      }
-    } catch {
-      removeRecord(key);
-      if (version === revision.current) {
-        setRedirectWarning(STORAGE_WARNING);
-        if (google && warnedGooglePlan.current !== preview.plan) {
-          warnedGooglePlan.current = preview.plan;
-          throw Object.assign(new Error(STORAGE_WARNING), { code: 'preview_redirect_unavailable' });
-        }
-      }
-    }
+    const saved = await keepForReturn(preview.plan, target, version);
     if (version !== revision.current) throw new Error('The preview changed during sign-in.');
+    if (!saved && google && warnedGooglePlan.current !== preview.plan) {
+      warnedGooglePlan.current = preview.plan;
+      throw Object.assign(new Error(STORAGE_WARNING), { code: 'preview_redirect_unavailable' });
+    }
     setPreview({ plan: preview.plan, target });
   }
 
@@ -140,5 +152,5 @@ export default function useEditorPreview(user, accountLoading, oauthReturnOwner)
   const warning = owner && redirectWarning
     ? 'Your plan is open in this tab. If you leave for checkout, you’ll need to upload it again.'
     : redirectWarning;
-  return { plan: available ? preview.plan : null, restoring, prepareSignIn, cancelSignIn, redirectWarning: warning, setGuestPlan, clear };
+  return { plan: available ? preview.plan : null, restoring, prepareNavigation, prepareSignIn, cancelSignIn, redirectWarning: warning, setPlan, clear };
 }

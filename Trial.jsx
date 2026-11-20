@@ -4,11 +4,11 @@ import { PRICING } from './Marketing.jsx';
 import { PolicyAgreement } from './Policies.jsx';
 import { Icon } from './ui.jsx';
 
-export function ExpiredTrialPlans() {
+export function ExpiredTrialPlans({ expired = true }) {
   return (
     <main className="accessPage">
       <section className="accessCard expiredTrialCard" aria-labelledby="expired-trial-title">
-        <h1 id="expired-trial-title">Your free trial has ended</h1>
+        <h1 id="expired-trial-title">{expired ? 'Your free trial has ended' : 'Choose a plan to edit'}</h1>
         <p>Choose how you’d like to keep editing and downloading your plans.</p>
         <nav className="expiredTrialOptions" aria-label="Choose a plan">
           <a href="/?plan=project#/account/billing">

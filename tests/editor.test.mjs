@@ -1669,9 +1669,9 @@ test('guest preview opens a pasted plan in memory and requires sign-up for tools
   const requests = [];
   const previews = [];
   render(React.createElement(Editor, {
-    guestPreview: true,
-    onGuestPlanChange: plan => previews.push(plan),
-    onRequestSignUp: plan => requests.push(plan),
+    previewOnly: true,
+    onPreviewPlanChange: plan => previews.push(plan),
+    onRequestEditing: plan => requests.push(plan),
   }));
   assert.ok(screen.getByRole('heading', { name: 'Upload or paste your floor plan' }));
   const image = new File(['test'], 'plan.png', { type: 'image/png' });
@@ -1754,7 +1754,7 @@ test('mobile guest controls keep edits locked and ignore an import completed aft
   window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
   t.after(() => { window.matchMedia = previous; });
   let requests = 0, previews = 0;
-  const props = { guestPreview: true, onRequestSignUp: () => requests++, onGuestPlanChange: () => previews++ };
+  const props = { previewOnly: true, onRequestEditing: () => requests++, onPreviewPlanChange: () => previews++ };
   const view = render(React.createElement(Editor, props));
   click('button', 'Select');
   click('button', 'Edit');
@@ -1769,4 +1769,20 @@ test('mobile guest controls keep edits locked and ignore an import completed aft
   await act(async () => finishReading(new ArrayBuffer(4)));
   assert.equal(previews, 0);
   assert.equal(screen.queryByRole('dialog'), null);
+});
+
+test('the editor sign-up page uses the full account form and can return to the plan', () => {
+  let returned = false;
+  render(React.createElement(SignInPage, {
+    initialMode: 'create', editorEntry: true, trialOffer: true, account: { client: {} },
+    onBackToPreview(event) { event.preventDefault(); returned = true; },
+  }));
+  const main = screen.getByRole('main');
+  assert.ok(within(main).getByRole('heading', { level: 1, name: 'Create your account' }));
+  assert.equal(screen.queryByRole('dialog'), null);
+  assert.doesNotMatch(main.textContent, /free trial|credit card needed/i);
+  assert.ok(within(main).getByRole('button', { name: 'Continue with Google' }));
+  assert.ok(within(main).getByRole('button', { name: 'Sign in' }));
+  click('link', 'Back to preview');
+  assert.equal(returned, true);
 });

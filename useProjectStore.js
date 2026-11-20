@@ -66,7 +66,7 @@ export function useProjectStore(makeEmpty, repository, showRecent, owner, memory
   const [project, setActiveState] = useState(makeEmpty);
   const [projects, setListState] = useState([]);
   const [hydrated, setHydrated] = useState(memoryOnly);
-  const [saveStatus, setSaveStatus] = useState(memoryOnly ? 'Guest preview' : 'Opening projects…');
+  const [saveStatus, setSaveStatus] = useState(memoryOnly ? 'Preview only' : 'Opening projects…');
   const [accountId, setAccountId] = useState(null);
   const accountIdRef = useRef(null);
   const projectRef = useRef(project),
