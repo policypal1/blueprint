@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { jsPDF } from 'jspdf';
 import { Icon, Modal, PRODUCT_NAME, useDialog } from './ui.jsx';
 import { DOORS, FIXTURES, PhoneControls, ToolButton, ToolChoices, editorMode } from './EditorControls.jsx';
 import EditorGuide from './EditorGuide.jsx';
@@ -21,10 +20,7 @@ import { useProjectStore } from './useProjectStore.js';
 import { sampleProject } from './sample-project.js';
 import { isWallColor, wallStyle, wallControls, resizeWall, sampleWallStyle } from './wall-tools.js';
 import RecentPlans from './RecentPlans.jsx';
-import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 const W = 1600;
 const H = 1000;
@@ -935,7 +931,7 @@ export function BlueprintApp({
   active = true, showRecent = false, sampleRequested = false, onSampleOpened, onOpenWorkspace,
   repository, projectAccess, lockedProjectIds = [], owner, authBusy = false, onRegisterSave, canDownload,
   showMobileTip = false, showFirstUseGuide = false,
-  guestPreview = false, previewPlan, onGuestPlanChange, onRequestSignUp, onPreviewPlanOpened,
+  previewOnly = false, previewPlan, onPreviewPlanChange, onRequestEditing, onPreviewPlanOpened,
 }) {
   const svgRef = useRef(null);
   const fileRef = useRef(null);
@@ -951,11 +947,11 @@ export function BlueprintApp({
     projects, setProjects, project, setProject, addLocalProject, selectProject, hydrated,
     saveStatus, projectRef, cloud, accountId, accountIdRef, flush,
   } = useProjectStore(
-    () => (guestPreview && previewPlan) || emptyProject('Untitled project'),
-    repository, active && showRecent, owner, guestPreview,
+    () => (previewOnly && previewPlan) || emptyProject('Untitled project'),
+    repository, active && showRecent, owner, previewOnly,
   );
   const singleProject = Boolean(projectAccess);
-  const showPlans = !guestPreview && (showRecent || (singleProject && !accountId));
+  const showPlans = !previewOnly && (showRecent || (singleProject && !accountId));
   const canCreateProject = !projectAccess || projectAccess.credits > 0;
   const originalLocked = Boolean(accountId && (lockedProjectIds.includes(accountId) || projectAccess?.ids.includes(accountId)));
   const [accountNotice, setAccountNotice] = useState('');
@@ -1005,11 +1001,11 @@ export function BlueprintApp({
     setEditorPanel(null);
     setProjectMenu(false);
     setGuideMode(null);
-    onRequestSignUp?.(plan.background || plan.elements.length ? plan : null);
+    onRequestEditing?.(plan.background || plan.elements.length ? plan : null);
   }
 
   function openToolPanel(panel) {
-    if (guestPreview && panel !== 'properties') requestEditing();
+    if (previewOnly && panel !== 'properties') requestEditing();
     else setEditorPanel(panel);
   }
 
@@ -1160,7 +1156,7 @@ export function BlueprintApp({
     updateElement(id, patch);
   };
   const changeTool = (next) => {
-    if (guestPreview && next !== 'pan' && next !== 'select') {
+    if (previewOnly && next !== 'pan' && next !== 'select') {
       requestEditing();
       return;
     }
@@ -1175,7 +1171,7 @@ export function BlueprintApp({
   };
 
   function tryWalkthroughTool(action) {
-    if (guestPreview && action !== 'pan' && action !== 'select') {
+    if (previewOnly && action !== 'pan' && action !== 'select') {
       requestEditing();
       return;
     }
@@ -1312,7 +1308,7 @@ export function BlueprintApp({
         ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) ||
         document.activeElement?.isContentEditable;
       const unmodified = !e.ctrlKey && !e.metaKey && !e.altKey;
-      if (guestPreview && !typing) {
+      if (previewOnly && !typing) {
         const modifier = e.ctrlKey || e.metaKey;
         const key = e.key.toLowerCase();
         if ((modifier && ['z', 'y', 's'].includes(key)) ||
@@ -1378,7 +1374,7 @@ export function BlueprintApp({
       }
     };
     const onPaste = (event) => {
-      if (!active || (!showPlans && !guestPreview) || !canCreateProject || busy || !hydrated || document.querySelector('[role=dialog]')) return;
+      if (!active || (!showPlans && !previewOnly) || !canCreateProject || busy || !hydrated || document.querySelector('[role=dialog]')) return;
       const clipboard = event.clipboardData;
       const file = Array.from(clipboard?.files ?? []).find((item) =>
         CLIPBOARD_IMAGES.has(item.type),
@@ -1764,7 +1760,7 @@ export function BlueprintApp({
     if (draft?.type === 'clean') setDraft((d) => ({ ...d, b: raw }));
     if (calibration?.stage === 1) setCalibration((c) => ({ ...c, b: raw }));
 
-    if (guestPreview && drag?.kind === 'move') {
+    if (previewOnly && drag?.kind === 'move') {
       dragRef.current = null;
       requestEditing();
       return;
@@ -1882,7 +1878,7 @@ export function BlueprintApp({
         setSelectedId(tap.id);
         setTool('select');
         setPhoneMode('view');
-        setStatus(guestPreview ? 'Object selected' : 'Selected · drag the handles to resize, or open Properties');
+        setStatus(previewOnly ? 'Object selected' : 'Selected · drag the handles to resize, or open Properties');
       }
       return;
     }
@@ -2021,7 +2017,7 @@ export function BlueprintApp({
     setBusy(true);
     try {
       if (
-        !guestPreview && !showPlans &&
+        !previewOnly && !showPlans &&
         (target.background || target.elements.length) &&
         !(await ask({
           title: 'Replace the background?',
@@ -2037,8 +2033,10 @@ export function BlueprintApp({
       let dataUrl,
         pageNumber = 1;
       if (/\.pdf$/i.test(file.name)) {
-        pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false })
-          .promise;
+        const [data, pdfjs] = await Promise.all([file.arrayBuffer(), import('pdfjs-dist')]);
+        if (!onSamePage()) return;
+        pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+        pdf = await pdfjs.getDocument({ data, isEvalSupported: false }).promise;
         if (!onSamePage()) return;
         if (pdf.numPages > 1) {
           const choice = await ask({
@@ -2085,7 +2083,7 @@ export function BlueprintApp({
         backgroundOpacity: 1,
         calibrated: false,
       };
-      if (guestPreview || showPlans) {
+      if (previewOnly || showPlans) {
         const name = file.name.replace(/\.[^.]+$/, '').trim().slice(0, 100) || 'Untitled plan';
         if (!(await openNewPlan({ ...emptyProject(name), ...background }))) return;
       } else {
@@ -2318,6 +2316,7 @@ export function BlueprintApp({
       let output;
       if (kind === 'pdf') {
         const png = canvas.toDataURL('image/png', 1);
+        const { jsPDF } = await import('jspdf');
         const pdf = new jsPDF({
           orientation: 'landscape',
           unit: 'in',
@@ -2420,9 +2419,9 @@ export function BlueprintApp({
     setPan({ x: 0, y: 0 });
   };
   const openNewPlan = async (plan, navigate = onOpenWorkspace, existingDeviceDraft = false) => {
-    if (guestPreview) {
+    if (previewOnly) {
       chooseProject(plan, false);
-      onGuestPlanChange?.(plan);
+      onPreviewPlanChange?.(plan);
       navigate?.();
       return true;
     }
@@ -2475,12 +2474,12 @@ export function BlueprintApp({
   // The same tab can carry a preview through sign-in and trial activation.
   // Credit-based projects require an explicit purchase decision on Recent plans.
   useEffect(() => {
-    if (!guestPreview && active && hydrated && previewPlan && !singleProject) {
+    if (!previewOnly && active && hydrated && previewPlan && !singleProject) {
       chooseProject(previewPlan);
       onPreviewPlanOpened?.();
       onOpenWorkspace?.();
     }
-  }, [guestPreview, active, hydrated, previewPlan, singleProject]);
+  }, [previewOnly, active, hydrated, previewPlan, singleProject]);
 
   const deleteProject = async (id) => {
     if (
@@ -2686,11 +2685,11 @@ export function BlueprintApp({
     </>
   );
 
-  const objectProperties = selected && guestPreview ? (
+  const objectProperties = selected && previewOnly ? (
     <div className="propStack">
       <div className="badge">{selected.type.toUpperCase()}</div>
       {wallLengthInches !== null && <div className="metric"><span>Wall length</span><strong>{inchesLabel(wallLengthInches)}</strong></div>}
-      <button className="wide" onClick={requestEditing}>Sign up to edit</button>
+      <button className="wide" onClick={requestEditing}>{owner ? 'Unlock editing' : 'Sign up to edit'}</button>
     </div>
   ) : selected ? (
     <Properties
@@ -2764,7 +2763,7 @@ export function BlueprintApp({
 
   let toolHint = TOOL_HINTS[tool];
   if (compact && tool === 'pan') toolHint = 'Drag to move. Pinch to zoom. Tap an object to edit.';
-  if (guestPreview) toolHint = tool === 'pan' ? 'Drag to pan. Pinch to zoom.' : 'Tap or click an object to select it.';
+  if (previewOnly) toolHint = tool === 'pan' ? 'Drag to pan. Pinch to zoom.' : 'Tap or click an object to select it.';
   if (useWallTaps) {
     toolHint = awaitingWallEnd ? 'Tap the other endpoint.' : 'Tap the first endpoint.';
   } else if (tool === 'calibrate') {
@@ -2865,9 +2864,9 @@ export function BlueprintApp({
   return (
     <div className={`app${compact ? ' compactEditor' : ''}`}>
       <div className="topbar" role="group" aria-label="Project controls">
-        <a className="recentBack" href={guestPreview ? '/#/' : '#/editor'}
-          aria-label={guestPreview ? 'Back to home' : 'Back to plans'} title={guestPreview ? 'Back to home' : 'Back to plans'}>
-          <Icon name="back" /> <span>{guestPreview ? 'Back to home' : 'Back to plans'}</span>
+        <a className="recentBack" href={previewOnly ? '/#/' : '#/editor'}
+          aria-label={previewOnly ? 'Back to home' : 'Back to plans'} title={previewOnly ? 'Back to home' : 'Back to plans'}>
+          <Icon name="back" /> <span>{previewOnly ? 'Back to home' : 'Back to plans'}</span>
         </a>
         <div className="projectTitleWrap">
           <button
@@ -2899,10 +2898,10 @@ export function BlueprintApp({
                 onClick={() => setProjectMenu(false)}
               />
               <div className="projectMenu">
-                {!guestPreview && (projectAccess
+                {!previewOnly && (projectAccess
                   ? <a className="button" href="#/editor"><Icon name="plus" /> Start another project</a>
                   : <button onClick={createProject}><Icon name="plus" /> New project</button>)}
-                {!guestPreview && <button onClick={() => renameProject(project)}>
+                {!previewOnly && <button onClick={() => renameProject(project)}>
                   <Icon name="text" /> Rename current project
                 </button>}
                 {accountId && (
@@ -2916,15 +2915,15 @@ export function BlueprintApp({
                     <Icon name="upload" /> {project.background ? 'Replace blueprint' : 'Upload a plan'}
                   </button>
                 )}
-                {!guestPreview && <button disabled={!canCreateProject} onClick={() => { setProjectMenu(false); backupRef.current?.click(); }}>
+                {!previewOnly && <button disabled={!canCreateProject} onClick={() => { setProjectMenu(false); backupRef.current?.click(); }}>
                   <Icon name="folder" /> Import saved backup
                 </button>}
-                {!guestPreview && compact && (
+                {!previewOnly && compact && (
                   <button disabled={!future.length} onClick={() => { redo(); setProjectMenu(false); }}>
                     <Icon name="redo" /> Redo
                   </button>
                 )}
-                {!guestPreview && <div className="projectMenuDivider" />}
+                {!previewOnly && <div className="projectMenuDivider" />}
                 {!projectAccess && projects.map((p) => (
                   <div className="projectRow" key={p.id}>
                     <button onClick={() => chooseProject(p, false)}>{p.name}</button>
@@ -2977,7 +2976,7 @@ export function BlueprintApp({
             aria-label="Export"
             className="primary"
             disabled={exporting || busy || !hydrated}
-            onClick={guestPreview ? requestEditing : () => setExportMenu(true)}
+            onClick={previewOnly ? requestEditing : () => setExportMenu(true)}
           >
             <Icon name="download" />
             <span>{exporting ? 'Exporting…' : 'Export'}</span>
@@ -2995,13 +2994,13 @@ export function BlueprintApp({
           </div>
           {!originalLocked && !project.background && !project.elements.length && !busy && ['select', 'pan'].includes(tool) && (
             <div className="canvasWelcome">
-              <h2>{guestPreview ? 'Upload or paste your floor plan' : 'Start with a plan'}</h2>
-              {guestPreview && <p className="hint">Upload a PDF or image, or paste a copied image to view it here.</p>}
+              <h2>{previewOnly ? 'Upload or paste your floor plan' : 'Start with a plan'}</h2>
+              {previewOnly && <p className="hint">Upload a PDF or image, or paste a copied image to view it here.</p>}
               <div className="canvasImportActions">
                 <button className="primary" disabled={!hydrated} onClick={() => fileRef.current?.click()}>
                   Upload
                 </button>
-                {guestPreview && navigator.clipboard?.read && (
+                {previewOnly && navigator.clipboard?.read && (
                   <button disabled={!hydrated} onClick={pastePlan}>Paste image</button>
                 )}
               </div>
@@ -3120,7 +3119,7 @@ export function BlueprintApp({
                     displayScale={displayScale}
                   />
                 ))}
-              {!guestPreview && !exporting && selected && tool === 'select' && !wallMatch && (
+              {!previewOnly && !exporting && selected && tool === 'select' && !wallMatch && (
                 <SelectionHandles el={selected} project={project} onResizeDown={startResize}
                   displayScale={displayScale} onOpenProperties={() => setEditorPanel('properties')} />
               )}
