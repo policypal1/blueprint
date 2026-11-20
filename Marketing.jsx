@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
 import AccountMenu from './AccountMenu.jsx';
 import PlanIllustration, { DoorPlan } from './PlanIllustration.jsx';
+import RevisionDemo from './RevisionDemo.jsx';
 import { POLICY_LINKS } from './Policies.jsx';
 import { publicPages } from './seo-pages.js';
 
@@ -104,6 +105,7 @@ function BlueprintDemo({ heading = 'How it works' }) {
         loop
         preload="none"
       />
+      <a href={publicPages.revisionDemo.path} className="detailsLink">Try a guided edit <Icon name="arrow" size={16} /></a>
     </section>
   );
 }
@@ -177,7 +179,7 @@ function PriceOptions({ compact = false }) {
   );
 }
 
-function HomeContent({ showTrial }) {
+function HomeContent({ showTrial, showVideo }) {
   const heroAction = useRef(null);
   const [showSticky, setShowSticky] = useState(false);
 
@@ -196,26 +198,31 @@ function HomeContent({ showTrial }) {
         <div className="heroBlueprint" aria-hidden="true"><PlanIllustration /></div>
         <div className="heroCopy">
           <h1 id="blueprint-hero-title">Edit your <span className="heroEmphasis">existing floor plan</span>.</h1>
-          <p>Upload a PDF or image, mark up walls, doors and fixtures, and export a revised plan.</p>
+          <p>Show your remodeling client where a door or wall could move. Mark the change on their PDF or image and export the revision for review.</p>
           <div className="heroActions" ref={heroAction}>
             <EditorLink />
             {showTrial && <p className="trialQualifier">3-day free trial · <strong className="trialNoCard">No credit card needed</strong></p>}
+            <div><a href={publicPages.revisionDemo.path} className="detailsLink">Try interactive demo <Icon name="arrow" size={16} /></a></div>
           </div>
         </div>
       </section>
-      <BlueprintDemo />
+      {showVideo && <BlueprintDemo />}
       <section className="homeSection" aria-labelledby="comparison-title">
-        <h2 id="comparison-title">See what changed</h2>
-        <p className="comparisonIntro">Close the old doorway, move the entry, and add a window.</p>
+        <h2 id="comparison-title">Give the hallway more clearance</h2>
+        <p className="comparisonIntro">The laundry door blocks the hall when it opens. Move the doorway along the wall and swing the door into the laundry.</p>
         <div className="comparisonGrid">
           <figure>
-            <figcaption><strong>Original</strong><span>Swing door</span></figcaption>
+            <figcaption><strong>Original</strong><span>Door opens into the hall</span></figcaption>
             <DoorPlan />
           </figure>
           <figure>
-            <figcaption><strong>Revised</strong><span>New entry and window</span></figcaption>
+            <figcaption><strong>Revised</strong><span>Door opens into the laundry</span></figcaption>
             <DoorPlan revised />
           </figure>
+        </div>
+        <div className="revisionExampleLinks">
+          <a href={publicPages.revisionDemo.path} className="detailsLink">Try this doorway revision <Icon name="arrow" size={16} /></a>
+          {!showVideo && <a href={DEMO_HASH} className="detailsLink">Watch the editor video</a>}
         </div>
       </section>
       <section className="homeSection" aria-labelledby="project-pricing-title">
@@ -325,6 +332,7 @@ export function SiteFooter() {
 export default function Marketing({ page, account, trialOffer = false }) {
   const pricing = page === 'pricing';
   const guide = page === 'guide';
+  const home = page === 'home' || page === 'demo';
   const showTrial = trialOffer && !account?.signedIn;
 
   useEffect(() => {
@@ -332,7 +340,7 @@ export default function Marketing({ page, account, trialOffer = false }) {
   }, [page]);
 
   return (
-    <div className={pricing || guide ? 'marketing' : 'marketing marketingHome'}>
+    <div className={home ? 'marketing marketingHome' : 'marketing'}>
       <a
         className="skipLink"
         href="#main-content"
@@ -349,7 +357,8 @@ export default function Marketing({ page, account, trialOffer = false }) {
       <main id="main-content" className={pricing ? 'pricingPage' : guide ? 'guidePage' : undefined} tabIndex={-1}>
         {pricing && <PricingContent showTrial={showTrial} />}
         {guide && <GuideContent />}
-        {!guide && !pricing && <HomeContent showTrial={showTrial} />}
+        {page === 'revisionDemo' && <RevisionDemo />}
+        {home && <HomeContent showTrial={showTrial} showVideo={page === 'demo'} />}
       </main>
       <SiteFooter />
     </div>
