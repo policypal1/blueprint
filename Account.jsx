@@ -228,7 +228,6 @@ function BillingSettings({ portalUrl, access }) {
           <div className="billingChoice">
             <h3>Single project</h3>
             <p><strong>$10 USD</strong> once, for one original blueprint</p>
-            <p>Revise one saved original plan and export your changes as PDF or PNG.</p>
             <button className="primary" disabled={!data?.checkoutReady || !accepted || Boolean(pending)}
               onClick={() => visitStripe('project')}>
               {pending === 'project' ? 'Opening Stripe…' : 'Buy a project credit'}
