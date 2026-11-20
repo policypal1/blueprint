@@ -8,7 +8,7 @@ const GOOGLE_PREVIEW_RETURN = 'editfloorplans-google-preview-return';
 const RECOVERY_OWNER = 'planpatch-recovery-owner';
 const EMAIL_CONFIRMATION_FLOW = 'confirm-email';
 const RETURN_ROUTES = new Set([
-  '#/editor', '#/editor/workspace', '#/account', '#/account/security', '#/account/billing', '#/trial',
+  '#/editor', '#/editor/access', '#/editor/workspace', '#/account', '#/account/security', '#/account/billing', '#/trial',
 ]);
 export const MIN_PASSWORD_LENGTH = 12;
 export const MAX_DISPLAY_NAME_LENGTH = 80;
