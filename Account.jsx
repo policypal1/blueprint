@@ -177,10 +177,11 @@ function BillingSettings({ portalUrl, access }) {
   const attempts = useRef({});
   const { data, loading, refresh } = access ?? {};
   const isLive = data?.billingMode === 'live';
+  const testMode = data?.billingMode === 'test' || (!data?.billingMode && data?.monthlyOfferVersion === MONTHLY_VERSION);
   const offerVersion = isLive ? LIVE_MONTHLY_VERSION : MONTHLY_VERSION;
   const disclosure = isLive ? LIVE_MONTHLY_DISCLOSURE : MONTHLY_DISCLOSURE;
   const currentOffer = data?.monthlyOfferVersion === offerVersion;
-  const backupPortal = !isLive && STRIPE_TEST_PORTAL.test(portalUrl);
+  const backupPortal = !access && STRIPE_TEST_PORTAL.test(portalUrl);
   const query = new URLSearchParams(window.location.search);
   const returned = query.has('checkout') || query.has('sandbox_checkout');
 
@@ -208,12 +209,12 @@ function BillingSettings({ portalUrl, access }) {
       <section className="accountCard" aria-labelledby="plans-billing-title">
         <div className="accountCardHeading">
           <h2 id="plans-billing-title">Plans and access</h2>
-          {data && !isLive && <span className="billingMode">Test mode</span>}
+          {testMode && <span className="billingMode">Test mode</span>}
         </div>
         {data?.monthly ? <p>Your monthly {isLive ? 'subscription' : 'test subscription'} is active.</p> : (
           <p>{data?.projectCredits || data?.projectIds?.length
             ? `${data.projectCredits} unused project ${data.projectCredits === 1 ? 'credit' : 'credits'} · ${data.projectIds.length} unlocked`
-            : isLive ? 'Choose a project credit or monthly access.' : 'A test purchase unlocks editing.'}</p>
+            : testMode ? 'A test purchase unlocks editing.' : 'Choose a project credit or monthly access.'}</p>
         )}
         {returned && !data?.monthly && !data?.projectCredits && !data?.projectIds?.length && (
           <p role="status">Stripe is confirming {isLive ? 'your payment' : 'the test payment'}. Check again in a moment.</p>
@@ -246,7 +247,7 @@ function BillingSettings({ portalUrl, access }) {
             {data?.checkoutReady && !data.monthly && !currentOffer && <p>Monthly checkout is being updated.</p>}
             <button className="primary" disabled={!data?.checkoutReady || !accepted || !currentOffer || !recurringAccepted || Boolean(pending) || data.monthly}
               onClick={() => visitStripe('monthly')}>
-              {data?.monthly ? 'Active subscription' : pending === 'monthly' ? 'Opening Stripe…' : isLive ? 'Start subscription' : 'Start test subscription'}
+              {data?.monthly ? 'Active subscription' : pending === 'monthly' ? 'Opening Stripe…' : testMode ? 'Start test subscription' : 'Start subscription'}
             </button>
           </div>
         </div>
