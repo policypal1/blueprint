@@ -1033,7 +1033,7 @@ export function BlueprintApp({
     observer?.observe(svg);
     window.addEventListener('resize', measure);
     return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
-  }, [active, showPlans, hydrated, compact, zoom]);
+  }, [active, showPlans, hydrated, compact, zoom, project.id]);
 
   const selected = project.elements.find((e) => e.id === selectedId) || null;
   const backgroundEdits = project.elements.filter((el) => el.type === 'clean' || el.type === 'erase');
@@ -2471,6 +2471,12 @@ export function BlueprintApp({
     }
   }, [hydrated, sampleRequested]);
 
+  useEffect(() => {
+    if (previewOnly && previewPlan && previewPlan.id !== projectRef.current.id) {
+      chooseProject(previewPlan, false);
+    }
+  }, [previewOnly, previewPlan]);
+
   // The same tab can carry a preview through sign-in and trial activation.
   // Credit-based projects require an explicit purchase decision on Recent plans.
   useEffect(() => {
@@ -2989,7 +2995,7 @@ export function BlueprintApp({
 
         <main className="canvasArea" aria-label="Drawing workspace">
           <div className="canvasCaption">
-            {!compact && <span>{toolHint}</span>}
+            {!compact && <span key={tool} className="currentToolHint">{toolHint}</span>}
             <span>{project.calibrated ? 'Scale calibrated' : 'Scale not calibrated'}</span>
           </div>
           {!originalLocked && !project.background && !project.elements.length && !busy && ['select', 'pan'].includes(tool) && (
@@ -3021,6 +3027,7 @@ export function BlueprintApp({
             style={{ transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})` }}
           >
             <svg
+              key={project.id}
               ref={svgRef}
               className="planCanvas"
               style={{ fontFamily: 'Inter, Arial, sans-serif' }}
@@ -3199,6 +3206,7 @@ export function BlueprintApp({
           onCancelWall={wallMatch ? cancelWallMatch : awaitingWallEnd ? () => changeTool('wall') : undefined}
           canSetDistance={calibration?.stage === 2}
           onTool={changeTool}
+          onMode={previewOnly ? setPhoneMode : undefined}
           onOpen={openToolPanel}
           onSetDistance={finishCalibration}
         />
