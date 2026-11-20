@@ -778,7 +778,7 @@ html:has(.authConfirmation) { overflow: hidden; }
   text-wrap: pretty;
 }
 .heroActions { margin-top: 28px; }
-.heroActionButtons > .button {
+.heroActions > .button {
   width: min(100%, 292px);
   min-height: 54px;
   padding-inline: 18px;
@@ -906,11 +906,6 @@ html:has(.authConfirmation) { overflow: hidden; }
   font-size: 14px;
 }
 .pricingTrial { margin-block: 0 26px; text-align: center; }
-.pricingIncludes { max-width: 620px; margin: 24px auto 0; text-align: center; color: var(--muted); line-height: 1.6; }
-.heroActionButtons { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
-.heroActionButtons > :is(a, button) { min-height: 48px; font-size: 16px; }
-.heroFileNote { margin: 14px 0 0; font-size: 14px; color: var(--muted); }
-.demoGuideLink { text-align: center; margin: -14px 20px 32px; font-size: 14px; }
 .guidePage {
   max-width: 960px;
   margin-inline: auto;
@@ -2021,8 +2016,6 @@ hr {
   .sampleEditorStatus > span:last-child { display: none; }
   .sampleEditorBody { min-height: 210px; }
   .sampleWalkthrough .modalActions { flex-wrap: wrap; }
-  .heroActionButtons { flex-direction: column; align-items: center; }
-  .heroActionButtons > :is(a, button) { width: min(100%, 292px); }
 }
 .editorGuide .modalHeader { margin-bottom: 10px; }
 .editorGuide .helpSteps { margin-top: 4px; }
