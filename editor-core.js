@@ -125,6 +125,8 @@ export function validateProject(data) {
   let points = 0;
   const elements = data.elements.map((el, index) => {
     if (!el || !types.has(el.type)) throw new Error(`Unsupported object at position ${index + 1}.`);
+    if (el.color !== undefined && (typeof el.color !== 'string' || !/^#[\da-f]{6}$/i.test(el.color)))
+      throw new Error('Wall colors must use a six-digit hex color.');
     for (const key of [
       'x',
       'y',
