@@ -194,7 +194,7 @@ function HomeContent({ showTrial, showVideo }) {
         <div className="heroBlueprint" aria-hidden="true"><PlanIllustration /></div>
         <div className="heroCopy">
           <h1 id="blueprint-hero-title">Edit your <span className="heroEmphasis">existing floor plan</span>.</h1>
-          <p>Mark up walls and doors on your existing PDF or image. Export the revised plan for your client.</p>
+          <p>Show your remodeling client where a door or wall could move. Mark the change on their PDF or image and export the revision for review.</p>
           <div className="heroActions">
             <EditorLink />
             {showTrial && <TrialQualifier />}
