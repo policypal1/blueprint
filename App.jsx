@@ -19,6 +19,7 @@ import {
 import { embedExportFont } from './export-font.js';
 import { useProjectStore } from './useProjectStore.js';
 import { sampleProject } from './sample-project.js';
+import { isWallColor, wallStyle, wallControls, resizeWall, sampleWallStyle } from './wall-tools.js';
 import RecentPlans from './RecentPlans.jsx';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
@@ -332,6 +333,7 @@ function normalizeBlueprintImport(raw, projectState) {
         a: { x: number(a?.x), y: number(a?.y) },
         b: { x: number(b?.x), y: number(b?.y) },
         thicknessInches: number(source.thicknessInches ?? source.thickness, 4.5),
+        ...(type === 'wall' && isWallColor(source.color) ? { color: source.color } : {}),
         strokeWidth: number(source.strokeWidth, 2),
       });
       continue;
@@ -941,6 +943,7 @@ export function BlueprintApp({
   const pinch = useRef(null);
   const wallTap = useRef(null);
   const dragRef = useRef(null);
+  const panSelection = useRef(null);
   const routeVersion = useRef(0);
   const importPending = useRef(false);
   const {
@@ -972,6 +975,11 @@ export function BlueprintApp({
   const [history, setHistory] = useState([]);
   const [future, setFuture] = useState([]);
   const [zoom, setZoom] = useState(1);
+  const [displayScale, setDisplayScale] = useState(1);
+  const [wallMatch, setWallMatch] = useState(null);
+  const wallDefaults = useRef(wallStyle(null));
+  const matchTap = useRef(null);
+  const matchRequest = useRef(0);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [status, setStatus] = useState('Ready');
   const [calibration, setCalibration] = useState(null);
@@ -985,6 +993,32 @@ export function BlueprintApp({
   const [eraseSize, setEraseSize] = useState(28);
   const [brushPoint, setBrushPoint] = useState(null);
   const [measurement, setMeasurement] = useState(null);
+
+  const cancelWallMatch = () => {
+    matchRequest.current += 1;
+    matchTap.current = null;
+    setWallMatch(null);
+  };
+
+  useEffect(() => {
+    wallDefaults.current = wallStyle(project.elements.filter(el => el.type === 'wall').at(-1));
+    cancelWallMatch();
+  }, [project.id]);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const measure = () => {
+      const bounds = svg.getBoundingClientRect();
+      const scale = Math.min(bounds.width / W, bounds.height / H);
+      if (scale > 0) setDisplayScale(scale);
+    };
+    measure();
+    const observer = window.ResizeObserver ? new window.ResizeObserver(measure) : null;
+    observer?.observe(svg);
+    window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+  }, [active, showPlans, hydrated, compact, zoom]);
 
   const selected = project.elements.find((e) => e.id === selectedId) || null;
   const backgroundEdits = project.elements.filter((el) => el.type === 'clean' || el.type === 'erase');
@@ -1053,6 +1087,8 @@ export function BlueprintApp({
   };
 
   const resetPointerInput = () => {
+    cancelWallMatch();
+    panSelection.current = null;
     finishDrag(false);
     panPointers.current.clear();
     pinch.current = null;
@@ -1101,9 +1137,11 @@ export function BlueprintApp({
       return;
     }
     pushHistory();
+    if (current.type === 'wall') wallDefaults.current = { ...wallStyle(current), ...patch };
     updateElement(id, patch);
   };
   const changeTool = (next) => {
+    if (next === 'wall' && selected?.type === 'wall') wallDefaults.current = wallStyle(selected);
     resetPointerInput();
     setCalibration(null);
     setMeasurement(null);
@@ -1126,7 +1164,7 @@ export function BlueprintApp({
       return;
     }
     pushHistory();
-    const element = { id: uid(), ...el };
+    const element = { id: uid(), ...(el.type === 'wall' ? wallDefaults.current : {}), ...el };
     updateProject((p) => ({ ...p, elements: [...p.elements, element] }));
     if (['text', 'symbol', 'door', 'window'].includes(el.type)) {
       setSelectedId(element.id);
@@ -1331,6 +1369,81 @@ export function BlueprintApp({
     return clientToWorkspace(evt.clientX, evt.clientY, rect);
   };
 
+  const beginWallMatch = () => {
+    if (wallMatch) { cancelWallMatch(); return; }
+    if (selected?.type !== 'wall') return;
+    resetPointerInput();
+    setWallMatch({ id: selected.id });
+    setTool('select');
+    setPhoneMode('view');
+    setEditorPanel(null);
+    setStatus('Tap an existing wall to match its color and thickness');
+  };
+
+  const matchWallAt = async (event, source) => {
+    const target = wallMatch;
+    const request = ++matchRequest.current;
+    const current = projectRef.current;
+    const point = clientToWorld(event);
+    const samePage = captureRoute();
+    if (!target) return;
+    if (source?.id === target.id) {
+      if (current.background && current.showBackground) source = null;
+      else { setStatus('Choose a different wall to match'); return; }
+    }
+    try {
+      let style;
+      if (source?.type === 'wall') style = wallStyle(source);
+      else {
+        if (!current.background || !current.showBackground) throw new Error('Tap an existing wall or show the original drawing first.');
+        const image = new Image();
+        await new Promise((resolve, reject) => {
+          image.onload = resolve;
+          image.onerror = () => reject(new Error('Could not read the original drawing.'));
+          image.src = current.background;
+        });
+        const canvas = document.createElement('canvas');
+        const rasterScale = 2;
+        canvas.width = W * rasterScale; canvas.height = H * rasterScale;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) throw new Error('Color matching is unavailable in this browser.');
+        context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height);
+        const ratio = Math.min(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
+        const width = image.naturalWidth * ratio, height = image.naturalHeight * ratio;
+        context.globalAlpha = current.backgroundOpacity ?? 1;
+        context.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+        context.globalAlpha = 1;
+        context.save(); context.scale(rasterScale, rasterScale);
+        context.fillStyle = '#fff'; context.strokeStyle = '#fff'; context.lineCap = 'round'; context.lineJoin = 'round';
+        for (const edit of current.elements) {
+          if (edit.type === 'clean') context.fillRect(edit.x, edit.y, edit.width, edit.height);
+          if (edit.type !== 'erase') continue;
+          context.lineWidth = edit.size || 36;
+          context.beginPath();
+          if (edit.points.length === 1) {
+            context.arc(edit.points[0].x, edit.points[0].y, context.lineWidth / 2, 0, Math.PI * 2); context.fill();
+          } else {
+            edit.points.forEach((p, i) => i ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y)); context.stroke();
+          }
+        }
+        context.restore();
+        const x = clamp(Math.round(point.x * rasterScale), 0, canvas.width - 1);
+        const y = clamp(Math.round(point.y * rasterScale), 0, canvas.height - 1);
+        const left = Math.max(0, x - 100), top = Math.max(0, y - 100);
+        const pixels = context.getImageData(left, top, Math.min(201, canvas.width - left), Math.min(201, canvas.height - top));
+        style = sampleWallStyle(pixels, x - left, y - top, rasterScale, current.unitsPerInch);
+        if (!style) throw new Error('No wall found there. Zoom in and tap the middle of a wall.');
+      }
+      if (!samePage() || request !== matchRequest.current || projectRef.current.id !== current.id) return;
+      commitElement(target.id, style);
+      cancelWallMatch();
+      setStatus(source ? 'Wall color and thickness matched' : style.thicknessInches
+        ? 'Drawing color and visual thickness matched' : 'Drawing color matched · adjust width with the handle');
+    } catch (error) {
+      if (samePage() && request === matchRequest.current) setStatus(error.message || 'Could not match that wall.');
+    }
+  };
+
   const extendBrush = (drag, point) => {
     const from = drag.last || point;
     if (drag.last && dist(from, point) < 1.5) return;
@@ -1357,6 +1470,10 @@ export function BlueprintApp({
     if (e.button !== 0 || busy || exporting || !hydrated) return;
     e.preventDefault();
     svgRef.current.setPointerCapture(e.pointerId);
+    if (wallMatch) {
+      if (e.isPrimary !== false) matchTap.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      return;
+    }
     if (useWallTaps) {
       wallTap.current = e.pointerType === 'touch' && e.isPrimary === false
         ? null
@@ -1371,6 +1488,7 @@ export function BlueprintApp({
         if (pointers.size >= 2) return;
         pointers.set(e.pointerId, start);
         if (pointers.size === 2 && !pinch.current) {
+          panSelection.current = null;
           const [[first, a], [second, b]] = pointers;
           const bounds = svgRef.current.getBoundingClientRect();
           pinch.current = {
@@ -1531,7 +1649,7 @@ export function BlueprintApp({
         const a = pointers.get(gesture.first);
         const b = pointers.get(gesture.second);
         if (a && b) {
-          const nextZoom = clamp(gesture.zoom * dist(a, b) / gesture.distance, 0.25, 3);
+          const nextZoom = clamp(gesture.zoom * dist(a, b) / gesture.distance, 0.25, 5);
           const shift = 1 - nextZoom / gesture.zoom;
           setZoom(nextZoom);
           setPan({
@@ -1642,7 +1760,15 @@ export function BlueprintApp({
     }
     if (drag?.kind === 'resize') {
       const base = drag.base;
-      if (base.type !== 'wall') {
+      if (base.type === 'wall') {
+        const point = drag.handle === 'thickness' ? raw : snapPoint(raw, project.elements.filter(el => el.id !== base.id), {
+          grid: !e.shiftKey, align: true, magnet: true,
+        });
+        const patch = resizeWall(base, drag.handle, point, drag.start, project.unitsPerInch);
+        updateElement(base.id, patch);
+        setStatus(drag.handle === 'thickness' ? `Wall thickness · ${fmt(patch.thicknessInches)} in`
+          : `Wall length · ${inchesLabel(dist((patch.a || base.a), (patch.b || base.b)) / project.unitsPerInch)}`);
+      } else {
         const angle = (-(base.rotation || 0) * Math.PI) / 180;
         const dx = raw.x - (base.x || 0);
         const dy = raw.y - (base.y || 0);
@@ -1683,6 +1809,7 @@ export function BlueprintApp({
   };
 
   const releasePanPointer = (pointerId) => {
+    if (panSelection.current?.pointerId === pointerId) panSelection.current = null;
     const pointers = panPointers.current;
     const tracked = pointers.delete(pointerId);
     if (pinch.current && tracked) {
@@ -1697,8 +1824,24 @@ export function BlueprintApp({
   const handlePointerUp = (e) => {
     if (svgRef.current?.hasPointerCapture(e.pointerId))
       svgRef.current.releasePointerCapture(e.pointerId);
+    if (wallMatch) {
+      const tap = matchTap.current;
+      matchTap.current = null;
+      if (tap?.id === e.pointerId && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) <= TAP_SLOP)
+        void matchWallAt(e, tap.source);
+      return;
+    }
     if (tool === 'pan') {
+      const tap = panSelection.current;
+      const selectOnTap = !pinch.current && panPointers.current.size <= 1 && tap?.pointerId === e.pointerId
+        && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) <= TAP_SLOP;
       releasePanPointer(e.pointerId);
+      if (selectOnTap) {
+        setSelectedId(tap.id);
+        setTool('select');
+        setPhoneMode('view');
+        setStatus('Selected · drag the handles to resize, or open Properties');
+      }
       return;
     }
     if (e.isPrimary === false) return;
@@ -1718,7 +1861,7 @@ export function BlueprintApp({
         const b = endWall(draft, point, project.elements, e.shiftKey);
         if (dist(draft.a, b) > 3) {
           setStatus('Wall added');
-          addElement({ type: 'wall', a: draft.a, b, thicknessInches: 4.5 });
+          addElement({ type: 'wall', a: draft.a, b });
           setDraft(null);
         }
       }
@@ -1727,7 +1870,7 @@ export function BlueprintApp({
     if (dragRef.current && dragRef.current.pointerId !== e.pointerId) return;
     if (draft?.type === 'wall' && dist(draft.a, draft.b) > 3) {
       setStatus('Wall added');
-      addElement({ type: 'wall', a: draft.a, b: draft.b, thicknessInches: 4.5 });
+      addElement({ type: 'wall', a: draft.a, b: draft.b });
     }
     if (draft?.type === 'line' && dist(draft.a, draft.b) > 3)
       addElement({ type: 'line', a: draft.a, b: draft.b, strokeWidth: 2 });
@@ -1768,9 +1911,20 @@ export function BlueprintApp({
   };
 
   const startMove = (e, el) => {
+    if (el.type === 'wall') {
+      const nearest = nearestWallSnap(clientToWorld(e), projectRef.current.elements, 18 / Math.max(displayScale, 0.01));
+      if (nearest) el = nearest.wall;
+    }
+    if (compact && tool === 'pan' && e.pointerType === 'touch' && e.isPrimary !== false && !busy && !exporting) {
+      panSelection.current = { id: el.id, pointerId: e.pointerId, x: e.clientX, y: e.clientY };
+    }
     if (e.button !== 0 || e.isPrimary === false || tool !== 'select' || busy || exporting) return;
     svgRef.current.setPointerCapture(e.pointerId);
     e.stopPropagation();
+    if (wallMatch) {
+      matchTap.current = { id: e.pointerId, x: e.clientX, y: e.clientY, source: el.type === 'wall' ? el : null };
+      return;
+    }
     setSelectedId(el.id);
     dragRef.current = {
       kind: 'move',
@@ -1793,6 +1947,7 @@ export function BlueprintApp({
       pointerId: e.pointerId,
       origin: { x: e.clientX, y: e.clientY },
       base: el,
+      start: clientToWorld(e),
       before: projectRef.current,
       handle,
     };
@@ -2063,8 +2218,8 @@ export function BlueprintApp({
       const clone = svg.cloneNode(true);
       clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
       clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
-      clone.setAttribute('width', String(W));
-      clone.setAttribute('height', String(H));
+      clone.setAttribute('width', String(W * 2));
+      clone.setAttribute('height', String(H * 2));
       clone.setAttribute('viewBox', `0 0 ${W} ${H}`);
       clone.querySelectorAll('[data-editor-only]').forEach((node) => node.remove());
       await embedExportFont(clone);
@@ -2464,6 +2619,8 @@ export function BlueprintApp({
       deleteSelected={deleteSelected}
       wallLengthInches={wallLengthInches}
       applyExactLength={applyExactLength}
+      onMatchWall={beginWallMatch}
+      matching={Boolean(wallMatch)}
     />
   ) : <p className="propertiesHint">Use Select, then click an object on the plan.</p>;
 
@@ -2524,6 +2681,7 @@ export function BlueprintApp({
   );
 
   let toolHint = TOOL_HINTS[tool];
+  if (compact && tool === 'pan') toolHint = 'Drag to move. Pinch to zoom. Tap an object to edit.';
   if (useWallTaps) {
     toolHint = awaitingWallEnd ? 'Tap the other endpoint.' : 'Tap the first endpoint.';
   } else if (tool === 'calibrate') {
@@ -2535,6 +2693,8 @@ export function BlueprintApp({
       ? 'Choose a spot on the plan for the door.'
       : 'Choose a spot on the plan for the fixture.';
   }
+
+  if (wallMatch) toolHint = 'Tap an existing wall to match its color and width.';
 
   const fileInputs = (
     <>
@@ -2565,10 +2725,13 @@ export function BlueprintApp({
 
   const desktopTip = showDesktopTip && !dialog && !guideMode && !importOpen && !editorPanel && !exportMenu && (
       <Modal title="Best on desktop" className="mobileEditorTip" onClose={() => dismissDesktopTip(false)}>
-        <p>A desktop gives you more room to draw and measure. You can keep editing on your phone.</p>
+        <div className="mobileTipBody">
+          <span className="mobileTipIcon"><Icon name="desktop" size={28} /></span>
+          <p>A bigger screen gives you more room for precise edits. On your phone, pinch to zoom and tap an object to adjust it.</p>
+        </div>
         <div className="modalActions">
           <button onClick={() => dismissDesktopTip(true)}>Don’t show again</button>
-          <button className="primary" data-dialog-focus onClick={() => dismissDesktopTip(false)}>Close</button>
+          <button className="primary" data-dialog-focus onClick={() => dismissDesktopTip(false)}>Continue on phone</button>
         </div>
       </Modal>
     );
@@ -2823,6 +2986,7 @@ export function BlueprintApp({
                     selected={!exporting && selectedId === el.id}
                     onDown={startMove}
                     onResizeDown={startResize}
+                    displayScale={displayScale}
                   />
                 ))}
               {project.elements
@@ -2835,6 +2999,7 @@ export function BlueprintApp({
                     selected={!exporting && selectedId === el.id}
                     onDown={startMove}
                     onResizeDown={startResize}
+                    displayScale={displayScale}
                   />
                 ))}
               {project.elements
@@ -2847,6 +3012,7 @@ export function BlueprintApp({
                     selected={!exporting && selectedId === el.id}
                     onDown={startMove}
                     onResizeDown={startResize}
+                    displayScale={displayScale}
                   />
                 ))}
               {project.elements
@@ -2859,12 +3025,17 @@ export function BlueprintApp({
                     selected={!exporting && selectedId === el.id}
                     onDown={startMove}
                     onResizeDown={startResize}
+                    displayScale={displayScale}
                   />
                 ))}
+              {!exporting && selected && tool === 'select' && !wallMatch && (
+                <SelectionHandles el={selected} project={project} onResizeDown={startResize}
+                  displayScale={displayScale} onOpenProperties={() => setEditorPanel('properties')} />
+              )}
               {!exporting && measurement && (
                 <MeasureOverlay measurement={measurement} project={project} />
               )}
-              {!exporting && draft && <Draft draft={draft} project={project} zoom={zoom} />}
+              {!exporting && draft && <Draft draft={draft} project={project} zoom={zoom} wallAppearance={wallDefaults.current} />}
               {!exporting && tool === 'erase' && brushPoint && (
                 <circle data-editor-only pointerEvents="none" cx={brushPoint.x} cy={brushPoint.y} r={eraseSize / 2}
                   fill="none" stroke={DRAWING_ACCENT} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
@@ -2887,11 +3058,14 @@ export function BlueprintApp({
             </svg>
           </div>
           <div className="zoomBox">
-            <button aria-label="Zoom out" onClick={() => setZoom((z) => clamp(z - 0.1, 0.25, 3))}>
+            <button aria-label="Zoom out" disabled={zoom <= 0.25} onClick={() => setZoom((z) => clamp(z - 0.1, 0.25, 5))}>
               <Icon name="minus" size={16} />
             </button>
-            <span>{Math.round(zoom * 100)}%</span>
-            <button aria-label="Zoom in" onClick={() => setZoom((z) => clamp(z + 0.1, 0.25, 3))}>
+            <select aria-label="Zoom level" value={Math.round(zoom * 100)} onChange={event => setZoom(clamp(Number(event.target.value) / 100, 0.25, 5))}>
+              {[...new Set([25, 50, 75, 100, 150, 200, 300, 400, 500, Math.round(zoom * 100)])].sort((a, b) => a - b)
+                .map(value => <option key={value} value={value}>{value}%</option>)}
+            </select>
+            <button aria-label="Zoom in" disabled={zoom >= 5} onClick={() => setZoom((z) => clamp(z + 0.1, 0.25, 5))}>
               <Icon name="plus" size={16} />
             </button>
             <button
@@ -2926,7 +3100,7 @@ export function BlueprintApp({
           calibrated={project.calibrated}
           selected={Boolean(selected)}
           hint={toolHint}
-          onCancelWall={awaitingWallEnd ? () => changeTool('wall') : undefined}
+          onCancelWall={wallMatch ? cancelWallMatch : awaitingWallEnd ? () => changeTool('wall') : undefined}
           canSetDistance={calibration?.stage === 2}
           onTool={changeTool}
           onOpen={setEditorPanel}
@@ -3124,8 +3298,8 @@ function BackgroundEdit({ el }) {
   return <path d={d} fill="none" stroke="black" strokeWidth={size} strokeLinecap="round" strokeLinejoin="round" />;
 }
 
-function Element({ el, project, selected, onDown, onResizeDown }) {
-  const common = { onPointerDown: (e) => onDown(e, el), style: { cursor: 'pointer' } };
+function Element({ el, project, selected, onDown, onResizeDown, displayScale = 1 }) {
+  const common = { 'data-element-id': el.id, onPointerDown: (e) => onDown(e, el), style: { cursor: 'pointer' } };
   const outline = selected ? DRAWING_ACCENT : '#111';
   if (el.type === 'wall') {
     const width = Math.max(3, (el.thicknessInches || 4.5) * project.unitsPerInch);
@@ -3144,13 +3318,17 @@ function Element({ el, project, selected, onDown, onResizeDown }) {
             pointerEvents="none"
           />
         )}
+        <line {...common} data-editor-only className="wallTouchTarget"
+          x1={el.a.x} y1={el.a.y} x2={el.b.x} y2={el.b.y}
+          stroke="transparent" strokeWidth={Math.max(width, 32 / Math.max(displayScale, 0.01))}
+          strokeLinecap="square" pointerEvents="stroke" />
         <line
           {...common}
           x1={el.a.x}
           y1={el.a.y}
           x2={el.b.x}
           y2={el.b.y}
-          stroke="#000"
+          stroke={wallStyle(el).color === '#000000' ? '#000' : wallStyle(el).color}
           strokeWidth={width}
           strokeLinecap="square"
         />
@@ -3221,7 +3399,6 @@ function Element({ el, project, selected, onDown, onResizeDown }) {
     return (
       <g>
         <DoorSymbol el={el} project={project} outline={outline} common={common} />
-        {selected && <SelectionHandles el={el} project={project} onResizeDown={onResizeDown} />}
       </g>
     );
   if (el.type === 'window') {
@@ -3280,7 +3457,6 @@ function Element({ el, project, selected, onDown, onResizeDown }) {
             strokeWidth="3"
           />
         </g>
-        {selected && <SelectionHandles el={el} project={project} onResizeDown={onResizeDown} />}
       </g>
     );
   }
@@ -3302,95 +3478,54 @@ function Element({ el, project, selected, onDown, onResizeDown }) {
     return (
       <g>
         <Symbol el={el} selected={selected} common={common} project={project} />
-        {selected && <SelectionHandles el={el} project={project} onResizeDown={onResizeDown} />}
       </g>
     );
   return null;
 }
 
-function SelectionHandles({ el, project, onResizeDown }) {
-  if (!onResizeDown || !['symbol', 'door', 'window'].includes(el.type)) return null;
+function SelectionHandles({ el, project, onResizeDown, displayScale = 1, onOpenProperties }) {
+  if (!onResizeDown || !['wall', 'symbol', 'door', 'window'].includes(el.type)) return null;
+  const scale = Math.max(displayScale, 0.01);
   const units = project.unitsPerInch;
-  const rotation = el.rotation || 0;
-  if (el.type === 'symbol') {
-    const w = (el.widthInches || 24) * units,
-      h = (el.heightInches || 24) * units;
+  const handle = (name, x, y, label, cursor = 'nwse-resize') => (
+    <g key={name}>
+      <circle data-resize-handle={name} role="button" aria-label={label} tabIndex={0}
+        cx={x} cy={y} r={22 / scale} fill="transparent" pointerEvents="all"
+        onPointerDown={e => onResizeDown(e, el, name)}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenProperties?.(); } }}
+        style={{ cursor }} />
+      <circle cx={x} cy={y} r={9 / scale} fill="#fff" stroke={DRAWING_ACCENT} strokeWidth="2"
+        vectorEffect="non-scaling-stroke" pointerEvents="none" />
+      <circle cx={x} cy={y} r={3 / scale} fill={DRAWING_ACCENT} pointerEvents="none" />
+    </g>
+  );
+  if (el.type === 'wall') {
+    const { middle, thickness } = wallControls(el, units, scale);
     return (
-      <g transform={`translate(${el.x} ${el.y}) rotate(${rotation})`} pointerEvents="none">
-        <rect
-          x={-w / 2 - 5}
-          y={-h / 2 - 5}
-          width={w + 10}
-          height={h + 10}
-          fill="none"
-          stroke={DRAWING_ACCENT}
-          strokeWidth="2"
-          strokeDasharray="7 6"
-        />
-        <rect
-          pointerEvents="all"
-          onPointerDown={(e) => onResizeDown(e, el, 'corner')}
-          x={w / 2 - 8}
-          y={h / 2 - 8}
-          width="16"
-          height="16"
-          rx="3"
-          fill={DRAWING_ACCENT}
-          stroke="#fff"
-          strokeWidth="3"
-          style={{ cursor: 'nwse-resize' }}
-        />
+      <g data-editor-only aria-label="Wall resize handles" pointerEvents="none">
+        <line x1={middle.x} y1={middle.y} x2={thickness.x} y2={thickness.y} stroke={DRAWING_ACCENT}
+          strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+        {handle('a', el.a.x, el.a.y, 'Resize wall start', 'move')}
+        {handle('b', el.b.x, el.b.y, 'Resize wall end', 'move')}
+        {handle('thickness', thickness.x, thickness.y, 'Resize wall thickness', 'ns-resize')}
+        <text x={thickness.x + 14 / scale} y={thickness.y + 4 / scale} fontSize={12 / scale}
+          fill={DRAWING_ACCENT} stroke="#fff" strokeWidth={3 / scale} paintOrder="stroke" fontWeight="600">
+          {fmt(wallStyle(el).thicknessInches)} in
+        </text>
       </g>
     );
   }
-  if (el.type === 'window') {
-    const w = (el.widthInches || 36) * units,
-      h = Math.max(12, (el.heightInches || 4.5) * units);
-    return (
-      <g transform={`translate(${el.x} ${el.y}) rotate(${rotation})`} pointerEvents="none">
-        <rect
-          x={-w / 2 - 5}
-          y={-h / 2 - 5}
-          width={w + 10}
-          height={h + 10}
-          fill="none"
-          stroke={DRAWING_ACCENT}
-          strokeWidth="2"
-          strokeDasharray="7 6"
-        />
-        <rect
-          pointerEvents="all"
-          onPointerDown={(e) => onResizeDown(e, el, 'corner')}
-          x={w / 2 - 8}
-          y={h / 2 - 8}
-          width="16"
-          height="16"
-          rx="3"
-          fill={DRAWING_ACCENT}
-          stroke="#fff"
-          strokeWidth="3"
-          style={{ cursor: 'nwse-resize' }}
-        />
-      </g>
-    );
-  }
-  const w = (el.widthInches || 32) * units;
+  const w = (el.widthInches || (el.type === 'door' ? 32 : 24)) * units;
+  const h = (el.heightInches || (el.type === 'window' ? 4.5 : 24)) * units;
   return (
-    <g transform={`translate(${el.x} ${el.y}) rotate(${rotation})`} pointerEvents="none">
-      <line x1="0" y1="0" x2={w} y2="0" stroke={DRAWING_ACCENT} strokeWidth="2" strokeDasharray="7 6" />
-      <rect
-        pointerEvents="all"
-        onPointerDown={(e) => onResizeDown(e, el, 'width')}
-        x={w - 8}
-        y="-8"
-        width="16"
-        height="16"
-        rx="3"
-        fill={DRAWING_ACCENT}
-        stroke="#fff"
-        strokeWidth="3"
-        style={{ cursor: 'ew-resize' }}
-      />
+    <g data-editor-only transform={`translate(${el.x} ${el.y}) rotate(${el.rotation || 0})`} pointerEvents="none">
+      {el.type === 'door'
+        ? <line x1="0" y1="0" x2={w} y2="0" stroke={DRAWING_ACCENT} strokeWidth="1.5"
+          strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+        : <rect x={-w / 2} y={-h / 2} width={w} height={h} fill="none" stroke={DRAWING_ACCENT}
+          strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />}
+      {handle(el.type === 'door' ? 'width' : 'corner', el.type === 'door' ? w : w / 2,
+        el.type === 'door' ? 0 : h / 2, `Resize ${el.type === 'symbol' ? 'fixture' : el.type}`)}
     </g>
   );
 }
@@ -3673,7 +3808,7 @@ function Symbol({ el, selected, common, project }) {
   return null;
 }
 
-function Draft({ draft, project, zoom }) {
+function Draft({ draft, project, zoom, wallAppearance }) {
   if (draft.awaitingEnd) {
     return (
       <circle
@@ -3698,9 +3833,9 @@ function Draft({ draft, project, zoom }) {
         y1={draft.a.y}
         x2={draft.b.x}
         y2={draft.b.y}
-        stroke="#000"
+        stroke={wallAppearance?.color || '#000'}
         strokeOpacity="0.82"
-        strokeWidth={Math.max(3, 4.5 * project.unitsPerInch)}
+        strokeWidth={Math.max(3, (wallAppearance?.thicknessInches || 4.5) * project.unitsPerInch)}
         strokeLinecap="square"
       />
     );
@@ -3848,6 +3983,8 @@ function Properties({
   deleteSelected,
   wallLengthInches,
   applyExactLength,
+  onMatchWall,
+  matching,
 }) {
   const set = (key, val) => updateElement(selected.id, { [key]: val });
   return (
@@ -3876,9 +4013,17 @@ function Properties({
               value={selected.thicknessInches || 4.5}
               min={0.25}
               step="0.25"
+              max={120}
               onCommit={(v) => set('thicknessInches', v)}
             />
           </label>
+          <label className="field wallColorField">
+            <span>Wall color</span>
+            <input type="color" value={wallStyle(selected).color} onChange={event => set('color', event.target.value)} />
+          </label>
+          <button className="wide" onClick={onMatchWall}>{matching ? 'Cancel matching' : 'Match another wall'}</button>
+          <p className="hint compactHint">Drag the end handles to change length. Drag the middle handle to change thickness.</p>
+          <p className="hint compactHint">Match copies color and visual width. Set scale for accurate inches.</p>
         </>
       )}
       {['door', 'window'].includes(selected.type) && (
@@ -4012,7 +4157,7 @@ function Properties({
             </button>
           </div>
           <div className="hint compactHint">
-            Drag the blue bottom-right handle on the canvas to resize. Press <b>R</b> to rotate 90°.
+            Drag the corner handle on the canvas to resize. Press <b>R</b> to rotate 90°.
           </div>
         </>
       )}
