@@ -4,7 +4,7 @@ import { Icon, Modal, PRODUCT_NAME } from './ui.jsx';
 import { authErrorText, MAX_DISPLAY_NAME_LENGTH, selectedBillingPlan } from './useAccount.js';
 import { canOpenEditor } from './access.js';
 import { PRICING } from './Marketing.jsx';
-import { MONTHLY_VERSION, MONTHLY_DISCLOSURE, LIVE_MONTHLY_VERSION, LIVE_MONTHLY_DISCLOSURE, MONTHLY_CANCELLATION_URL } from './supabase/functions/planpatch-account/monthly-offer.js';
+import { MONTHLY_VERSION, LIVE_MONTHLY_VERSION, MONTHLY_AGREEMENT, MONTHLY_CANCELLATION, MONTHLY_DETAILS, MONTHLY_CANCELLATION_URL } from './supabase/functions/planpatch-account/monthly-offer.js';
 import { PolicyAgreement } from './Policies.jsx';
 
 const SANDBOX_PORTAL_URL = 'https://billing.stripe.com/p/login/test_00w8wIf8fdke23P1oO4ZG00';
@@ -175,14 +175,14 @@ function BillingSettings({ portalUrl, access, plan }) {
   const [error, setError] = useState(null);
   const [checkedAgain, setCheckedAgain] = useState(false);
   const [accepted, setAccepted] = useState(false);
-  const [recurringAccepted, setRecurringAccepted] = useState(false);
+  const [acceptedOfferVersion, setAcceptedOfferVersion] = useState(null);
   const attempts = useRef({});
   const { data, refresh } = access ?? {};
   const isLive = data?.billingMode === 'live';
   const testMode = data?.billingMode === 'test' || (!data?.billingMode && data?.monthlyOfferVersion === MONTHLY_VERSION);
   const offerVersion = isLive ? LIVE_MONTHLY_VERSION : MONTHLY_VERSION;
-  const disclosure = isLive ? LIVE_MONTHLY_DISCLOSURE : MONTHLY_DISCLOSURE;
   const currentOffer = data?.monthlyOfferVersion === offerVersion;
+  const recurringAccepted = currentOffer && acceptedOfferVersion === offerVersion;
   const backupPortal = !access && STRIPE_TEST_PORTAL.test(portalUrl);
   const query = new URLSearchParams(window.location.search);
   const returned = query.get('checkout') === 'returned' || query.get('sandbox_checkout') === 'returned';
@@ -212,7 +212,7 @@ function BillingSettings({ portalUrl, access, plan }) {
 
   async function visitStripe(action) {
     const openPortal = action === 'portal' || action === 'cancel';
-    if (pending || (!openPortal && !accepted) || (action === 'monthly' && (!recurringAccepted || !currentOffer))) return;
+    if (pending || (!openPortal && !accepted) || (action === 'monthly' && !recurringAccepted)) return;
     setPending(action);
     setError(null);
     try {
@@ -283,20 +283,26 @@ function BillingSettings({ portalUrl, access, plan }) {
             </button>
           </div>}
           {plan !== 'project' && <div className="billingChoice" data-selected={plan === 'monthly'}>
-            <h3>Monthly access</h3>
-            <p className="billingChoicePrice"><strong>${PRICING.monthly}</strong> USD / month</p>
-            <p>Edit multiple projects. Renews until canceled.</p>
+            <h3>Monthly access · ${PRICING.monthly}/month</h3>
             {plan && policyAgreement}
             {data?.checkoutReady && !data.monthly && currentOffer && (
-              <label className="policyAgreement">
-                <input type="checkbox" checked={recurringAccepted} onChange={(event) => setRecurringAccepted(event.target.checked)} />
-                <span>{disclosure}</span>
-              </label>
+              <>
+                <label className="policyAgreement">
+                  <input type="checkbox" checked={recurringAccepted} aria-describedby="monthly-cancellation"
+                    onChange={(event) => setAcceptedOfferVersion(event.target.checked ? offerVersion : null)} />
+                  <span>{MONTHLY_AGREEMENT}</span>
+                </label>
+                <p id="monthly-cancellation">{MONTHLY_CANCELLATION}</p>
+                <details className="monthlyDetails">
+                  <summary>Billing details</summary>
+                  <p>{MONTHLY_DETAILS}</p>
+                </details>
+              </>
             )}
-            {data?.checkoutReady && !data.monthly && !currentOffer && <p>Monthly checkout is being updated.</p>}
-            <button className="primary" disabled={!data?.checkoutReady || !accepted || !currentOffer || !recurringAccepted || Boolean(pending) || data.monthly}
+            {data?.checkoutReady && !data.monthly && !currentOffer && <p>Refresh this page to review the latest monthly terms.</p>}
+            <button className="primary" disabled={!data?.checkoutReady || !accepted || !recurringAccepted || Boolean(pending) || data.monthly}
               onClick={() => visitStripe('monthly')}>
-              {data?.monthly ? 'Active subscription' : pending === 'monthly' ? 'Opening Stripe…' : testMode ? 'Start test subscription' : 'Start subscription'}
+              {data?.monthly ? 'Active subscription' : pending === 'monthly' ? 'Opening Stripe…' : testMode ? 'Continue to test payment' : 'Continue to payment'}
             </button>
           </div>}
         </div>
