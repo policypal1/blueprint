@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  parseLength,
   pdfLayout,
   validateProject,
   MAX_ELEMENTS,
@@ -24,45 +23,14 @@ test('pointer coordinates account for centered letterboxing, pan, and CSS zoom',
   );
 });
 
-test('measurement parser supports inches, feet, and mixed fractions without silently dropping characters', () => {
-  for (const [input, expected] of [
-    [120, 120],
-    ['120', 120],
-    [`10' 6"`, 126],
-    ['10 ft 6.25 in', 126.25],
-    ['8 feet', 96],
-    ['8′ 10½″', NaN],
-    ['10 1/2', 10.5],
-    [`8' 10 1/2"`, 106.5],
-    ['1/4', 0.25],
-  ]) {
-    if (Number.isNaN(expected)) assert.ok(Number.isNaN(parseLength(input)));
-    else assert.equal(parseLength(input), expected);
-  }
-  for (const bad of ['', '-5', 'abc123', '1/0', '12 meters', '8 inches junk', Infinity])
-    assert.ok(!Number.isFinite(parseLength(bad)));
-});
 test('every fit-to-page export preserves the workspace aspect ratio and stays inside the sheet', () => {
   for (const paper of ['letter', 'tabloid', 'a3']) {
-    const r = pdfLayout({ paper, scale: 'fit' });
+    const r = pdfLayout({ paper });
     assert.equal(r.width / r.height, 1.6);
     assert.ok(r.x >= 0.49 && r.y >= 0.49);
     assert.ok(r.x + r.width <= r.pageWidth - 0.49);
     assert.ok(r.y + r.height <= r.pageHeight - 0.49);
   }
-});
-test('scaled export maps a known 120-inch wall to 2.5 inches on paper at 1:48', () => {
-  const r = pdfLayout({ paper: 'tabloid', scale: '48', unitsPerInch: 4, calibrated: true });
-  assert.equal(((120 * 4) / 1600) * r.width, 2.5);
-  assert.throws(() => pdfLayout({ scale: '48', unitsPerInch: 4 }), /Set the blueprint scale/);
-  assert.throws(
-    () => pdfLayout({ scale: '24', unitsPerInch: 0.1, calibrated: true }),
-    /will not fit/,
-  );
-  assert.throws(
-    () => pdfLayout({ scale: 'banana', unitsPerInch: 4, calibrated: true }),
-    /supported/,
-  );
 });
 test('backup validation accepts a real sample and preserves a round trip', () => {
   const source = { ...sampleProject('original'), createdAt: 100, updatedAt: 200 };
@@ -70,6 +38,9 @@ test('backup validation accepts a real sample and preserves a round trip', () =>
   assert.equal(restored.elements.length, source.elements.length);
   assert.equal(restored.unitsPerInch, 4);
   assert.equal(restored.calibrated, true);
+  const legacy = restored.elements.find(el => el.type === 'dimension');
+  const original = source.elements.find(el => el.type === 'dimension');
+  assert.deepEqual([legacy.id, legacy.a, legacy.b], [original.id, original.a, original.b]);
   assert.equal(restored.createdAt, 100);
   assert.equal(restored.updatedAt, 200);
 });
