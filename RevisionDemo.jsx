@@ -41,10 +41,23 @@ export default function RevisionDemo({ embedded = false }) {
   const [compareOriginal, setCompareOriginal] = useState(false);
   const player = useRef(null);
   const keyboardStep = useRef(false);
+  const startCue = useRef(null);
   const frame = frames[index];
   const last = index === LAST;
   const review = frame.stage === 'revised';
   const Heading = embedded ? 'h2' : 'h1';
+
+  useEffect(() => {
+    const cue = startCue.current;
+    if (!cue || !window.IntersectionObserver) return;
+    const observer = new window.IntersectionObserver(([entry]) => {
+      if (entry.intersectionRatio < 0.7) return;
+      cue.classList.add('revisionCueSeen');
+      observer.disconnect();
+    }, { threshold: 0.7 });
+    observer.observe(cue);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!keyboardStep.current) return;
@@ -73,7 +86,7 @@ export default function RevisionDemo({ embedded = false }) {
                 <button key={name} type="button" disabled={!prompt} data-current={position === frame.tool}
                   data-next-action={prompt} aria-label={`Choose ${name}`} onClick={(event) => go(index + 1, event)}>
                   <Icon name={icon} size={18} /><span>{name}</span>
-                  {index === 0 && prompt && <span className="revisionToolCue" aria-hidden="true">
+                  {index === 0 && prompt && <span className="revisionToolCue" ref={startCue} aria-hidden="true">
                     <Icon name="back" size={13} />Start here
                   </span>}
                 </button>
