@@ -341,7 +341,7 @@ test('landing and pricing explain the product and lead to the editor', async () 
   render(React.createElement(Marketing, { page: 'home' }));
   const hero = screen.getByRole('region', { name: /Edit your existing floor plan/ });
   assert.ok(within(hero).getByRole('heading', { name: /Edit your existing floor plan/ }));
-  assert.ok(within(hero).getByText(/Upload a PDF or photo of your floor plan.*walls and doors/));
+  assert.ok(within(hero).getByText('Upload a PDF or photo of your floor plan. Make your edits, then export the revised plan.'));
   assert.equal(within(hero).getByRole('link', { name: 'Try demo below' }).getAttribute('href'), '#doorway-demo');
   assert.equal(
     within(hero).getByRole('link', { name: 'Open editor' }).getAttribute('href'),
@@ -352,17 +352,13 @@ test('landing and pricing explain the product and lead to the editor', async () 
   const pricing = screen.getByRole('heading', { name: 'One project or monthly access' });
   const demo = screen.getByRole('region', { name: 'Try the floor plan demo' });
   assert.equal(hero.nextElementSibling, demo);
-  const videoOption = screen.getByText('Watch the editor video').closest('details');
-  assert.ok(videoOption && !videoOption.open);
-  assert.equal(videoOption.querySelector('video'), null);
-  videoOption.open = true;
-  fireEvent(videoOption, new window.Event('toggle'));
-  assert.equal(videoOption.querySelector('video[controls]').getAttribute('src'), '/planpatch-demo.mp4');
-  videoOption.open = false;
-  fireEvent(videoOption, new window.Event('toggle'));
-  assert.equal(videoOption.querySelector('video'), null);
-  assert.ok(demo.compareDocumentPosition(pricing) & Node.DOCUMENT_POSITION_FOLLOWING);
-  assert.ok(within(demo).getByRole('button', { name: 'Choose Clean up' }));
+  assert.equal(screen.queryByText('Watch the editor video'), null);
+  assert.equal(document.querySelector('video'), null);
+  assert.equal(demo.nextElementSibling, pricing.closest('section'));
+  const cleanUp = within(demo).getByRole('button', { name: 'Choose Clean up' });
+  assert.ok(within(cleanUp).getByText('Start here'));
+  fireEvent.click(cleanUp);
+  assert.equal(within(cleanUp).queryByText('Start here'), null);
   fireEvent.click(within(hero).getByRole('link', { name: 'Try demo below' }));
   assert.equal(document.activeElement, within(demo).getByRole('heading', { level: 2 }));
   assert.ok(document.querySelector('.mobileMenu .siteNav a.navEditorLink[href="/#/editor"]'));
@@ -1310,7 +1306,10 @@ test('reduced-motion visitors control sample playback and pricing keeps billing 
     view.unmount();
     render(React.createElement(Marketing, { page: 'pricing', trialOffer: true, account: { signedIn: true, user: { email: 'demo@example.test' } } }));
     assert.equal(screen.queryByRole('link', { name: 'View billing' }), null);
-    assert.match(screen.getByRole('main').textContent, /3-day free trial\. No credit card needed\./);
+    const pricing = within(screen.getByRole('main'));
+    assert.equal(pricing.queryByRole('link', { name: 'Open editor' }), null);
+    assert.doesNotMatch(screen.getByRole('main').textContent, /No credit card needed/i);
+    assert.equal(pricing.getByRole('heading', { name: 'Pricing' }).nextElementSibling.firstElementChild, pricing.getAllByRole('article')[0]);
     assert.equal(screen.queryByRole('link', { name: 'Start 3-day free trial' }), null);
     assert.ok(document.querySelector('.accountMenuLinks a[href="#/account/billing"]'));
   } finally {
