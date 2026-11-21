@@ -51,6 +51,10 @@ export default function EditorTour({ step, tool, project, baseline, onStep, onCl
       const b = target.getBoundingClientRect();
       setRect({ left: Math.max(0,b.left-5), top: Math.max(0,b.top-5), width: b.width+10, height:b.height+10 });
     };
+    if (['window','sofa'].includes(current.target)) {
+      const target = [...document.querySelectorAll(`[data-tour="${current.target}"]`)].find(el => el.getBoundingClientRect().width > 0);
+      target?.scrollIntoView?.({ block:'nearest' });
+    }
     measure();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
     observer?.observe(document.body);
@@ -61,7 +65,7 @@ export default function EditorTour({ step, tool, project, baseline, onStep, onCl
   }, [step, current.target]);
   return <div className="editorTour" role="region" aria-label="Guided sample edit">
     {rect && <div className="tourSpotlight" style={rect} />}
-    <section className={`tourCard ${current.target === 'canvas' ? 'tourCanvasCard' : 'tourToolCard'}`} aria-live="polite">
+    <section className={`tourCard ${current.target === 'canvas' ? 'tourCanvasCard' : 'tourToolCard'} ${['window','sofa'].includes(current.target) ? 'tourPanelCard' : ''}`} aria-live="polite">
       <span className="tourProgress">{Math.min(step+1,9)} of 9</span>
       <h2>{current.title}</h2>{current.text && <p>{current.text}</p>}
       {step === 4 && label && <form onSubmit={event => { event.preventDefault(); if(label.text.trim().toLowerCase() === 'living room') onStep(5); }}>
