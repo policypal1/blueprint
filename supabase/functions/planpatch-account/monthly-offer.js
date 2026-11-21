@@ -1,8 +1,11 @@
-// The browser renders this same version and wording before opening Stripe Checkout.
-export const MONTHLY_VERSION = 'monthly-usd19-2026-11-19';
-export const MONTHLY_DISCLOSURE = 'I authorize Samuel Kumpula, the operator of EditFloorPlans.com, to charge $19 USD now and every month until I cancel. I can cancel before my next renewal in Account → Billing → Manage test billing. My access continues through the paid period. Payments for the current period are nonrefundable except where required by law.';
+// New checkouts record these exact terms. Older receipts retain the wording accepted at purchase.
+export const MONTHLY_AGREEMENT = 'I agree to pay $19 today and $19 each month until I cancel.';
+export const MONTHLY_CANCELLATION = 'Cancel before your next renewal in Account → Billing.';
+export const MONTHLY_DETAILS = 'Samuel Kumpula operates EditFloorPlans.com. All charges are in US dollars. After you cancel, access continues through the paid period. Payments for the current period are nonrefundable except where required by law.';
+export const MONTHLY_DISCLOSURE = [MONTHLY_AGREEMENT, MONTHLY_CANCELLATION, MONTHLY_DETAILS].join(' ');
 export const MONTHLY_CANCELLATION_URL = 'https://www.editfloorplans.com/#/account/billing';
 
 // A separate version prevents sandbox acceptance from authorizing live renewal.
-export const LIVE_MONTHLY_VERSION = 'monthly-live-usd19-2026-11-19';
-export const LIVE_MONTHLY_DISCLOSURE = MONTHLY_DISCLOSURE.replace('Manage test billing', 'Manage billing');
+export const MONTHLY_VERSION = 'monthly-usd19-2026-11-21';
+export const LIVE_MONTHLY_VERSION = 'monthly-live-usd19-2026-11-21';
+export const LIVE_MONTHLY_DISCLOSURE = MONTHLY_DISCLOSURE;

@@ -100,14 +100,14 @@ The public policies live in `Policies.jsx`. Replace the support placeholder usin
 
 - A short landing page with a desktop and a phone demo, followed by the original and revised plans from the walkthrough.
 - The pricing page shows **$10 per project** and **$19/month**.
-- Charcoal toolbars, an orange action color, and warm drawing surfaces. The phone toolbar groups View, Edit, and Measure. Edit puts walls, doors, and fixtures within thumb reach. Desktop shows the full palette beside the drawing.
+- Charcoal toolbars, an orange action color, and warm drawing surfaces. The phone toolbar groups View and Edit. Edit puts walls, doors, and fixtures within thumb reach. Desktop shows the full palette beside the drawing.
 - On a phone, choose **Edit → Wall** and tap each endpoint. **Cancel** clears the first endpoint before a wall is placed. On desktop, drag to draw a wall.
 - Recent plans opens drawings saved in this browser or in your account. Upload a PDF or image to start a separate plan.
 - Password removal from the active application. `Root.jsx` routes the marketing pages and lazy-loads the editor.
 - Safer project switching and autosave, honest save-failure messages, portable JSON backups and restoration, and a reusable sample project.
-- Undo for property changes, persistent dimension rendering, better measurement input parsing, pointer capture, and corrected pointer coordinates when the viewport adds margins around the drawing.
-- PDF page selection, import limits, non-destructive background cleanup, and calibrated scale handling.
-- PDF export that preserves proportions, three sheet sizes, fixed drawing scales with fit checks, a 3200 × 2000 PNG export, embedded drawing fonts, and removal of editing overlays from downloads.
+- Undo for property changes, manual measurement notes, compatibility with saved dimension annotations, pointer capture, and corrected pointer coordinates when the viewport adds margins around the drawing.
+- PDF page selection, import limits, and non-destructive background cleanup.
+- PDF export that preserves proportions, three fit-to-page sheet sizes, a 3200 × 2000 PNG export, embedded drawing fonts, and removal of editing overlays from downloads.
 - Updated dependencies, input validation, security headers, and automated regression checks.
 
 ## Files you will edit most often
@@ -120,7 +120,7 @@ The public policies live in `Policies.jsx`. Replace the support placeholder usin
 | `App.jsx`              | Editor interactions, geometry, imports and exports |
 | `EditorControls.jsx`   | Phone toolbar and door and fixture choices         |
 | `RecentPlans.jsx`      | Saved plan list and upload entry point              |
-| `editor-core.js`       | Validation, measurements, coordinates, PDF layout  |
+| `editor-core.js`       | Validation, coordinates, PDF layout                |
 | `useProjectStore.js`   | Local IndexedDB saving and loading                 |
 | `useAccount.js`        | Sign-in and session handling                       |
 | `account-projects.js`  | Account plans and private image storage            |
@@ -132,7 +132,7 @@ The public policies live in `Policies.jsx`. Replace the support placeholder usin
 
 ## Plan files and backups
 
-PDFs and images become a raster background. You can mask details and draw new editable objects over it. Importing a PDF does **not** automatically turn its original walls into CAD objects. Advanced JSON import accepts explicitly structured editable geometry. PDF output is raster-based, not CAD/vector output. Dimensions use inches and feet.
+PDFs and images become a raster background. You can mask details and draw new editable objects over it. Importing a PDF does **not** automatically turn its original walls into CAD objects. Advanced JSON import accepts explicitly structured editable geometry. PDF output is raster-based, not CAD/vector output. Use Text to record known measurements in any unit. PDF exports fit the selected sheet. Previously saved dimension annotations still render.
 
 Device drafts stay in IndexedDB for the current browser and domain. Use **Download backup** under project settings to keep a portable copy.
 

@@ -3,17 +3,15 @@ import { Icon } from './ui.jsx';
 import { sampleProject } from './sample-project.js';
 
 const tools = [['pan', 'Pan'], ['select', 'Select'], ['wall', 'Wall'], ['door', 'Door'], ['text', 'Text'], ['clean', 'Clean up']];
-const activeTools = ['pan', 'select', 'wall', 'door', 'text', 'clean', 'window', 'calibrate', 'measure', 'download'];
+const activeTools = ['pan', 'select', 'wall', 'door', 'text', 'clean', 'window', 'download'];
 const captions = [
   'Pan moves the view. The drawing itself stays in place.',
   'Select the wall, then change Wall thickness in Object properties.',
   'Choose Wall and draw between two points.',
   'Choose a door style and place it next to a wall.',
-  'Place a text label to describe your revision.',
+  'Type a note or known measurement with Text.',
   'Clean up covers an old detail before you redraw it.',
-  'More tools contains windows, fixtures and dimensions.',
-  'Match a known span to its real distance before measuring.',
-  'Distance measures between two points on the calibrated plan.',
+  'More tools contains windows, fixtures, lines, and rectangles.',
   'Export saves your revision as a PDF or PNG.',
 ];
 
@@ -66,7 +64,7 @@ export default function SampleEditorPreview({ step, playing }) {
   const addedWindow = step > 6 || (step === 6 && phase > 0);
   const chosenWall = step === 1 && phase > 0;
   const active = activeTools[step];
-  const showProperties = [1, 2, 3, 4, 7, 9].includes(step);
+  const showProperties = [1, 2, 3, 4, 7].includes(step);
   useEffect(() => {
     const targets = [
       ['.sampleDrawing', '.sampleDrawing'],
@@ -76,12 +74,10 @@ export default function SampleEditorPreview({ step, playing }) {
       ['[data-demo-target="new-label"]', '[data-demo-target="new-label"]'],
       ['[data-demo-target="cleanup"]', '[data-demo-target="cleanup"]'],
       ['[data-demo-target="new-window"]', '[data-demo-target="new-window"]'],
-      ['[data-demo-target="known-span"]', '[data-demo-target="real-distance"] input'],
-      ['[data-demo-target="measurement"]', '[data-demo-target="measurement"]'],
       ['.sampleAction', '.sampleSuccess'],
     ];
     const selector = phase === 0
-      ? `[data-demo-tool="${step >= 6 && step < 9 ? 'tools' : active}"]`
+      ? `[data-demo-tool="${step === 6 ? 'tools' : active}"]`
       : targets[step][phase - 1];
     const locate = () => {
       const element = root.current?.querySelector(selector);
@@ -102,8 +98,8 @@ export default function SampleEditorPreview({ step, playing }) {
       <div className="sampleEditorBar"><span><Icon name="file" size={16} /> Oak St. Remodel</span><span>Sample plan</span></div>
       <div className="sampleToolbar" aria-hidden="true">
         {tools.map(([id, label]) => <span key={id} data-demo-tool={id} data-active={active === id}><Icon name={id} size={16} />{label}</span>)}
-        <span data-demo-tool="tools" data-active={step >= 6 && step < 9}><Icon name="more" size={16} />More tools</span>
-        <span data-demo-tool="download" data-active={step === 9}><Icon name="download" size={16} />Export</span>
+        <span data-demo-tool="tools" data-active={step === 6}><Icon name="more" size={16} />More tools</span>
+        <span data-demo-tool="download" data-active={step === 7}><Icon name="download" size={16} />Export</span>
       </div>
       <div className="sampleEditorBody">
         <svg className="sampleDrawing" viewBox="180 -10 1250 1060" role="img" aria-label={captions[step]}>
@@ -123,32 +119,26 @@ export default function SampleEditorPreview({ step, playing }) {
               <path d={`M${el.x - el.widthInches * 2} ${el.y}h${el.widthInches * 4}`} />
             </g>)}
             {project.elements.filter((el) => el.type === 'text').map((el) => <text key={el.id} x={el.x} y={el.y} fontSize="22" fill="#555b5b">{el.text}</text>)}
-            <g fill="none" stroke={step === 7 ? '#a4431a' : '#747b79'} strokeWidth="3">
-              <path data-demo-target="known-span" d="M300 65h1000M300 50v30m1000-30v30" />
+            <g fill="none" stroke="#747b79" strokeWidth="3">
+              <path d="M300 65h1000M300 50v30m1000-30v30" />
               <text x="800" y="45" textAnchor="middle" fill="#555b5b" stroke="none" fontSize="25">20′ 10″</text>
             </g>
             {addedWall && <line data-demo-target="new-wall" x1="300" y1="730" x2={step === 2 && phase === 1 ? 455 : 620} y2="730" stroke="#a4431a" strokeWidth="18" strokeLinecap="square" />}
             {addedDoor && <g data-demo-target="new-door"><DemoDoor x="620" y="730" width={144} accent /></g>}
-            {addedText && <text data-demo-target="new-label" x="370" y="800" fontSize="26" fill="#a4431a">PROPOSED ENTRY</text>}
+            {addedText && <text data-demo-target="new-label" x="370" y="800" fontSize="26" fill="#a4431a">36 in clear opening</text>}
             {step === 5 && <rect data-demo-target="cleanup" x="455" y="160" width="270" height="355" rx="6" fill={cleaned ? '#fff' : '#f8e6d7'} fillOpacity={cleaned ? 1 : .35} stroke="#a4431a" strokeWidth="3" strokeDasharray="10 8" />}
             {addedWindow && <g data-demo-target="new-window" fill="white" stroke="#a4431a" strokeWidth="4"><rect x="288" y="400" width="24" height="192" /><path d="M300 400v192" /></g>}
-            {step === 8 && phase > 0 && <g fill="none" stroke="#a4431a" strokeWidth="4">
-              <path data-demo-target="measurement" d="M300 680h288m-288-12v24m288-24v24" />
-              <text x="444" y="665" textAnchor="middle" fill="#a4431a" stroke="none" fontSize="28">6′ 0″</text>
-            </g>}
           </g>
         </svg>
         {showProperties && <aside className="sampleProperties" aria-label="Sample object properties">
-          <strong>{step === 9 ? 'Export plan' : step === 7 ? 'Set the scale' : 'Object properties'}</strong>
+          <strong>{step === 7 ? 'Export plan' : 'Object properties'}</strong>
           {[1, 2].includes(step) && <>
             <span className="sampleObjectType">WALL</span>
-            <label>Exact wall length<input readOnly tabIndex={-1} value={step === 1 ? '5′ 10″' : '6′ 8″'} /></label>
-            <label data-demo-target="thickness" data-highlight={chosenWall}>Wall thickness (inches)<input readOnly tabIndex={-1} value={changedWall && step === 1 ? '6' : '4.5'} /></label>
+            <label data-demo-target="thickness" data-highlight={chosenWall}>Wall thickness (px)<input readOnly tabIndex={-1} value={changedWall && step === 1 ? '24' : '18'} /></label>
           </>}
-          {step === 3 && <><span className="sampleObjectType">DOOR</span><label>Door type<input readOnly tabIndex={-1} value="Single swing" /></label><label>Width (inches)<input readOnly tabIndex={-1} value="36" /></label></>}
-          {step === 4 && <><span className="sampleObjectType">TEXT</span><label>Label<input readOnly tabIndex={-1} value="PROPOSED ENTRY" /></label></>}
-          {step === 7 && <><label data-demo-target="real-distance">Real distance<input readOnly tabIndex={-1} value={phase > 0 ? '20 ft 10 in' : ''} placeholder="Known distance" /></label><span className="sampleAction" data-highlight={phase > 0}>Set real distance</span></>}
-          {step === 9 && <><span className="sampleAction" data-highlight={phase > 0}><Icon name="download" size={16} /> Download PDF</span><span className="sampleAction">PNG image</span>{phase === 2 && <p className="sampleSuccess"><Icon name="check" size={16} /> Revision ready</p>}</>}
+          {step === 3 && <><span className="sampleObjectType">DOOR</span><label>Door type<input readOnly tabIndex={-1} value="Single swing" /></label><label>Drawing width (px)<input readOnly tabIndex={-1} value="144" /></label></>}
+          {step === 4 && <><span className="sampleObjectType">TEXT</span><label>Label<input readOnly tabIndex={-1} value="36 in clear opening" /></label></>}
+          {step === 7 && <><span className="sampleAction" data-highlight={phase > 0}><Icon name="download" size={16} /> Download PDF</span><span className="sampleAction">PNG image</span>{phase === 2 && <p className="sampleSuccess"><Icon name="check" size={16} /> Revision ready</p>}</>}
         </aside>}
       </div>
       <div className="sampleEditorStatus"><span>{captions[step]}</span><span>Demonstration</span></div>

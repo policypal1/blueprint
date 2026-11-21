@@ -245,7 +245,7 @@ test('trial countdown ticks each second and catches up after a background pause'
 });
 
 test('live billing uses live consent and keeps purchases disabled during Stripe review', async () => {
-  const { LIVE_MONTHLY_VERSION, LIVE_MONTHLY_DISCLOSURE } = await import('../supabase/functions/planpatch-account/monthly-offer.js');
+  const { LIVE_MONTHLY_VERSION, MONTHLY_AGREEMENT, MONTHLY_CANCELLATION, MONTHLY_DETAILS } = await import('../supabase/functions/planpatch-account/monthly-offer.js');
   const calls = [];
   const account = { user: { id: 'live-billing-ui' } };
   let rechecks = 0;
@@ -253,7 +253,7 @@ test('live billing uses live consent and keeps purchases disabled during Stripe 
     billingAvailable: true, monthlyOfferVersion: LIVE_MONTHLY_VERSION }, refresh: async () => { rechecks++; }, checkout: async (...args) => calls.push(args) };
   const view = render(React.createElement(AccountPage, { account, access: { ...access, data: null, loading: true }, billing: true }));
   assert.equal(screen.queryByRole('link', { name: 'Open test billing portal' }), null);
-  assert.equal(screen.queryByRole('button', { name: 'Start test subscription' }), null);
+  assert.equal(screen.queryByRole('button', { name: 'Continue to test payment' }), null);
   view.rerender(React.createElement(AccountPage, { account, access, billing: true }));
   assert.equal(screen.queryByText('Payments are awaiting Stripe activation.'), null);
   assert.equal(screen.queryByText('Live billing'), null);
@@ -269,9 +269,17 @@ test('live billing uses live consent and keeps purchases disabled during Stripe 
   access.data.checkoutReady = true;
   view.rerender(React.createElement(AccountPage, { account, access, billing: true }));
   const [terms, renewal] = screen.getAllByRole('checkbox');
-  assert.equal(renewal.labels[0].textContent, LIVE_MONTHLY_DISCLOSURE);
+  assert.equal(renewal.labels[0].textContent, MONTHLY_AGREEMENT);
+  assert.equal(document.getElementById(renewal.getAttribute('aria-describedby')).textContent, MONTHLY_CANCELLATION);
+  const summary = screen.getByText('Billing details', { selector: 'summary' });
+  const details = summary.closest('details');
+  assert.equal(details.open, false);
+  fireEvent.click(summary);
+  assert.equal(details.open, true);
+  assert.ok(within(details).getByText(MONTHLY_DETAILS));
+  assert.equal(renewal.checked, false);
   fireEvent.click(terms); fireEvent.click(renewal);
-  click('button', 'Start subscription');
+  click('button', 'Continue to payment');
   await waitFor(() => assert.equal(calls.length, 1));
   assert.deepEqual(calls[0][2], { accepted: true, version: LIVE_MONTHLY_VERSION });
 });
@@ -285,7 +293,7 @@ test('billing keeps the selected order through sign-in and shows checkout failur
     checkout: async () => { throw new Error('Could not open Stripe. Try again.'); },
   };
   try {
-    for (const [plan, title] of [['project', 'Single project'], ['monthly', 'Monthly access']]) {
+    for (const [plan, title] of [['project', 'Single project'], ['monthly', 'Monthly access · $19/month']]) {
       const target = accountReturnTarget('#/account/billing', `?plan=${plan}&tracking=test`);
       assert.equal(target, `?plan=${plan}#/account/billing`);
       // The callback validates the stored target again after email or Google authentication.
@@ -298,7 +306,7 @@ test('billing keeps the selected order through sign-in and shows checkout failur
       const order = within(screen.getByRole('region', { name: 'Your order' }));
       assert.deepEqual(order.getAllByRole('heading', { level: 3 }).map(el => el.textContent), [title]);
       for (const agreement of order.getAllByRole('checkbox')) fireEvent.click(agreement);
-      fireEvent.click(order.getByRole('button', { name: plan === 'project' ? 'Buy a project credit' : 'Start subscription' }));
+      fireEvent.click(order.getByRole('button', { name: plan === 'project' ? 'Buy a project credit' : 'Continue to payment' }));
       assert.equal((await order.findByRole('alert')).textContent, 'Could not open Stripe. Try again.');
       assert.equal(order.getByRole('link', { name: 'View both plans' }).getAttribute('href'), '/#/account/billing');
       view.unmount();
@@ -334,6 +342,32 @@ test('a Stripe return rechecks access automatically until the delayed webhook ca
     window.setTimeout = schedule;
     window.clearTimeout = cancel;
     window.history.replaceState(null, '', previous);
+  }
+});
+
+test('the demo cues the arrow once when it comes into view', () => {
+  const original = window.IntersectionObserver;
+  let notify, target;
+  let disconnected = false;
+  window.IntersectionObserver = class {
+    constructor(callback) { notify = callback; }
+    observe(node) { target = node; }
+    disconnect() { disconnected = true; }
+  };
+  try {
+    render(React.createElement(Marketing, { page: 'home' }));
+    const demo = within(screen.getByRole('region', { name: 'Try the floor plan demo' }));
+    assert.equal(target, demo.getByText('Start here'));
+    notify([{ intersectionRatio: 0 }]);
+    assert.equal(target.classList.contains('revisionCueSeen'), false);
+    notify([{ intersectionRatio: 1 }]);
+    assert.ok(disconnected && target.classList.contains('revisionCueSeen'));
+    fireEvent.click(demo.getByRole('button', { name: 'Choose Clean up' }));
+    fireEvent.click(demo.getByRole('button', { name: 'Back' }));
+    assert.equal(demo.getByText('Start here').classList.contains('revisionCueSeen'), false);
+  } finally {
+    if (original) window.IntersectionObserver = original;
+    else delete window.IntersectionObserver;
   }
 });
 
@@ -410,18 +444,23 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
   const wall = svg().querySelector('line[stroke="#000"]');
   fireEvent.pointerDown(wall, { button: 0, clientX: 400, clientY: 200, pointerId: 2 });
   fireEvent.pointerUp(svg(), { pointerId: 2 });
-  const thickness = screen.getByLabelText('Wall thickness (inches)');
-  fireEvent.change(thickness, { target: { value: '8' } });
+  const thickness = screen.getByLabelText('Wall thickness (px)');
+  fireEvent.change(thickness, { target: { value: '32' } });
   fireEvent.blur(thickness);
   assert.equal(svg().querySelector('line[stroke="#000"]').getAttribute('stroke-width'), '32');
   click('button', 'Undo');
   assert.equal(svg().querySelector('line[stroke="#000"]').getAttribute('stroke-width'), '18');
-  // A persistent dimension appears in the output geometry.
+  // A contractor can mark a known dimension directly. It persists as text.
   click('button', 'More tools');
-  click('button', 'Dimension');
-  draw(200, 150, 600, 150);
+  assert.equal(screen.queryByRole('button', { name: 'Dimension', exact: true }), null);
+  click('button', 'Close dialog');
+  click('button', 'Text');
+  tap(200, 150);
+  const label = screen.getByRole('textbox', { name: 'Text' });
+  fireEvent.change(label, { target: { value: '36 in clear opening' } });
+  fireEvent.blur(label);
   assert.equal(count(), 2);
-  assert.ok(svg().textContent.includes(`8' 4"`));
+  assert.ok(svg().textContent.includes('36 in clear opening'));
   // Switch before the debounced disk write; recent edits must remain.
   await newProject('Regression B');
   click('button', 'More tools');
@@ -474,17 +513,6 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
   await waitFor(() => assert.ok(svg().querySelector('image')));
   assert.deepEqual(pages, [2]);
   assert.equal(count(), 2);
-  // Exact scale requires a known distance, then changes the printed measurements.
-  click('button', 'Set scale');
-  fireEvent.pointerDown(svg(), { button: 0, clientX: 200, clientY: 200, pointerId: 5 });
-  fireEvent.pointerUp(svg(), { pointerId: 5 });
-  fireEvent.pointerDown(svg(), { button: 0, clientX: 600, clientY: 200, pointerId: 5 });
-  fireEvent.pointerUp(svg(), { pointerId: 5 });
-  click('button', 'Set real distance');
-  await screen.findByRole('dialog', { name: 'Set blueprint scale' });
-  fireEvent.change(screen.getByLabelText('Known distance'), { target: { value: '100' } });
-  click('button', 'Set scale');
-  await waitFor(() => assert.ok(screen.getByText('Scale calibrated')));
   click('button', 'Plan settings');
   fireEvent.click(screen.getByLabelText('Show imported blueprint'));
   assert.equal(svg().querySelector('image'), null);
@@ -519,6 +547,7 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
   assert.equal(exportedSvg.documentElement.localName, 'svg', 'The export rasterizer needs well-formed SVG.');
   assert.ok(!(await svgBlob.text()).includes('data-editor-only'));
   assert.ok((await svgBlob.text()).includes('@font-face'));
+  assert.ok(exportedSvg.documentElement.textContent.includes('36 in clear opening'));
   click('button', 'Export');
   click('button', 'Download PDF');
   await waitFor(() => assert.ok(downloads.some((d) => d.name.endsWith('.pdf'))));
@@ -615,8 +644,15 @@ test('phone editor reaches the core drawing tools and keeps pinch gestures in Vi
     assert.ok(cleanupDialog.getByRole('button', { name: 'Rectangle' }));
     assert.ok(cleanupDialog.getByRole('button', { name: 'Brush eraser' }));
     click('button', 'Close dialog');
-    click('button', 'Measure');
-    assert.ok(screen.getByRole('button', { name: 'Distance' }));
+    assert.equal(screen.queryByRole('button', { name: 'Measure' }), null);
+    click('button', 'Text');
+    tap(420, 300);
+    click('button', 'Properties');
+    const text = screen.getByRole('textbox', { name: 'Text' });
+    fireEvent.change(text, { target: { value: '900 mm' } });
+    fireEvent.blur(text);
+    click('button', 'Close dialog');
+    assert.ok(svg().textContent.includes('900 mm'));
 
     await waitSaved();
   } finally {
@@ -643,7 +679,7 @@ test('wall endpoints and width resize by touch with one undo per drag', async ()
   fireEvent.pointerDown(width, { ...pointer, clientX: x, clientY: y });
   fireEvent.pointerMove(svg(), { ...pointer, clientX: x, clientY: y + 6 });
   fireEvent.pointerUp(svg(), { ...pointer, clientX: x, clientY: y + 6 });
-  assert.equal(screen.getByLabelText('Wall thickness (inches)').value, '7.5');
+  assert.equal(screen.getByLabelText('Wall thickness (px)').value, '30');
   assert.equal(wall.getAttribute('stroke-width'), '30');
   click('button', 'Undo');
   assert.equal(svg().querySelector('line[stroke="#000"]').getAttribute('stroke-width'), '18');
@@ -664,20 +700,20 @@ test('wall colors persist, new walls inherit the chosen style and matching is un
   };
   select(first, 200);
   fireEvent.input(screen.getByLabelText('Wall color'), { target: { value: '#777777' } });
-  fireEvent.change(screen.getByLabelText('Wall thickness (inches)'), { target: { value: '6' } });
-  fireEvent.blur(screen.getByLabelText('Wall thickness (inches)'));
+  fireEvent.change(screen.getByLabelText('Wall thickness (px)'), { target: { value: '24' } });
+  fireEvent.blur(screen.getByLabelText('Wall thickness (px)'));
   click('button', 'Wall'); draw(200, 400, 600, 400); click('button', 'Select');
   const walls = svg().querySelectorAll('line[stroke="#777777"]');
   assert.equal(walls.length, 2);
   assert.equal(walls[1].getAttribute('stroke-width'), '24');
   select(walls[1], 400);
   fireEvent.change(screen.getByLabelText('Wall color'), { target: { value: '#222222' } });
-  fireEvent.change(screen.getByLabelText('Wall thickness (inches)'), { target: { value: '2' } });
-  fireEvent.blur(screen.getByLabelText('Wall thickness (inches)'));
+  fireEvent.change(screen.getByLabelText('Wall thickness (px)'), { target: { value: '8' } });
+  fireEvent.blur(screen.getByLabelText('Wall thickness (px)'));
   click('button', 'Match another wall');
   select(first, 200);
   await waitFor(() => assert.equal(screen.getByLabelText('Wall color').value, '#777777'));
-  assert.equal(screen.getByLabelText('Wall thickness (inches)').value, '6');
+  assert.equal(screen.getByLabelText('Wall thickness (px)').value, '24');
   click('button', 'Undo');
   assert.ok(svg().querySelector('line[stroke="#222222"][stroke-width="8"]'));
   await waitSaved(); cleanup(); render(React.createElement(Editor)); await waitSaved();
@@ -749,15 +785,15 @@ test('the walkthrough opens once and the complete editor guide stays available',
     assert.equal(screen.queryByRole('dialog', walkthrough), null);
     view.rerender(editor({ showRecent: false }));
     await screen.findByRole('dialog', walkthrough);
-    assert.ok(screen.getByText('Step 1 of 10'));
+    assert.ok(screen.getByText('Step 1 of 8'));
     click('button', 'Try Pan');
     assert.equal(screen.queryByRole('dialog', walkthrough), null);
     assert.equal(screen.getByRole('button', { name: 'Pan', exact: true }).getAttribute('aria-pressed'), 'true');
     click('button', 'Resume walkthrough');
-    assert.ok(screen.getByText('Step 1 of 10'));
-    for (let step = 2; step <= 10; step++) {
+    assert.ok(screen.getByText('Step 1 of 8'));
+    for (let step = 2; step <= 8; step++) {
       click('button', 'Next');
-      assert.ok(screen.getByText(`Step ${step} of 10`));
+      assert.ok(screen.getByText(`Step ${step} of 8`));
     }
     assert.ok(within(screen.getByRole('dialog', walkthrough)).getByRole('heading', { name: 'Export your plan' }));
     click('button', 'Finish');
@@ -772,7 +808,7 @@ test('the walkthrough opens once and the complete editor guide stays available',
     assert.ok(screen.getByRole('dialog', { name: 'Editor guide' }));
     click('button', 'Replay walkthrough');
     assert.ok(screen.getByRole('dialog', walkthrough));
-    assert.ok(screen.getByText('Step 1 of 10'));
+    assert.ok(screen.getByText('Step 1 of 8'));
   } finally {
     localStorage.removeItem(`editfloorplans-editor-guide:${owner}`);
   }
@@ -921,40 +957,40 @@ test('all door and fixture choices place objects and copy, delete, and undo stay
   await waitSaved();
 });
 
-test('out-of-range measurements cannot make a project fail to reopen', async () => {
+test('legacy dimension annotations still render after reopening, without measurement tools', async () => {
   render(React.createElement(Editor));
-  try {
-    await waitSaved();
-    await newProject('Measurement limits');
-    click('button', 'Wall');
-    draw(200, 200, 600, 200);
-    click('button', 'Select');
-    const wall = svg().querySelector('line[stroke="#000"]');
-    fireEvent.pointerDown(wall, { button: 0, clientX: 400, clientY: 200, pointerId: 2 });
-    fireEvent.pointerUp(svg(), { pointerId: 2 });
-    const length = screen.getByLabelText('Exact wall length');
-    fireEvent.change(length, { target: { value: '10000000' } });
-    fireEvent.blur(length);
-    assert.equal(wall.getAttribute('x2'), '600');
-
-    click('button', 'Set scale');
-    tap(200, 300);
-    tap(600, 300);
-    click('button', 'Set real distance');
-    fireEvent.change(screen.getByLabelText('Known distance'), { target: { value: '0.000001' } });
-    click('button', 'Set scale');
-    await screen.findByRole('dialog', { name: 'Could not set scale' });
-    click('button', 'Continue');
-    assert.ok(screen.getByText('Scale not calibrated'));
-    await waitSaved();
-    cleanup();
-    render(React.createElement(Editor));
-    await waitSaved();
-    assert.equal(document.querySelector('.projectButton').textContent, 'Measurement limits');
-    assert.equal(count(), 1);
-  } finally {
-    cleanup();
-  }
+  await waitSaved();
+  fireEvent.click(document.querySelector('.projectButton'));
+  click('button', 'Open sample project');
+  const legacyLabel = `20' 10"`;
+  assert.ok(svg().textContent.includes(legacyLabel));
+  assert.equal(screen.queryByRole('button', { name: 'Distance' }), null);
+  fireEvent.keyDown(window, { key: 'm' });
+  assert.equal(screen.getByRole('button', { name: 'Select' }).getAttribute('aria-pressed'), 'true');
+  click('button', 'Plan settings');
+  assert.equal(screen.queryByRole('button', { name: /set.*scale/i }), null);
+  fireEvent.click(screen.getByText('Project actions'));
+  click('button', 'Advanced JSON import');
+  const trace = { units: 'pixels', imageWidth: 3200, imageHeight: 2000,
+    elements: [{ type: 'wall', x1: 100, y1: 100, x2: 600, y2: 100, thickness: 12 }] };
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: JSON.stringify(trace) } });
+  const replace = screen.getByRole('checkbox', { name: /Replace current editable drawing/ });
+  if (replace.checked) fireEvent.click(replace);
+  click('button', 'Import editable plan');
+  assert.ok(svg().textContent.includes(legacyLabel));
+  assert.ok(svg().querySelector('line[stroke-width="6"]'));
+  click('button', 'Plan settings');
+  click('button', 'Close dialog');
+  click('button', 'Export');
+  fireEvent.click(screen.getByText('PDF print settings'));
+  assert.ok(screen.getByLabelText('PDF sheet'));
+  assert.equal(screen.queryByLabelText('PDF scale'), null);
+  click('button', 'Close dialog');
+  await waitSaved();
+  cleanup();
+  render(React.createElement(Editor));
+  await waitSaved();
+  assert.ok(svg().textContent.includes(legacyLabel));
 });
 
 test('reopening shows saved plans and uploading from the list creates a new plan', async (t) => {
@@ -1271,18 +1307,18 @@ test('the editor walkthrough plays edits, pauses and advances without changing s
     render(React.createElement(Walkthrough));
     assert.ok(screen.getByRole('dialog', { name: 'Editor walkthrough' }));
     click('button', 'Next');
-    assert.ok(screen.getByText('Step 2 of 10'));
-    assert.equal(screen.getByLabelText('Wall thickness (inches)').value, '4.5');
+    assert.ok(screen.getByText('Step 2 of 8'));
+    assert.equal(screen.getByLabelText('Wall thickness (px)').value, '18');
     tick(1300);
     tick(1300);
-    assert.equal(screen.getByLabelText('Wall thickness (inches)').value, '6');
+    assert.equal(screen.getByLabelText('Wall thickness (px)').value, '24');
     assert.equal(document.querySelectorAll('.sampleEditor').length, 1);
     assert.ok(document.querySelector('.sampleDrawing line[stroke-width="24"]'));
     click('button', 'Pause walkthrough');
     assert.equal(pending.size, 0);
     click('button', 'Play walkthrough');
     tick(6500);
-    assert.ok(screen.getByText('Step 3 of 10'));
+    assert.ok(screen.getByText('Step 3 of 8'));
     assert.equal(document.querySelectorAll('.sampleEditor').length, 1);
     click('button', 'Close dialog');
     assert.equal(pending.size, 0);
@@ -1302,7 +1338,7 @@ test('reduced-motion visitors control sample playback and pricing keeps billing 
     assert.ok(screen.getByRole('button', { name: 'Play walkthrough' }));
     assert.equal(screen.queryByRole('button', { name: 'Pause walkthrough' }), null);
     click('button', 'Next');
-    assert.ok(screen.getByText('Step 2 of 10'));
+    assert.ok(screen.getByText('Step 2 of 8'));
     view.unmount();
     render(React.createElement(Marketing, { page: 'pricing', trialOffer: true, account: { signedIn: true, user: { email: 'demo@example.test' } } }));
     assert.equal(screen.queryByRole('link', { name: 'View billing' }), null);
@@ -1327,7 +1363,7 @@ test('guest landing opens the editor and exposes the same policy links in the mo
   assert.equal(hero.getByRole('link', { name: 'Try demo below' }).getAttribute('href'), '#doorway-demo');
   const footer = within(screen.getByRole('navigation', { name: 'Footer' }));
   assert.deepEqual(footer.getAllByRole('link').map((link) => link.getAttribute('href')), [
-    '/terms', '/privacy', '/refunds-and-cancellation', '/support', '/privacy#cookie-settings',
+    '/floor-plan-guides', '/terms', '/privacy', '/refunds-and-cancellation', '/support', '/privacy#cookie-settings',
   ]);
   const mobileFooter = document.querySelector('.footerMenu');
   fireEvent.click(mobileFooter.querySelector('summary'));
@@ -1454,6 +1490,10 @@ test('each new guide has a public page and related navigation', async () => {
       await screen.findByRole('heading', { name, level: 1 });
       const related = within(screen.getByRole('navigation', { name: 'Related floor plan guides' }));
       assert.equal(related.getAllByRole('link').length, 3);
+      if (path === '/mark-up-a-floor-plan-for-a-remodel') {
+        assert.ok(screen.getByRole('heading', { name: 'Move a doorway' }));
+        assert.equal(screen.getByRole('link', { name: 'Try the doorway demo' }).getAttribute('href'), '/demo');
+      }
       assert.equal(screen.getByRole('link', { name: 'All floor plan guides' }).getAttribute('href'), '/floor-plan-guides');
       view.unmount();
     }
@@ -1784,17 +1824,17 @@ test('account deletion requires a typed confirmation from the account owner', as
 });
 
 test('monthly checkout requires its own agreement and only confirmed purchases offer a downloadable acknowledgment', async () => {
-  const { MONTHLY_VERSION, MONTHLY_DISCLOSURE } = await import('../supabase/functions/planpatch-account/monthly-offer.js');
+  const { MONTHLY_VERSION, MONTHLY_AGREEMENT } = await import('../supabase/functions/planpatch-account/monthly-offer.js');
   const calls = [];
   const account = { user: { id: 'subscription-ui-test' } };
   const access = { data: { checkoutReady: true, billingAvailable: true, monthlyOfferVersion: MONTHLY_VERSION },
     checkout: async (...args) => { calls.push(args); } };
   const view = render(React.createElement(AccountPage, { billing: true, account, access }));
   const [policies, recurring] = screen.getAllByRole('checkbox');
-  const monthly = screen.getByRole('button', { name: 'Start test subscription' });
+  const monthly = screen.getByRole('button', { name: 'Continue to test payment' });
   const project = screen.getByRole('button', { name: 'Buy a project credit' });
   assert.equal(recurring.checked, false);
-  assert.equal(recurring.labels[0].textContent, MONTHLY_DISCLOSURE);
+  assert.equal(recurring.labels[0].textContent, MONTHLY_AGREEMENT);
   assert.equal(monthly.disabled, true);
   fireEvent.click(policies);
   assert.equal(project.disabled, false);
@@ -1804,7 +1844,8 @@ test('monthly checkout requires its own agreement and only confirmed purchases o
   fireEvent.click(monthly);
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0][2], { accepted: true, version: MONTHLY_VERSION });
-  const confirmed = { offer_version: MONTHLY_VERSION, offer_text: MONTHLY_DISCLOSURE, amount_paid_cents: 1900,
+  // An older paid order always prints the disclosure accepted at the time of purchase.
+  const confirmed = { offer_version: 'monthly-usd19-2026-11-19', offer_text: 'I authorize the original monthly offer.', amount_paid_cents: 1900,
     accepted_at: '2026-11-19T01:00:00Z', paid_at: '2026-11-19T01:01:00Z', first_period_end: '2026-12-19T01:01:00Z', invoice_id: 'in_test_confirmed' };
   view.rerender(React.createElement(AccountPage, { billing: true, account, access: {
     ...access, data: { ...access.data, monthly: true, monthlyConfirmation: confirmed },
@@ -1812,7 +1853,7 @@ test('monthly checkout requires its own agreement and only confirmed purchases o
   const download = screen.getByRole('link', { name: 'Save subscription confirmation' });
   assert.match(download.download, /\.txt$/);
   const text = decodeURIComponent(download.href.split(',').slice(1).join(','));
-  for (const item of [MONTHLY_DISCLOSURE, confirmed.invoice_id, '$19.00 USD', 'https://www.editfloorplans.com/#/account/billing']) {
+  for (const item of [confirmed.offer_version, confirmed.offer_text, confirmed.invoice_id, '$19.00 USD', 'https://www.editfloorplans.com/#/account/billing']) {
     assert.ok(text.includes(item));
   }
   view.rerender(React.createElement(AccountPage, { billing: true, account: { user: { id: 'new-user' } }, access }));
@@ -1922,8 +1963,7 @@ test('mobile guest controls keep edits locked and ignore an import completed aft
   click('button', 'Edit');
   assert.equal(requests, 0);
   click('button', 'Door');
-  click('button', 'Measure');
-  click('button', 'Set scale');
+  click('button', 'Text');
   assert.equal(requests, 2);
   click('button', 'View');
   assert.equal(screen.getByRole('button', { name: 'Select' }).getAttribute('aria-pressed'), 'true');
@@ -2072,4 +2112,91 @@ test('an unreadable PDF releases its loading worker and leaves the editor ready 
   await waitFor(() => assert.equal(destroy.mock.callCount(), 1));
   assert.equal(count(), 0);
   assert.equal(document.querySelector('.projectButton').disabled, false);
+});
+
+test('guided doorway move previews an imported swing, saves once, and undoes cleanup and placement together', async () => {
+  const app = render(React.createElement(Editor));
+  await waitSaved();
+  await newProject('Guided doorway on original');
+  fireEvent.change(document.querySelector('input[type=file]'), {
+    target: { files: [new File(['floor plan'], 'doorway.png', { type: 'image/png' })] },
+  });
+  await waitFor(() => assert.ok(svg().querySelector('image')));
+  const controls = () => within(screen.getByRole('region', { name: 'Move a doorway' }));
+  const start = () => { click('button', 'Door'); click('button', 'Move a doorway'); };
+  const mark = () => {
+    start();
+    tap(200, 200);
+    tap(290, 200);
+    tap(200, 110);
+    tap(500, 400);
+    tap(500, 510);
+  };
+  mark();
+  assert.equal(count(), 0);
+  assert.ok(svg().querySelector('mask path'));
+  assert.ok(svg().querySelector('g[transform="translate(500 400) rotate(90)"]'));
+  assert.ok(screen.getByRole('button', { name: 'Export' }).disabled);
+  fireEvent.click(controls().getByText('Back'));
+  assert.equal(svg().querySelector('mask'), null);
+  tap(610, 400);
+  fireEvent.click(controls().getByText('Cancel'));
+  assert.equal(count(), 0);
+  assert.equal(svg().querySelector('mask'), null);
+  mark();
+  fireEvent.change(controls().getByRole('combobox'), { target: { value: 'door-single-right' } });
+  fireEvent.click(controls().getByText('Swap hinge'));
+  fireEvent.click(controls().getByText('Apply move'));
+  assert.equal(count(), 2);
+  const door = () => svg().querySelector('g[transform="translate(500 490) rotate(270)"]');
+  assert.ok(door());
+  assert.equal(door().querySelector('line').getAttribute('y2'), '90');
+  click('button', 'Undo');
+  assert.equal(count(), 0);
+  assert.equal(svg().querySelector('mask'), null);
+  assert.equal(door(), null);
+  click('button', 'Redo');
+  assert.ok(door());
+  assert.ok(svg().querySelector('mask path'));
+  await waitSaved();
+  app.unmount();
+  render(React.createElement(Editor));
+  await waitSaved();
+  assert.ok(door());
+  assert.ok(svg().querySelector('mask path'));
+});
+
+test('phone doorway move preserves an editable door and existing wall and ignores interrupted taps', async (t) => {
+  const previous = window.matchMedia;
+  window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
+  t.after(() => { window.matchMedia = previous; });
+  render(React.createElement(Editor));
+  await waitSaved();
+  await newProject('Guided doorway on wall');
+  click('button', 'Edit');
+  tap(200, 200); tap(900, 200);
+  click('button', 'Door'); click('button', 'Double');
+  tap(250, 200);
+  const original = svg().querySelector('g[data-element-id][transform]');
+  const id = original.getAttribute('data-element-id');
+  const before = original.getAttribute('transform');
+  click('button', 'Door'); click('button', 'Move a doorway');
+  const controls = within(screen.getByRole('region', { name: 'Move a doorway' }));
+  draw(250, 200, 310, 290);
+  assert.ok(controls.getByText(/Tap the old hinge/));
+  const touch = { button: 0, clientX: 250, clientY: 200, pointerId: 1, pointerType: 'touch' };
+  fireEvent.pointerDown(original.querySelector('rect'), touch);
+  fireEvent.pointerUp(svg(), touch);
+  assert.ok(controls.getByText('Tap the new hinge location.'));
+  fireEvent.pointerDown(svg(), touch);
+  fireEvent.pointerCancel(svg(), touch);
+  assert.ok(controls.getByText('Tap the new hinge location.'));
+  tap(600, 205); tap(750, 205);
+  assert.equal(controls.getByRole('combobox').value, 'door-double');
+  fireEvent.click(controls.getByText('Apply move'));
+  assert.equal(count(), 2);
+  const door = () => svg().querySelector('g[data-element-id="' + id + '"]');
+  assert.equal(door().getAttribute('transform'), 'translate(600 200) rotate(0)');
+  click('button', 'Undo');
+  assert.equal(door().getAttribute('transform'), before);
 });

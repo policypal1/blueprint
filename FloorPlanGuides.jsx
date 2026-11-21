@@ -12,22 +12,21 @@ const guides = [
 function MeasureGuide() {
   return (
     <>
-      <p>Pick a distance you can verify on the drawing or at the property. A long labeled span gives you more room to place the two calibration points precisely.</p>
+      <p>Start with a dimension printed on the original sheet or a distance you have checked at the property. The editor lets you record that value beside a proposed change.</p>
       <ol className="articleSteps">
         <li>
-          <h2>Open the floor plan sheet</h2>
-          <p>Upload the PDF and choose the sheet with the dimension you know. Zoom in until you can distinguish both ends of its dimension line.</p>
+          <h2>Find a reliable dimension</h2>
+          <p>Follow the two extension lines to see which faces the printed number refers to. For a doorway, the rough opening and the clear opening are different measurements. If the dimension you need is missing, check it on site or use a calibrated measuring tool on the original PDF and verify it against a second known span.</p>
         </li>
         <li>
-          <h2>Set the scale</h2>
-          <p>Choose <strong>Set scale</strong>, select the two ends, and press <strong>Set real distance</strong>. Enter the known distance, such as <strong>10 ft</strong> or <strong>120 inches</strong>. A number entered without a unit is read as inches.</p>
+          <h2>Mark it on the plan</h2>
+          <p>Upload the PDF, choose the sheet, then choose <strong>Text</strong> and place the label beside the opening. In <strong>Properties</strong>, type the value, unit and what you measured, such as <strong>36 in clear opening</strong>. Use Line under More tools if you want a leader pointing to the opening.</p>
         </li>
         <li>
-          <h2>Measure a new span</h2>
-          <p>In <strong>Measure</strong>, choose <strong>Distance</strong> and drag between two points for a reading. To leave a label on the drawing, use <strong>Dimension</strong> under More tools and drag across the span.</p>
+          <h2>Check the exported note</h2>
+          <p>Download the revised PDF. Zoom in and check that both the value and the part of the drawing it refers to are easy to read. Verify critical clearances on site before ordering materials.</p>
         </li>
       </ol>
-      <p>Check a second labeled span, preferably across the other direction. A stretched scan can disagree even after you set a scale. Use field measurements for decisions that depend on exact clearance or fit.</p>
     </>
   );
 }
@@ -46,6 +45,11 @@ function RemodelGuide() {
           <p>Open <strong>Clean up</strong> and choose the rectangle or brush eraser to clear old details. Draw a new wall with <strong>Wall</strong>, select a swing under <strong>Door</strong>, and add a short note with <strong>Text</strong>. Open <strong>More tools</strong> for windows and fixtures.</p>
         </li>
         <li>
+          <h2>Move a doorway</h2>
+          <p>Choose <strong>Door</strong>, then <strong>Move a doorway</strong>. On an uploaded plan, tap the old hinge, the opposite jamb, and the tip of the door leaf. If you added the door in the editor, tap that door to select it.</p>
+          <p>Tap the new hinge, then tap along the wall in the direction of the opening. Check the swing in the preview and choose <strong>Apply move</strong>. One undo restores the old doorway. <a className="accountTextLink" href={publicPages.revisionDemo.path}>Try the doorway demo</a>.</p>
+        </li>
+        <li>
           <h2>Label and share the revision</h2>
           <p>Label anything a reviewer might miss, such as a doorway moving into a hallway. Export a PDF named for the room and revision, then send it alongside the original.</p>
         </li>
@@ -61,22 +65,22 @@ function RemodelGuide() {
 function PrintGuide() {
   return (
     <>
-      <p>A page can look right on screen while printing at a different scale. Set the scale in the editor, match the paper to the export, and check one dimension on the printout.</p>
+      <p>Use the original scale-marked PDF when a reviewer needs to take dimensions from paper. A revised PDF from the editor fits your selected sheet and is suitable for reviewing changes and reading written measurements.</p>
       <ol className="articleSteps">
         <li>
-          <h2>Calibrate a known distance</h2>
-          <p>Use <strong>Set scale</strong> to match two points on the drawing to a known distance. <a className="accountTextLink" href={publicPages.measureGuide.path}>Follow the calibration steps</a>.</p>
+          <h2>Read the source sheet</h2>
+          <p>Find the drawing scale and intended paper size in the title block. Check whether the detail you need has its own scale. A photo or a scan resized to fit a page may have lost its original scale.</p>
         </li>
         <li>
-          <h2>Choose a sheet and drawing scale</h2>
-          <p>In <strong>Export</strong>, open the PDF print settings and select Letter, Tabloid, or A3. Choose a fixed scale such as <strong>¼ inch = 1 foot</strong>. If the drawing is too large for your sheet, choose a larger sheet or a smaller scale. Use <strong>Fit to page</strong> for a reference copy.</p>
+          <h2>Match the paper and print at actual size</h2>
+          <p>Open the original PDF in your PDF viewer, select the intended paper size, and choose <strong>Actual size</strong> or <strong>100%</strong>. Check for clipping in print preview. <a className="accountTextLink" href="https://helpx.adobe.com/acrobat/desktop/print-documents/set-up-and-print-pdfs/page-size.html">Adobe’s PDF sizing instructions</a></p>
         </li>
         <li>
-          <h2>Print at actual size</h2>
-          <p>Select the same paper size in your PDF viewer. Choose <strong>Actual size</strong> or <strong>100%</strong> to preserve the exported dimensions. Check the print preview for clipped edges. <a className="accountTextLink" href="https://helpx.adobe.com/acrobat/desktop/print-documents/set-up-and-print-pdfs/page-size.html">Adobe’s PDF sizing instructions</a></p>
+          <h2>Check a labeled span with a ruler</h2>
+          <p>At ¼ inch = 1 foot, a 12-foot span should measure 3 inches on the printout. Check a second span in the other direction to catch a distorted scan.</p>
         </li>
       </ol>
-      <p>Use a ruler on a known span from the drawing. At ¼ inch = 1 foot, a 12-foot span should measure 3 inches on paper.</p>
+      <p>To share a markup instead, choose <strong>Export</strong>, select Letter, Tabloid, or A3 under PDF print settings, and download the PDF. <a className="accountTextLink" href={publicPages.measureGuide.path}>How to add a verified measurement to a floor plan</a></p>
     </>
   );
 }

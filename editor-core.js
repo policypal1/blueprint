@@ -23,48 +23,14 @@ export function clientToWorkspace(clientX, clientY, rect) {
   };
 }
 
-function fraction(value) {
-  const match = String(value)
-    .trim()
-    .match(/^(?:(\d+)\s+)?(\d+)\/(\d+)$/);
-  if (match) return Number(match[1] || 0) + Number(match[2]) / Number(match[3]);
-  return /^\d+(?:\.\d+)?$/.test(String(value).trim()) ? Number(value) : NaN;
-}
-
-// Bare numbers are inches. Accept feet, decimals, and common mixed fractions.
-export function parseLength(value) {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
-  const text = String(value).trim().toLowerCase().replace(/[′’]/g, "'").replace(/[″“”]/g, '"');
-  const feet = text.match(/^(\d+(?:\.\d+)?)\s*(?:'|feet|foot|ft)\s*(.*?)\s*$/);
-  if (feet) {
-    const rest = feet[2].replace(/\s*(?:inches|inch|in|\")$/, '').trim();
-    return Number(feet[1]) * 12 + (rest ? fraction(rest) : 0);
-  }
-  return fraction(text.replace(/\s*(?:inches|inch|in|\")$/, '').trim());
-}
-
-export function pdfLayout({ paper = 'tabloid', scale = 'fit', unitsPerInch, calibrated = false }) {
+export function pdfLayout({ paper = 'tabloid' }) {
   const sizes = { tabloid: [17, 11], letter: [11, 8.5], a3: [16.5354, 11.6929] };
   const [pageWidth, pageHeight] = sizes[paper] || sizes.tabloid;
   const availableWidth = pageWidth - 1,
     availableHeight = pageHeight - 1;
-  let width, height;
-  if (scale === 'fit') {
-    const factor = Math.min(availableWidth / WIDTH, availableHeight / HEIGHT);
-    width = WIDTH * factor;
-    height = HEIGHT * factor;
-  } else {
-    if (!calibrated || !Number.isFinite(unitsPerInch) || unitsPerInch <= 0)
-      throw new Error('Set the blueprint scale before exporting to a drawing scale.');
-    const denominator = Number(scale);
-    if (![24, 48, 96].includes(denominator)) throw new Error('Choose a supported print scale.');
-    width = WIDTH / unitsPerInch / denominator;
-    height = HEIGHT / unitsPerInch / denominator;
-    if (width > availableWidth + 0.001 || height > availableHeight + 0.001)
-      throw new Error(
-        'The full workspace will not fit at this scale. Choose a larger sheet, a smaller drawing scale, or Fit to page.',
-      );
-  }
+  const factor = Math.min(availableWidth / WIDTH, availableHeight / HEIGHT);
+  const width = WIDTH * factor;
+  const height = HEIGHT * factor;
   return {
     pageWidth,
     pageHeight,
