@@ -97,7 +97,7 @@ test('live monthly renewal reconciles actual invoices and fraud signals revoke t
 });
 
 test('live account checkout ignores client mode, customer, owner and price, and rejects test consent', async () => {
-  let created;
+  let created, priorOrderOpen = false;
   const reservation = { id: 'reserved-live-consent', expires_at: 2000000000 };
   const handler = accountHandler({ siteOrigin: origin, liveWebhookSecret: 'whsec_fixture',
     getBillingConfig: async () => configuration,
@@ -112,6 +112,8 @@ test('live account checkout ignores client mode, customer, owner and price, and 
         if (name === 'planpatch_reserve_live_subscription') {
           assert.equal(args.owner_id, owner); assert.equal(args.customer, customer);
           assert.equal(args.disclosure, LIVE_MONTHLY_DISCLOSURE);
+          assert.equal(args.accepted_version, LIVE_MONTHLY_VERSION);
+          if (priorOrderOpen) return { single: async () => ({ error: { message: 'A checkout with different terms is still open.' } }) };
           return { single: async () => ({ data: reservation }) };
         }
         assert.equal(name, 'planpatch_bind_live_checkout'); return Promise.resolve({ data: true });
@@ -121,6 +123,15 @@ test('live account checkout ignores client mode, customer, owner and price, and 
     body: JSON.stringify({ action: 'checkout', plan: 'monthly', attempt, mode: 'test', price: 'price_wrong', owner: 'wrong',
       customer: 'cus_wrong', consent: { accepted: true, version } }) });
   assert.equal((await handler(request(MONTHLY_VERSION))).status, 400);
+  const stale = await handler(request('monthly-live-usd19-2026-11-19'));
+  assert.equal(stale.status, 400);
+  assert.match((await stale.json()).error, /refresh/i);
+  priorOrderOpen = true;
+  const conflict = await handler(request(LIVE_MONTHLY_VERSION));
+  assert.equal(conflict.status, 409);
+  assert.match((await conflict.json()).error, /previous monthly checkout/i);
+  assert.equal(created, undefined);
+  priorOrderOpen = false;
   assert.equal((await handler(request(LIVE_MONTHLY_VERSION))).status, 200);
   assert.equal(created.customer, customer); assert.equal(created.client_reference_id, owner);
   assert.deepEqual(created.line_items, [{ quantity: 1, price: prices.monthly }]);
