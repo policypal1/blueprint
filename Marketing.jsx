@@ -10,10 +10,10 @@ export const PRICING = { project: 10, monthly: 19 };
 export const DEMO_HASH = '#/how-it-works';
 
 const plans = [
-  { label: 'Single project', unit: 'once', amount: PRICING.project, icon: 'file',
-    description: 'Make revisions to one original blueprint. Your credit stays with that project.' },
-  { label: 'Monthly access', unit: 'per month', amount: PRICING.monthly, icon: 'folder',
-    description: 'Edit multiple projects. Renews monthly until you cancel in Billing.' },
+  { label: 'Single project', unit: 'once', amount: PRICING.project,
+    description: 'One original floor plan. Edit it and export as many times as you need.' },
+  { label: 'Monthly access', unit: 'per month', amount: PRICING.monthly,
+    description: 'For crews with more than one job going. Covers multiple projects.' },
 ];
 
 const faqs = [
@@ -162,21 +162,53 @@ export function SiteHeader({ page, account }) {
 
 function PriceOptions({ compact = false }) {
   return (
-    <div className={compact ? 'priceOptions compactPrices' : 'priceOptions'}>
-      {plans.map(({ label, unit, amount, icon, description }, index) => (
-        <article className="priceCard" key={unit}>
-          <span className="priceIcon"><Icon name={icon} size={22} /></span>
-          <div>
-            {compact ? <p className="compactPriceLabel">{label}</p> : <h2>{label}</h2>}
-            <p className="price"><strong>${amount}</strong><span> USD {unit}</span></p>
-          </div>
-          {!compact && <p className="priceDetail">{description}</p>}
-          {!compact && <a className="button primary pricePurchase" href={`/?plan=${index === 0 ? 'project' : 'monthly'}#/account/billing`}>
-            {index === 0 ? 'Buy single project' : 'Get monthly access'}
-          </a>}
+    <div className="priceOptions">
+      {plans.map(({ label, unit, amount, description }, index) => (
+        <article className={`priceCard${index === 1 ? ' priceCardFeatured' : ''}`} key={unit}>
+          {compact ? <h3>{label}</h3> : <h2>{label}</h2>}
+          <p className="price"><strong>${amount}</strong><span>USD {unit}</span></p>
+          <p className="priceDetail">{description}</p>
+          <a className={`button pricePurchase${index === 1 ? ' primary' : ''}`}
+            href={compact ? publicPages.pricing.path : `/?plan=${index === 0 ? 'project' : 'monthly'}#/account/billing`}
+            aria-label={compact ? `See ${label.toLowerCase()} pricing` : undefined}>
+            {compact ? 'See pricing' : index === 0 ? 'Buy single project' : 'Get monthly access'}
+          </a>
+          {!compact && <p className="priceNote">{index === 0
+            ? 'One-time payment. Your credit stays with this project.'
+            : 'Renews monthly until you cancel in Billing.'}</p>}
         </article>
       ))}
     </div>
+  );
+}
+
+function WorkflowComparison() {
+  const oldWay = [
+    'Email the plan to a drafter and wait',
+    'Redraw it from scratch in CAD',
+    'Screenshot it and scribble in a PDF app',
+    'Explain the change on the phone',
+  ];
+  const withBlueprint = [
+    'Upload the plan you already have',
+    'Erase and draw only what changes',
+    'Export a clean revised PDF or PNG',
+    'Send the revision when you’re ready',
+  ];
+  return (
+    <section className="homeSection workflowComparison" aria-labelledby="workflow-comparison-title">
+      <h2 id="workflow-comparison-title">A simpler way to revise a floor plan</h2>
+      <div className="workflowComparisonGrid">
+        <div className="workflowCard workflowCardOld">
+          <h3>The old way</h3>
+          <ul>{oldWay.map((text) => <li key={text}><Icon name="close" size={23} /><span>{text}</span></li>)}</ul>
+        </div>
+        <div className="workflowCard workflowCardBlueprint">
+          <h3>With Blueprint</h3>
+          <ul>{withBlueprint.map((text) => <li key={text}><Icon name="check" size={23} /><span>{text}</span></li>)}</ul>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -201,10 +233,10 @@ function HomeContent({ showTrial, showVideo }) {
       </section>
       <RevisionDemo embedded />
       {showVideo && <BlueprintDemo />}
-      <section className="homeSection" aria-labelledby="project-pricing-title">
+      <WorkflowComparison />
+      <section className="homeSection homePricing" aria-labelledby="project-pricing-title">
         <div className="priceSectionHeading">
           <h2 id="project-pricing-title">One project or monthly access</h2>
-          <a className="detailsLink" href={publicPages.pricing.path}>See pricing <Icon name="arrow" size={17} /></a>
         </div>
         <PriceOptions compact />
       </section>
