@@ -1,7 +1,7 @@
-.hero h1 { font-size: clamp(44px, 9vw, 88px); }
-.hero { min-height: 0; padding-block: clamp(54px, 7vw, 90px) 36px; }
-.heroCopy > p { max-width: 45ch; }
-.heroActions .detailsLink { display: inline-block; margin-top: 18px; font-size: 1rem; }
+.marketingHome .hero h1 { font-size: clamp(44px, 9vw, 88px); }
+.marketingHome .hero { min-height: 0; padding-block: clamp(54px, 7vw, 90px) 36px; }
+.marketingHome .heroCopy > p { max-width: 45ch; }
+.marketingHome .heroActions .detailsLink { display: inline-block; margin-top: 18px; font-size: 1rem; }
 .homeBeforeAfter { max-width: 1100px; padding: 8px 5% 36px; margin: 0 auto; text-align: center; }
 .comparisonPair { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(10px, 3vw, 28px); }
 .comparisonPair figure { min-width: 0; margin: 0; overflow: hidden; border: 1px solid var(--line); background: #fff; border-radius: 12px; }
@@ -30,8 +30,8 @@
 .tourCard p { font-size: 1rem; line-height: 1.5; margin: 0 0 12px; }
 .tourSkip { font-size: .875rem; background: transparent; text-decoration: underline; border: 0; padding: 4px 0; }
 @media(max-width: 800px) {
-  .hero h1 { font-size: clamp(44px, 10.4vw, 65px); }
-  .hero { padding-top: 42px; }
+  .marketingHome .hero h1 { font-size: clamp(44px, 10.4vw, 65px); }
+  .marketingHome .hero { padding-top: 42px; }
   .audienceGrid { grid-template-columns: 1fr; gap: 14px; }
   .tourCard { top: 90px; padding: 14px; }
   .tourCard p { font-size: .875rem; }
