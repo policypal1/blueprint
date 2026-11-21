@@ -20,7 +20,7 @@ test('live checkout validates fixed server prices and keeps live renewal consent
   const requests = [];
   let livePrice = true;
   const stripe = { prices: { retrieve: async id => ({ id, active: true, livemode: livePrice, currency: 'usd',
-    unit_amount: id === prices.project ? 1000 : 1900,
+    unit_amount: id === prices.project ? 900 : 1900,
     ...(id === prices.monthly ? { recurring: { interval: 'month', interval_count: 1 } } : {}) }) },
   checkout: { sessions: { create: async params => {
     requests.push(params); return { livemode: true, url: 'https://checkout.stripe.com/live' };
