@@ -105,7 +105,15 @@ export default function useEditorPreview(user, accountLoading, oauthReturnOwner)
     }
   }
 
-  async function prepareNavigation() {
+  async function prepareNavigation(plan) {
+    if (plan) {
+      const target = owner ? { owner } : null;
+      const version = ++revision.current;
+      forgetTicket();
+      setPreview({ plan, target });
+      await keepForReturn(plan, target, version);
+      return version === revision.current;
+    }
     if (!preview?.plan) return true;
     const version = ++revision.current;
     forgetTicket();

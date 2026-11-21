@@ -31,6 +31,7 @@ export function ToolButton({ tool, id, setTool, label }) {
   return (
     <button
       type="button"
+      data-tour={id}
       className={`tool ${tool === id ? 'active' : ''}`}
       aria-pressed={tool === id}
       onClick={() => setTool(id)}
@@ -93,6 +94,7 @@ export function PhoneControls({
           return (
             <button
               key={id}
+              data-tour={id}
               aria-haspopup={opensPanel ? 'dialog' : undefined}
               aria-pressed={opensPanel ? undefined : tool === id}
               className={inCategory ? 'active' : undefined}
