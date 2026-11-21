@@ -188,7 +188,7 @@ function BillingSettings({ portalUrl, access, plan }) {
   const returned = query.get('checkout') === 'returned' || query.get('sandbox_checkout') === 'returned';
   const policyAgreement = data?.checkoutReady && (
     <label className="policyAgreement">
-      <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
+      <input type="checkbox" checked={accepted} onChange={(event) => { setAccepted(event.target.checked); setAcceptedOfferVersion(event.target.checked && currentOffer ? offerVersion : null); }} />
       <span><PolicyAgreement /></span>
     </label>
   );
@@ -283,7 +283,7 @@ function BillingSettings({ portalUrl, access, plan }) {
         )}
         {!plan && policyAgreement}
         <div className="billingChoices">
-          {plan !== 'monthly' && <div className="priceCard billingPlan" data-selected={plan === 'project'}>
+          {plan !== 'monthly' && <div className="priceCard priceCardFeatured billingPlan" data-selected={plan === 'project'}>
             <h3>Single project</h3>
             <p className="price"><strong>${PRICING.project}</strong><span>USD once</span></p>
             <p className="priceDetail">One original floor plan. Edit it and export as many times as you need.</p>
@@ -293,26 +293,21 @@ function BillingSettings({ portalUrl, access, plan }) {
               {pending === 'project' ? 'Opening Stripe…' : 'Buy a project credit'}
             </button>
           </div>}
-          {plan !== 'project' && <div className="priceCard priceCardFeatured billingPlan" data-selected={plan === 'monthly'}>
+          {plan !== 'project' && <div className="priceCard billingPlan" data-selected={plan === 'monthly'}>
             <h3>Monthly access</h3>
             <p className="price"><strong>${PRICING.monthly}</strong><span>USD per month</span></p>
-            <p className="priceDetail">For crews with more than one job going. Covers multiple projects.</p>
+            <p className="priceDetail">Doing more than one? $19/month covers unlimited projects.</p>
             {plan && policyAgreement}
             {data?.checkoutReady && !data.monthly && currentOffer && (
               <>
-                <p className="monthlyPrice" id="monthly-price">{MONTHLY_PRICE}</p>
-                <p className="monthlyCancellation" id="monthly-cancellation">{MONTHLY_CANCELLATION}</p>
-                <label className="policyAgreement">
-                  <input type="checkbox" checked={recurringAccepted} aria-describedby="monthly-price monthly-cancellation"
-                    onChange={(event) => setAcceptedOfferVersion(event.target.checked ? offerVersion : null)} />
-                  <span>{MONTHLY_AGREEMENT}</span>
-                </label>
+                <p className="monthlyCancellation" id="monthly-price">$19/month until canceled. Cancel anytime in Billing.</p>
+
               </>
             )}
             {data?.checkoutReady && !data.monthly && !currentOffer && <p>Refresh this page to review the latest monthly terms.</p>}
             <button className="pricePurchase primary" disabled={!data?.checkoutReady || !accepted || !recurringAccepted || Boolean(pending) || data.monthly}
               onClick={() => visitStripe('monthly')}>
-              {data?.monthly ? 'Active subscription' : pending === 'monthly' ? 'Opening Stripe…' : testMode ? 'Continue to test payment' : 'Continue to payment'}
+              {data?.monthly ? 'Active subscription' : pending === 'monthly' ? 'Opening Stripe…' : testMode ? 'Continue to test payment' : 'Subscribe for $19/month'}
             </button>
           </div>}
         </div>
