@@ -10,13 +10,13 @@ const tools = [
 ];
 
 const frames = [
-  { tool: 0, stage: 'original', instruction: 'Choose Clean up to erase the old door.' },
-  { tool: 0, stage: 'original', instruction: 'Click the old door swing.', action: 'Cover old swing', point: [268, 322] },
+  { tool: 0, stage: 'original', instruction: 'Start with Clean up to erase the old door.' },
+  { tool: 0, stage: 'original', instruction: 'Select the old door swing.', action: 'Cover old swing', point: [268, 322] },
   { tool: 1, stage: 'masked', instruction: 'Choose Wall to close the opening.' },
-  { tool: 1, stage: 'masked', instruction: 'Click the left end of the gap.', action: 'Set wall start', point: [242, 293] },
-  { tool: 1, stage: 'masked', instruction: 'Click the right end to finish the wall.', action: 'Finish wall', point: [314, 293] },
+  { tool: 1, stage: 'masked', instruction: 'Select the left end of the gap.', action: 'Set wall start', point: [242, 293] },
+  { tool: 1, stage: 'masked', instruction: 'Select the right end to finish the wall.', action: 'Finish wall', point: [314, 293] },
   { tool: 2, stage: 'cleaned', instruction: 'Choose Door to place the new entry.' },
-  { tool: 2, stage: 'cleaned', instruction: 'Click the new doorway location.', action: 'Place new door', point: [421, 293] },
+  { tool: 2, stage: 'cleaned', instruction: 'Select the new doorway location.', action: 'Place new door', point: [421, 293] },
   { tool: 3, stage: 'revised', instruction: 'Choose Export to finish.' },
   { tool: 3, stage: 'revised', instruction: 'Your revised plan is ready.' },
 ];
@@ -36,7 +36,7 @@ function EditGuide({ frame }) {
   return <svg className="revisionMark" viewBox="0 0 800 500" aria-hidden="true">{mark}</svg>;
 }
 
-export default function RevisionDemo({ embedded = false, videoHref }) {
+export default function RevisionDemo({ embedded = false }) {
   const [index, setIndex] = useState(0);
   const [compareOriginal, setCompareOriginal] = useState(false);
   const player = useRef(null);
@@ -60,25 +60,10 @@ export default function RevisionDemo({ embedded = false, videoHref }) {
 
   return (
     <section id="doorway-demo" className="revisionDemo" data-embedded={embedded} aria-labelledby="revision-title">
-      <div className="revisionHeading">
-        <Heading id="revision-title" tabIndex={-1} className="revisionTitle">Try the floor plan demo</Heading>
-        {videoHref && <a className="detailsLink" href={videoHref}>Watch the editor video</a>}
-      </div>
+      <Heading id="revision-title" tabIndex={-1} className="revisionTitle">Try the floor plan demo</Heading>
       <div className="revisionPlayer" ref={player}>
-        <div className="revisionFileBar">
-          <div className="revisionFile"><Icon name="file" size={19} /><strong>Laundry remodel.pdf</strong></div>
-          <button type="button" className="revisionRestart" disabled={index === 0} onClick={(event) => go(0, event)}>
-            <Icon name="undo" size={16} />Restart
-          </button>
-        </div>
-        <div className="revisionDirection">
-          <div className="revisionProgress" aria-hidden="true">
-            {tools.map(({ name }, position) => <i key={name} data-on={position <= frame.tool} />)}
-          </div>
-          <div className="revisionInstruction" aria-live="polite" aria-atomic="true">
-            <span>Step {frame.tool + 1} of 4</span>
-            <strong>{frame.instruction}</strong>
-          </div>
+        <div className="revisionInstruction" aria-live="polite" aria-atomic="true">
+          <strong>{frame.instruction}</strong>
         </div>
         <div className="revisionBody">
           <div className="revisionTools" role="group" aria-label="Demo editor tools">
@@ -88,7 +73,7 @@ export default function RevisionDemo({ embedded = false, videoHref }) {
                 <button key={name} type="button" disabled={!prompt} data-current={position === frame.tool}
                   data-next-action={prompt} aria-label={`Choose ${name}`} onClick={(event) => go(index + 1, event)}>
                   <Icon name={icon} size={18} /><span>{name}</span>
-                  {prompt && <span className="revisionToolCue" aria-hidden="true">{index === 0 ? 'Start here' : 'Click here'}</span>}
+                  {index === 0 && prompt && <span className="revisionToolCue" aria-hidden="true">Start here</span>}
                 </button>
               );
             })}
@@ -100,7 +85,7 @@ export default function RevisionDemo({ embedded = false, videoHref }) {
               {frame.point && (
                 <button key={index} type="button" className="revisionHotspot" aria-label={frame.action} data-next-action="true"
                   style={{ left: `${frame.point[0] / 8}%`, top: `${frame.point[1] / 5}%` }} onClick={(event) => go(index + 1, event)}>
-                  <span className="revisionHotspotRing" /><span className="revisionHotspotTag">Click here</span>
+                  <span className="revisionHotspotRing" /><span className="revisionHotspotTag" aria-hidden="true">Here</span>
                 </button>
               )}
             </div>

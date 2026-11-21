@@ -1,12 +1,22 @@
 .marketingHome { padding-bottom: 0; }
-.heroActions .trialQualifier, .pricingTrial .trialQualifier {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
+.heroCopy > p { max-width: 40ch; }
+.hero h1 { margin-bottom: clamp(22px, 2.5vw, 30px); }
+.heroActions { margin-top: clamp(28px, 3vw, 38px); }
+.demoScrollLink { margin-top: 8px; }
+.homeVideo {
+  max-width: 1000px;
+  margin: 0 auto clamp(28px, 5vw, 60px);
+  padding-inline: var(--site-gutter);
 }
-.heroActions .trialQualifier > svg, .pricingTrial .trialQualifier > svg { flex: none; }
-.demoScrollLink { margin-top: 12px; }
+.homeVideo > summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 50px; padding: 10px 15px; border: 1px solid var(--line);
+  border-radius: 8px; cursor: pointer; color: var(--ink); font-size: 15px; font-weight: 600;
+}
+.homeVideo > summary::-webkit-details-marker { display: none; }
+.homeVideo[open] > summary svg { transform: rotate(180deg); }
+.homeVideo .blueprintDemo { padding: 14px 0 0; }
+.mobileHomeFaq { display: none; }
 .blueprintDemo > .detailsLink { margin-top: 16px; }
 
 .revisionDemo {
@@ -15,9 +25,8 @@
   padding: clamp(28px, 4vw, 52px) var(--site-gutter) clamp(40px, 6vw, 78px);
   scroll-margin-top: 12px;
 }
-.revisionHeading { display: flex; align-items: center; justify-content: space-between; gap: 0 16px; flex-wrap: wrap; margin-bottom: 20px; }
 .revisionTitle {
-  margin: 0;
+  margin: 0 0 20px;
   color: var(--ink);
   font-size: clamp(30px, 3.6vw, 48px);
   line-height: 1.08;
@@ -32,37 +41,9 @@
   color: var(--ink);
   box-shadow: 0 12px 32px #302b2210, 0 2px 5px #302b2208;
 }
-.revisionFileBar, .revisionFile, .revisionInstruction, .revisionFooter, .revisionToggle {
-  display: flex;
-  align-items: center;
-}
-.revisionFileBar {
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 14px;
-  background: var(--chrome);
-  color: var(--chromeText);
-}
-.revisionFile { min-width: 0; gap: 9px; }
-.revisionFile > svg { color: var(--orange); }
-.revisionFile strong { font-size: 14px; font-weight: 600; }
-.revisionRestart, .revisionBack {
-  min-height: 38px;
-  padding: 7px 9px;
-  border: 0;
-  background: transparent;
-  font-size: 13px;
-}
-.revisionRestart { color: var(--chromeText); }
-.revisionRestart:disabled { opacity: .6; }
-.revisionRestart:hover:not(:disabled) { background: #474b49; }
-.revisionDirection { background: var(--paper); }
-.revisionProgress { display: flex; gap: 2px; }
-.revisionProgress i { flex: 1; height: 4px; background: #e1ded4; }
-.revisionProgress i[data-on="true"] { background: #ad491c; }
-.revisionInstruction { min-height: 65px; padding: 12px 20px; gap: 16px; }
-.revisionInstruction span { white-space: nowrap; color: var(--accent); font-size: 13px; font-weight: 600; }
-.revisionInstruction strong { font-size: clamp(16px, 1.7vw, 23px); line-height: 1.25; font-weight: 600; }
+.revisionInstruction, .revisionToggle { display: flex; align-items: center; }
+.revisionInstruction { min-height: 60px; padding: 12px 20px; background: var(--paper); }
+.revisionInstruction strong { font-size: clamp(16px, 1.7vw, 21px); line-height: 1.4; font-weight: 600; }
 .revisionBody { display: grid; grid-template-columns: clamp(184px, 19%, 205px) minmax(0, 1fr); border-block: 1px solid #d4d2c9; }
 .revisionTools {
   padding: 17px 9px;
@@ -177,7 +158,7 @@
   gap: 9px;
   background: var(--paper);
 }
-.revisionBack { justify-self: start; color: var(--muted); }
+.revisionBack { justify-self: start; min-height: 44px; padding: 7px 9px; border: 0; background: transparent; color: var(--muted); font-size: 13px; }
 .revisionBack:disabled { opacity: .45; }
 .revisionBack:hover:not(:disabled) { background: #eaeae4; }
 .revisionToggle {
@@ -188,12 +169,19 @@
   border-radius: 6px;
   background: #eaeae4;
 }
-.revisionToggle button { min-height: 32px; padding: 4px 9px; border: 0; background: transparent; font-size: 13px; }
+.revisionToggle button { min-height: 40px; padding: 4px 9px; border: 0; background: transparent; font-size: 13px; }
 .revisionToggle button[aria-pressed="true"] { background: white; border-radius: 4px; box-shadow: 0 1px 3px #24372929; }
 .revisionOwnPlan { grid-column: 3; justify-self: end; min-height: 42px; padding: 8px 12px; font-size: 14px; white-space: nowrap; }
 @media (max-width: 800px) {
   .revisionDemo { padding-inline: max(12px, 3.5vw); }
-  .revisionHeading { margin-bottom: 14px; }
+  .hero { min-height: min(530px, calc(100svh - 72px)); padding-block: clamp(44px, 9vw, 64px); }
+  .heroCopy > p { max-width: 33ch; }
+  .revisionTitle { margin-bottom: 16px; font-size: clamp(27px, 6vw, 36px); }
+  .homeVideo { padding-inline: max(12px, 3.5vw); }
+  .marketingHome .mobileHomeFaq {
+    display: block; margin: 0 auto; padding: 32px var(--site-gutter) 42px;
+    border-top: 1px solid var(--line);
+  }
   .revisionBody { grid-template-columns: 1fr; }
   .revisionTools {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -205,18 +193,18 @@
   .revisionTools button {
     justify-content: center;
     gap: 5px;
-    min-height: 52px;
-    padding: 4px 2px 16px;
+    min-height: 56px;
+    padding: 6px 2px 16px;
     font-size: 13px;
   }
   .revisionToolCue { position: absolute; bottom: 4px; right: 0; left: 0; text-align: center; }
   .revisionTools button[data-next-action="true"] { box-shadow: inset 0 -2px #ac4518; }
-  .revisionInstruction { min-height: 69px; padding: 10px 12px; gap: 12px; }
+  .revisionInstruction { min-height: 62px; padding: 12px 14px; }
   .revisionInstruction strong { line-height: 1.35; }
   .revisionCanvas { padding: 11px; }
   .revisionFooter { min-height: 55px; gap: 5px; padding: 5px 8px; }
   .revisionOwnPlan { font-size: 13px; padding-inline: 8px; }
-  .revisionToggle button { min-height: 36px; font-size: 12px; padding-inline: 6px; }
+  .revisionToggle button { min-height: 44px; font-size: 12px; padding-inline: 6px; }
 }
 @media (max-width: 460px) {
   .revisionFooter { grid-template-columns: 1fr auto; }

@@ -37,7 +37,10 @@ function writeProjects(owner, update) {
     try {
       await new Promise((resolve, reject) => {
         const tx = db.transaction('app', 'readwrite');
-        update(tx.objectStore('app'), projectListKey(owner));
+        update(tx.objectStore('app'), projectListKey(owner), (error) => {
+          tx.abort();
+          reject(error);
+        });
         tx.oncomplete = resolve;
         tx.onerror = () => reject(tx.error);
         tx.onabort = () => reject(tx.error || new Error('Save interrupted'));
@@ -53,6 +56,40 @@ function writeProjects(owner, update) {
 export function persistProjects(list, owner) {
   const snapshot = structuredClone(list);
   return writeProjects(owner, (store, key) => store.put(snapshot, key));
+}
+
+const storageVersion = (record) => record.storageRevision ?? record.updatedAt ?? null;
+
+async function saveLocalChanges(owner, baseline, list) {
+  const next = new Map(list.map(p => [p.id, p]));
+  const changed = new Set([...baseline.keys(), ...next.keys()].filter(id =>
+    baseline.get(id)?.project !== next.get(id)));
+  if (!changed.size) return baseline;
+  const version = crypto.randomUUID();
+  await writeProjects(owner, (store, key, abort) => {
+    const read = store.get(key);
+    read.onsuccess = () => {
+      if (read.result !== undefined && !Array.isArray(read.result)) {
+        abort(new Error('Could not read the saved project list.'));
+        return;
+      }
+      const saved = new Map((read.result ?? []).map(p => [p.id, p]));
+      for (const id of changed) {
+        const record = saved.get(id);
+        // Compare only the plans touched by this tab, inside the write transaction.
+        if (saved.has(id) !== baseline.has(id) || (record && storageVersion(record) !== baseline.get(id).version)) {
+          abort(new Error('Plan changed in another tab'));
+          return;
+        }
+        if (next.has(id)) saved.set(id, { ...next.get(id), storageRevision: version });
+        else saved.delete(id);
+      }
+      store.put([...saved.values()], key);
+    };
+  });
+  return new Map(list.map(project => [project.id, {
+    project, version: changed.has(project.id) ? version : baseline.get(project.id).version,
+  }]));
 }
 
 export async function removeDeviceProjects(owner) {
@@ -75,6 +112,8 @@ export function useProjectStore(makeEmpty, repository, showRecent, owner, memory
     failedLoad = useRef(false),
     revision = useRef(0),
     persistedRevision = useRef(0);
+  const baseline = useRef(new Map());
+  const saving = useRef(Promise.resolve(true));
 
   const setProjects = (fn) => {
     if (memoryOnly) return;
@@ -121,15 +160,22 @@ export function useProjectStore(makeEmpty, repository, showRecent, owner, memory
     if (revision.current === persistedRevision.current) return true;
     if (!ready.current || failedLoad.current) return false;
     const thisRevision = revision.current;
-    try {
-      await persistProjects(listRef.current, owner);
-      persistedRevision.current = thisRevision;
-      if (thisRevision === revision.current) setSaveStatus('Saved in this browser');
-      return true;
-    } catch {
-      setSaveStatus('Save failed · download a backup');
-      return false;
-    }
+    const list = listRef.current;
+    saving.current = saving.current.then(async () => {
+      if (thisRevision <= persistedRevision.current) return true;
+      try {
+        baseline.current = await saveLocalChanges(owner, baseline.current, list);
+        persistedRevision.current = thisRevision;
+        if (thisRevision === revision.current) setSaveStatus('Saved in this browser');
+        return true;
+      } catch (error) {
+        setSaveStatus(error.message === 'Plan changed in another tab'
+          ? 'Plan changed in another tab · download a backup before reopening'
+          : 'Save failed · download a backup');
+        return false;
+      }
+    });
+    return saving.current;
   };
 
   useEffect(() => {
@@ -140,7 +186,11 @@ export function useProjectStore(makeEmpty, repository, showRecent, owner, memory
       .then((list) => {
         if (!alive) return;
         // Validate all records before writing: never silently overwrite a damaged archive.
-        const validated = list.map(validateProject).sort((a, b) => b.updatedAt - a.updatedAt);
+        const validated = list.map(validateProject);
+        baseline.current = new Map(validated.map((project, i) => [project.id, {
+          project, version: storageVersion(list[i]),
+        }]));
+        validated.sort((a, b) => b.updatedAt - a.updatedAt);
         let id;
         try {
           id = localStorage.getItem(currentProjectKey(owner));

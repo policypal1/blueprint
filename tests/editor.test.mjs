@@ -341,8 +341,8 @@ test('landing and pricing explain the product and lead to the editor', async () 
   render(React.createElement(Marketing, { page: 'home' }));
   const hero = screen.getByRole('region', { name: /Edit your existing floor plan/ });
   assert.ok(within(hero).getByRole('heading', { name: /Edit your existing floor plan/ }));
-  assert.ok(within(hero).getByText(/remodeling client.*PDF or image/));
-  assert.equal(within(hero).getByRole('link', { name: 'Try the demo below' }).getAttribute('href'), '#doorway-demo');
+  assert.ok(within(hero).getByText(/Upload a PDF or photo of your floor plan.*walls and doors/));
+  assert.equal(within(hero).getByRole('link', { name: 'Try demo below' }).getAttribute('href'), '#doorway-demo');
   assert.equal(
     within(hero).getByRole('link', { name: 'Open editor' }).getAttribute('href'),
     '/#/editor',
@@ -352,10 +352,18 @@ test('landing and pricing explain the product and lead to the editor', async () 
   const pricing = screen.getByRole('heading', { name: 'One project or monthly access' });
   const demo = screen.getByRole('region', { name: 'Try the floor plan demo' });
   assert.equal(hero.nextElementSibling, demo);
-  assert.equal(within(demo).getByRole('link', { name: 'Watch the editor video' }).getAttribute('href'), '#/how-it-works');
+  const videoOption = screen.getByText('Watch the editor video').closest('details');
+  assert.ok(videoOption && !videoOption.open);
+  assert.equal(videoOption.querySelector('video'), null);
+  videoOption.open = true;
+  fireEvent(videoOption, new window.Event('toggle'));
+  assert.equal(videoOption.querySelector('video[controls]').getAttribute('src'), '/planpatch-demo.mp4');
+  videoOption.open = false;
+  fireEvent(videoOption, new window.Event('toggle'));
+  assert.equal(videoOption.querySelector('video'), null);
   assert.ok(demo.compareDocumentPosition(pricing) & Node.DOCUMENT_POSITION_FOLLOWING);
   assert.ok(within(demo).getByRole('button', { name: 'Choose Clean up' }));
-  fireEvent.click(within(hero).getByRole('link', { name: 'Try the demo below' }));
+  fireEvent.click(within(hero).getByRole('link', { name: 'Try demo below' }));
   assert.equal(document.activeElement, within(demo).getByRole('heading', { level: 2 }));
   assert.ok(document.querySelector('.mobileMenu .siteNav a.navEditorLink[href="/#/editor"]'));
   const desktopNav = within(document.querySelector('.siteHeaderActions > nav'));
@@ -511,6 +519,8 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
     .filter((b) => b.type === 'image/svg+xml;charset=utf-8')
     .at(-1);
   assert.ok(svgBlob);
+  const exportedSvg = new dom.window.DOMParser().parseFromString(await svgBlob.text(), 'image/svg+xml');
+  assert.equal(exportedSvg.documentElement.localName, 'svg', 'The export rasterizer needs well-formed SVG.');
   assert.ok(!(await svgBlob.text()).includes('data-editor-only'));
   assert.ok((await svgBlob.text()).includes('@font-face'));
   click('button', 'Export');
@@ -1300,7 +1310,7 @@ test('reduced-motion visitors control sample playback and pricing keeps billing 
     view.unmount();
     render(React.createElement(Marketing, { page: 'pricing', trialOffer: true, account: { signedIn: true, user: { email: 'demo@example.test' } } }));
     assert.equal(screen.queryByRole('link', { name: 'View billing' }), null);
-    assert.match(screen.getByRole('main').textContent, /3-day free trial for new accounts · No credit card needed/);
+    assert.match(screen.getByRole('main').textContent, /3-day free trial\. No credit card needed\./);
     assert.equal(screen.queryByRole('link', { name: 'Start 3-day free trial' }), null);
     assert.ok(document.querySelector('.accountMenuLinks a[href="#/account/billing"]'));
   } finally {
@@ -1313,9 +1323,9 @@ test('guest landing opens the editor and exposes the same policy links in the mo
   const view = render(React.createElement(Marketing, { page: 'home', trialOffer: true }));
   const hero = within(screen.getByRole('region', { name: /Edit your existing floor plan/ }));
   assert.equal(hero.getByRole('link', { name: 'Open editor' }).getAttribute('href'), '/#/editor');
-  assert.ok(hero.getByText('No credit card needed', { exact: true }).classList.contains('trialNoCard'));
+  assert.equal(hero.queryByText(/free trial|No credit card needed/i), null);
   assert.equal(hero.queryByText(/ends automatically/i), null);
-  assert.equal(hero.getByRole('link', { name: 'Try the demo below' }).getAttribute('href'), '#doorway-demo');
+  assert.equal(hero.getByRole('link', { name: 'Try demo below' }).getAttribute('href'), '#doorway-demo');
   const footer = within(screen.getByRole('navigation', { name: 'Footer' }));
   assert.deepEqual(footer.getAllByRole('link').map((link) => link.getAttribute('href')), [
     '/terms', '/privacy', '/refunds-and-cancellation', '/support', '/privacy#cookie-settings',
@@ -1323,13 +1333,28 @@ test('guest landing opens the editor and exposes the same policy links in the mo
   const mobileFooter = document.querySelector('.footerMenu');
   fireEvent.click(mobileFooter.querySelector('summary'));
   assert.deepEqual(within(mobileFooter).getAllByRole('link').map(link => link.getAttribute('href')),
-    footer.getAllByRole('link').map(link => link.getAttribute('href')));
+    ['#home-faq-title', ...footer.getAllByRole('link').map(link => link.getAttribute('href'))]);
   fireEvent.keyDown(mobileFooter, { key: 'Escape' });
   assert.equal(mobileFooter.open, false);
   view.rerender(React.createElement(Marketing, { page: 'home', trialOffer: true, account: { signedIn: true } }));
-  assert.match(screen.getByRole('main').textContent, /3-day free trial for new accounts · No credit card needed/);
+  assert.equal(hero.queryByText(/free trial|No credit card needed/i), null);
+  assert.ok(screen.getByRole('heading', { name: 'FAQs' }));
+  assert.ok(screen.getByText('What happens when the free trial ends?'));
   view.rerender(React.createElement(Marketing, { page: 'home', trialOffer: false }));
   assert.doesNotMatch(screen.getByRole('main').textContent, /free trial|no credit card needed/i);
+});
+
+test('following the mobile FAQ fragment preserves the browser scroll position', async (t) => {
+  window.history.replaceState(null, '', '/');
+  render(React.createElement(Root));
+  const heading = await screen.findByRole('heading', { name: 'FAQs' });
+  const scroll = t.mock.method(window, 'scrollTo', () => {});
+  await act(async () => {
+    window.history.pushState(null, '', '#' + heading.id);
+    window.dispatchEvent(new window.Event('hashchange'));
+  });
+  assert.equal(scroll.mock.callCount(), 0);
+  window.history.replaceState(null, '', '/');
 });
 
 test('the PDF editing guide shows the video followed by three steps', () => {
@@ -1361,7 +1386,7 @@ test('the original how-it-works link still opens the video and links to the inte
   }
 });
 
-test('a guest can revise the sample doorway, compare drawings, choose Export and restart without opening project storage', async (t) => {
+test('a guest can revise the sample doorway, compare drawings, choose Export and go back without opening project storage', async (t) => {
   const previous = window.location.href;
   const dbOpen = t.mock.method(globalThis.indexedDB, 'open');
   const saved = { ...localStorage };
@@ -1379,7 +1404,7 @@ test('a guest can revise the sample doorway, compare drawings, choose Export and
   assert.ok(toolbar.getByText('Start here'));
   press(toolbar, 'Choose Clean up');
   assert.equal(document.activeElement, canvas.getByRole('button', { name: 'Cover old swing' }));
-  assert.ok(canvas.getByText('Click here'));
+  assert.ok(canvas.getByRole('button', { name: 'Cover old swing' }));
   press(canvas, 'Cover old swing');
   stage(/leaving the opening/, 'DOOR REMOVAL');
   press(toolbar, 'Choose Wall');
@@ -1406,9 +1431,12 @@ test('a guest can revise the sample doorway, compare drawings, choose Export and
   assert.equal(tour.queryByRole('button', { name: /download.*pdf/i }), null);
   assert.deepEqual(tour.getAllByRole('link'), [ownPlan]);
 
-  press(tour, 'Restart');
+  assert.equal(tour.queryByRole('button', { name: 'Restart' }), null);
+  assert.equal(tour.queryByText('Laundry remodel.pdf'), null);
+  assert.equal(document.querySelector('.revisionProgress'), null);
+  for (let i = 0; i < 8; i++) press(tour, 'Back');
   stage(/existing laundry door opens into the hall/, 'EXISTING PLAN');
-  assert.ok(tour.getByRole('button', { name: 'Restart' }).disabled);
+  assert.ok(tour.getByRole('button', { name: 'Back' }).disabled);
   assert.equal(tour.queryByRole('group', { name: 'Compare drawings' }), null);
   assert.equal(dbOpen.mock.callCount(), 0);
   assert.deepEqual({ ...localStorage }, saved);
@@ -2007,4 +2035,42 @@ test('door access dialog keeps the drawing visible for guests, eligible users an
     globalThis.IDBKeyRange = previousKeyRange;
     delete globalThis.__editorAccess;
   }
+});
+
+test('an unavailable raster cannot corrupt the project archive, and the same image can be retried', async (t) => {
+  const owner = 'low-memory-import';
+  render(React.createElement(Editor, { owner }));
+  await waitSaved();
+  const input = document.querySelector('input[type=file]');
+  const file = new File(['scanned plan'], 'scan.png', { type: 'image/png' });
+  const encode = t.mock.method(HTMLCanvasElement.prototype, 'toDataURL', () => 'data:,');
+  fireEvent.change(input, { target: { files: [file] } });
+  await screen.findByRole('dialog', { name: 'Could not import this file' });
+  click('button', 'Continue');
+  assert.equal(svg().querySelector('image'), null);
+  await waitFor(() => assert.equal(document.querySelector('.projectButton').disabled, false));
+  encode.mock.restore();
+  fireEvent.change(input, { target: { files: [file] } });
+  await waitFor(() => assert.equal(svg().querySelector('image')?.getAttribute('href'), png));
+  await waitSaved();
+  cleanup();
+  render(React.createElement(Editor, { owner }));
+  await waitSaved();
+  assert.equal(svg().querySelector('image')?.getAttribute('href'), png);
+});
+
+test('an unreadable PDF releases its loading worker and leaves the editor ready for another upload', async (t) => {
+  const failure = new Error('Invalid PDF structure');
+  const destroy = t.mock.fn(async () => {});
+  t.mock.method(globalThis, '__pdfDocument', () => ({ promise: Promise.reject(failure), destroy }));
+  render(React.createElement(Editor, { owner: 'unreadable-pdf' }));
+  await waitSaved();
+  fireEvent.change(document.querySelector('input[type=file]'), { target: {
+    files: [{ name: 'broken.pdf', size: 5, arrayBuffer: async () => new ArrayBuffer(5) }],
+  } });
+  await screen.findByRole('dialog', { name: 'Could not import this file' });
+  click('button', 'Continue');
+  await waitFor(() => assert.equal(destroy.mock.callCount(), 1));
+  assert.equal(count(), 0);
+  assert.equal(document.querySelector('.projectButton').disabled, false);
 });
