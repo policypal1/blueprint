@@ -244,8 +244,23 @@ test('trial countdown ticks each second and catches up after a background pause'
   }
 });
 
+test('permanent owner access survives expired trials and monthly periods and removes purchase prompts', () => {
+  const data = { ownerAccess: true, paymentsRequired: true, monthly: false,
+    trialEndsAt: '2000-01-01T00:00:00Z', monthlyEndsAt: '2000-01-01T00:00:00Z' };
+  assert.equal(fullEditorAccess(data), true);
+  assert.equal(canOpenEditor(data), true);
+  assert.equal(fullEditorAccess({ ...data, ownerAccess: false }), false);
+  assert.equal(fullEditorAccess({ ...data, deleting: true }), false);
+  render(React.createElement(AccountPage, { billing: true, account: { user: { id: 'owner' } }, access: { data } }));
+  assert.ok(screen.getByRole('heading', { name: 'Owner access' }));
+  assert.ok(screen.getByText('No payment required. Your access does not expire.'));
+  assert.equal(screen.queryByRole('checkbox'), null);
+  assert.equal(screen.queryByRole('button', { name: /payment|credit|subscription/i }), null);
+  assert.equal(screen.getByRole('link', { name: 'Open editor' }).getAttribute('href'), '#/editor');
+});
+
 test('live billing uses live consent and keeps purchases disabled during Stripe review', async () => {
-  const { LIVE_MONTHLY_VERSION, MONTHLY_AGREEMENT, MONTHLY_CANCELLATION, MONTHLY_DETAILS } = await import('../supabase/functions/planpatch-account/monthly-offer.js');
+  const { LIVE_MONTHLY_VERSION, MONTHLY_PRICE, MONTHLY_AGREEMENT, MONTHLY_CANCELLATION } = await import('../supabase/functions/planpatch-account/monthly-offer.js');
   const calls = [];
   const account = { user: { id: 'live-billing-ui' } };
   let rechecks = 0;
@@ -270,13 +285,10 @@ test('live billing uses live consent and keeps purchases disabled during Stripe 
   view.rerender(React.createElement(AccountPage, { account, access, billing: true }));
   const [terms, renewal] = screen.getAllByRole('checkbox');
   assert.equal(renewal.labels[0].textContent, MONTHLY_AGREEMENT);
-  assert.equal(document.getElementById(renewal.getAttribute('aria-describedby')).textContent, MONTHLY_CANCELLATION);
-  const summary = screen.getByText('Billing details', { selector: 'summary' });
-  const details = summary.closest('details');
-  assert.equal(details.open, false);
-  fireEvent.click(summary);
-  assert.equal(details.open, true);
-  assert.ok(within(details).getByText(MONTHLY_DETAILS));
+  const describedBy = renewal.getAttribute('aria-describedby').split(' ').map(id => document.getElementById(id).textContent);
+  assert.deepEqual(describedBy, [MONTHLY_PRICE, MONTHLY_CANCELLATION]);
+  assert.equal(screen.queryByText('Billing details'), null);
+  assert.ok(screen.getByRole('link', { name: 'Terms of Service' }));
   assert.equal(renewal.checked, false);
   fireEvent.click(terms); fireEvent.click(renewal);
   click('button', 'Continue to payment');
@@ -293,7 +305,7 @@ test('billing keeps the selected order through sign-in and shows checkout failur
     checkout: async () => { throw new Error('Could not open Stripe. Try again.'); },
   };
   try {
-    for (const [plan, title] of [['project', 'Single project'], ['monthly', 'Monthly access · $19/month']]) {
+    for (const [plan, title] of [['project', 'Single project'], ['monthly', 'Monthly access']]) {
       const target = accountReturnTarget('#/account/billing', `?plan=${plan}&tracking=test`);
       assert.equal(target, `?plan=${plan}#/account/billing`);
       // The callback validates the stored target again after email or Google authentication.
