@@ -19,19 +19,19 @@ function AccessLayout({ title, onClose, paid = false, children }) {
 }
 
 export function ExpiredTrialPlans({ expired = true, onClose, onChoose, previewWarning }) {
-  const title = expired ? 'Your free trial has ended' : 'Choose a plan to edit';
+  const title = expired ? 'Your trial ended. Your work is saved.' : 'Your plan is ready to download';
   return (
     <AccessLayout title={title} onClose={onClose} paid>
-      <p>Choose how you’d like to edit and export your plans.</p>
+      <p>Keep editing for free. Unlock a clean PDF or PNG download when you’re ready. Your drafts are saved in this browser.</p>
       <nav className="expiredTrialOptions" aria-label="Choose a plan">
         <a href="/?plan=project#/account/billing" onClick={onChoose}>
           <Icon name="file" />
-          <span>Single project<small>Edit and export one plan</small></span>
+          <span>Unlock to download<small>Single project · unlimited revisions</small></span>
           <span className="expiredTrialPrice">${PRICING.project}<small>one time</small></span>
         </a>
         <a href="/?plan=monthly#/account/billing" onClick={onChoose}>
           <Icon name="folder" />
-          <span>Monthly access<small>Edit and export multiple plans</small></span>
+          <span>Monthly access<small>Unlimited projects and downloads</small></span>
           <span className="expiredTrialPrice">${PRICING.monthly}<small>per month</small></span>
         </a>
       </nav>
