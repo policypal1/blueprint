@@ -298,12 +298,6 @@ function BillingSettings({ portalUrl, access, plan }) {
             <p className="price"><strong>${PRICING.monthly}</strong><span>USD per month</span></p>
             <p className="priceDetail">Doing more than one? $19/month covers unlimited projects.</p>
             {plan && policyAgreement}
-            {data?.checkoutReady && !data.monthly && currentOffer && (
-              <>
-                <p className="monthlyCancellation" id="monthly-price">$19/month until canceled. Cancel anytime in Billing.</p>
-
-              </>
-            )}
             {data?.checkoutReady && !data.monthly && !currentOffer && <p>Refresh this page to review the latest monthly terms.</p>}
             <button className="pricePurchase primary" disabled={!data?.checkoutReady || !accepted || !recurringAccepted || Boolean(pending) || data.monthly}
               onClick={() => visitStripe('monthly')}>

@@ -1,6 +1,6 @@
 import { MONTHLY_VERSION as TEST_VERSION, MONTHLY_DISCLOSURE as TEST_DISCLOSURE, LIVE_MONTHLY_VERSION, LIVE_MONTHLY_DISCLOSURE, MONTHLY_CANCELLATION_URL } from './monthly-offer.js';
 
-const AMOUNTS = { project: 1000, monthly: 1900 };
+const AMOUNTS = { project: 900, monthly: 1900 };
 const CHECKOUT_EVENTS = new Set([
   'checkout.session.completed', 'checkout.session.async_payment_succeeded', 'checkout.session.async_payment_failed',
 ]);
@@ -138,7 +138,7 @@ async function syncProject(stripe, admin, checkoutId) {
   if (!belongsToPlanPatch(checkout) || checkout.metadata.plan !== 'project' || checkout.mode !== 'payment') return;
   if (livemode) {
     const lines = await stripe.checkout.sessions.listLineItems(checkout.id, { limit: 2 });
-    if (lines.data.length !== 1 || stripeId(lines.data[0].price) !== prices.project || lines.data[0].quantity !== 1) return;
+    if (lines.data.length !== 1 || ![prices.project, 'price_1UdgmRFQHJCPVJXE43gIaTyt'].includes(stripeId(lines.data[0].price)) || lines.data[0].quantity !== 1) return;
   }
   const intent = stripeId(checkout.payment_intent);
   const customer = stripeId(checkout.customer);

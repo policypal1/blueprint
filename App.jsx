@@ -2,7 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Icon, Modal, PRODUCT_NAME, useDialog } from './ui.jsx';
 import { DOORS, FIXTURES, PhoneControls, ToolButton, ToolChoices, editorMode } from './EditorControls.jsx';
 import EditorGuide from './EditorGuide.jsx';
-import EditorTour from './EditorTour.jsx';
+import EditorTour, { TourMarks, tourBaseline } from './EditorTour.jsx';
+import { snapOpening, resizeWindow } from './opening-tools.js';
+import { EXTRA_FIXTURES } from './fixtures.jsx';
 import './conversion.css';
 import { DoorwayControls, DoorwayMarks, markDoorway, movedDoorwayElements } from './DoorwayMove.jsx';
 import {
@@ -238,6 +240,7 @@ function endWall(draft, point, elements, freeAngle) {
 }
 
 const BLUEPRINT_IMPORT_SYMBOLS = new Set([
+  ...EXTRA_FIXTURES.map(item => item.id),
   'toilet',
   'sink',
   'shower',
@@ -393,7 +396,7 @@ function normalizeBlueprintImport(raw, projectState) {
         washerdryer: [30, 18],
         counter: [48, 24],
         stove: [30, 26],
-      }[symbol];
+      }[symbol] || (() => { const item = EXTRA_FIXTURES.find(item => item.id === symbol); return [item.width,item.height]; })();
       neutral.push({
         type: 'symbol',
         symbol,
@@ -1603,7 +1606,7 @@ export function BlueprintApp({
       const snap = nearestWallSnap(raw, project.elements, 38);
       addElement({
         type: 'window',
-        ...(snap ? { x: snap.point.x, y: snap.point.y, rotation: snap.rotation } : common),
+        ...(snap ? snapOpening({ type: 'window', widthInches: 30, rotation: snap.rotation }, snap, project.elements, project.unitsPerInch) : common),
         widthInches: 30,
         heightInches: 4.5,
       });
@@ -1649,6 +1652,8 @@ export function BlueprintApp({
         widthInches: 48,
         heightInches: 24,
       });
+    const fixture = EXTRA_FIXTURES.find(item => item.id === tool);
+    if (fixture) addElement({ type: 'symbol', symbol: tool, ...common, widthInches: fixture.width, heightInches: fixture.height });
     if (tool === 'stove')
       addElement({ type: 'symbol', symbol: 'stove', ...common, widthInches: 30, heightInches: 26 });
   };
@@ -1765,18 +1770,13 @@ export function BlueprintApp({
         updateElement(base.id, {
           points: base.points.map((p) => translatePoint(p, dx, dy)),
         });
-      } else if (base.type === 'door') {
+      } else if (base.type === 'door' || base.type === 'window') {
         const target = translatePoint(base, dx, dy);
         const wallSnap = nearestWallSnap(target, project.elements, 30);
         updateElement(
           base.id,
           wallSnap
-            ? {
-                x: wallSnap.point.x,
-                y: wallSnap.point.y,
-                rotation: wallSnap.rotation,
-                attachedWallId: wallSnap.wall.id,
-              }
+            ? snapOpening({ ...base, x: target.x, y: target.y }, wallSnap, project.elements, project.unitsPerInch, base)
             : { x: target.x, y: target.y, rotation: base.rotation || 0, attachedWallId: null },
         );
       } else {
@@ -1804,10 +1804,7 @@ export function BlueprintApp({
             heightInches: clamp((Math.abs(localY) * 2) / project.unitsPerInch, 1, MAX_PROJECT_NUMBER),
           });
         } else if (base.type === 'window') {
-          updateElement(base.id, {
-            widthInches: clamp((Math.abs(localX) * 2) / project.unitsPerInch, 1, MAX_PROJECT_NUMBER),
-            heightInches: clamp((Math.abs(localY) * 2) / project.unitsPerInch, 0.25, MAX_PROJECT_NUMBER),
-          });
+          updateElement(base.id, resizeWindow(base, drag.handle, raw, project.unitsPerInch, project.elements, drag.start));
         } else if (base.type === 'door') {
           updateElement(base.id, {
             widthInches: clamp(Math.abs(localX) / project.unitsPerInch, 1, MAX_PROJECT_NUMBER),
@@ -2154,7 +2151,7 @@ export function BlueprintApp({
   };
   const checkDownload = async () => {
     if (canDownload && !(await canDownload(accountIdRef.current))) {
-      throw new Error('Unlock a clean download with a $10 project credit or $19/month access. Your work is saved in this browser.');
+      throw new Error('Unlock a clean download with a $9 project credit or $19/month access. Your work is saved in this browser.');
     }
   };
   async function openExport() {
@@ -2416,7 +2413,7 @@ export function BlueprintApp({
     setExportMenu(false);
     setImportOpen(false);
     setGuideMode(null);
-
+    setTour(null);
 
     setTool(compact ? 'pan' : 'select');
     setPhoneMode('view');
@@ -2472,9 +2469,23 @@ export function BlueprintApp({
   };
   const loadSample = async (navigate = onOpenWorkspace) => {
     if (await openNewPlan(sampleProject(uid()), navigate)) {
-      if (freeEditing) { setGuideMode(null); setPhoneMode('edit'); setTour({ step: 0, walls: 7, texts: 3 }); }
+      if (freeEditing) { setGuideMode(null); setPhoneMode('edit'); setTour(tourBaseline(projectRef.current));
+        try { localStorage.setItem('editfloorplans-sample-guide:' + (owner || 'guest'), 'seen'); } catch {} }
     }
   };
+  const checkedSampleIntro = useRef(false);
+  useEffect(() => {
+    if (!freeEditing || !active || !hydrated || busy || sampleRequested || checkedSampleIntro.current) return;
+    if (showPlans && repository && cloud.listStatus !== 'ready') return;
+    checkedSampleIntro.current = true;
+    try { if (localStorage.getItem('editfloorplans-sample-guide:' + (owner || 'guest'))) return; } catch {}
+    if (project.background || project.elements.length || projects.some(plan => plan.background || plan.elements.length) || cloud.list?.length) return;
+    void loadSample();
+  }, [freeEditing, active, hydrated, busy, sampleRequested, cloud.listStatus]);
+  useEffect(() => {
+    if (!tour) return;
+    if (tour.step === 5 || tour.step === 7) setEditorPanel('tools');
+  }, [tour?.step]);
   useEffect(() => {
     if (hydrated && sampleRequested && window.location.hash === '#/editor/sample') {
       if (canCreateProject) void loadSample(onSampleOpened);
@@ -2501,8 +2512,9 @@ export function BlueprintApp({
     if (
       !(await ask({
         title: 'Delete this project?',
+        detail: projects.find(item => item.id === id)?.name || 'Untitled project',
         message:
-          'Download a backup first if you want to keep it. This removes this project from this browser.',
+          'This removes the saved draft from this browser. Download a backup first if you want to keep a copy.',
         type: 'confirm',
         confirmLabel: 'Delete project',
         danger: true,
@@ -2723,7 +2735,7 @@ export function BlueprintApp({
     </>
   );
 
-  const desktopTip = showDesktopTip && !dialog && !guideMode && !importOpen && !editorPanel && !exportMenu && (
+  const desktopTip = showDesktopTip && !tour && !dialog && !guideMode && !importOpen && !editorPanel && !exportMenu && (
       <Modal title="Best on desktop" className="mobileEditorTip" onClose={() => dismissDesktopTip(false)}>
         <div className="mobileTipBody">
           <span className="mobileTipIcon"><Icon name="desktop" size={28} /></span>
@@ -2740,7 +2752,9 @@ export function BlueprintApp({
     return (
       <>
         {tour && active && <EditorTour step={tour.step} tool={tool} project={project} compact={compact} baseline={tour}
-        onStep={step => setTour(current => current ? { ...current, step } : null)} onClose={() => setTour(null)} />}
+        onStep={step => setTour(current => current ? { ...current, step } : null)} onClose={() => { setTour(null); setEditorPanel(null); }}
+        onEditLabel={(id,text) => updateElement(id,{text})}
+        onOpenPlan={() => { setTour(null); setEditorPanel(null); fileRef.current?.click(); }} />}
       {fileInputs}
         <RecentPlans
           projects={projects}
@@ -2887,7 +2901,7 @@ export function BlueprintApp({
             title={guideMode === 'practice' ? 'Resume walkthrough' : 'Editor guide'}
             onClick={() => {
               if (guideMode !== 'practice') setWalkthroughStep(0);
-              if (freeEditing && project.elements.length) { setGuideMode(null); setPhoneMode('edit'); setTour({ step: 0, walls: project.elements.filter(e => e.type === 'wall').length, texts: project.elements.filter(e => e.type === 'text').length }); }
+              if (freeEditing && project.elements.length) { setGuideMode(null); setPhoneMode('edit'); setTour(tourBaseline(project)); }
               else setGuideMode('walkthrough');
             }}
           >
@@ -2906,7 +2920,9 @@ export function BlueprintApp({
         </div>
       </div>
       {tour && active && <EditorTour step={tour.step} tool={tool} project={project} compact={compact} baseline={tour}
-        onStep={step => setTour(current => current ? { ...current, step } : null)} onClose={() => setTour(null)} />}
+        onStep={step => setTour(current => current ? { ...current, step } : null)} onClose={() => { setTour(null); setEditorPanel(null); }}
+        onEditLabel={(id,text) => updateElement(id,{text})}
+        onOpenPlan={() => { setTour(null); setEditorPanel(null); fileRef.current?.click(); }} />}
       {fileInputs}
       <div className="workspace">
         {!compact && <aside className="sidebar leftbar" aria-label="Drawing tools">{toolPalette}</aside>}
@@ -2917,8 +2933,8 @@ export function BlueprintApp({
           </div>}
           {!originalLocked && !project.background && !project.elements.length && !busy && ['select', 'pan'].includes(tool) && (
             <div className="canvasWelcome">
-              <h2>{previewOnly ? 'Upload or paste your floor plan' : 'Start with a plan'}</h2>
-              {previewOnly && <p className="hint">Upload a PDF or image and edit for free. Unlock a clean download from $10.</p>}
+              <span className="uploadWelcomeIcon"><Icon name="upload" size={30} /></span><h2>Upload or paste your floor plan</h2>
+              {previewOnly && <p className="hint">Bring your existing plan. Make it your own.</p>}
               <div className="canvasImportActions">
                 <button className="primary" disabled={!hydrated} onClick={() => fileRef.current?.click()}>
                   Upload
@@ -3059,6 +3075,7 @@ export function BlueprintApp({
                 <circle data-editor-only pointerEvents="none" cx={brushPoint.x} cy={brushPoint.y} r={eraseSize / 2}
                   fill="none" stroke={DRAWING_ACCENT} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
               )}
+              {tour && !exporting && <TourMarks step={tour.step} />}
             </svg>
           </div>
           <div className="zoomBox">
@@ -3506,6 +3523,15 @@ function SelectionHandles({ el, project, onResizeDown, displayScale = 1, onOpenP
       </g>
     );
   }
+  if (el.type === 'window') {
+    const width = el.widthInches * units, height = (el.heightInches || 4.5) * units;
+    return <g data-editor-only aria-label="Window resize handles" transform={`translate(${el.x} ${el.y}) rotate(${el.rotation || 0})`} pointerEvents="none">
+      <line x1={-width / 2} y1="0" x2={width / 2} y2="0" stroke={DRAWING_ACCENT} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+      {handle('start', -width / 2, 0, 'Resize window start', 'ew-resize')}
+      {handle('end', width / 2, 0, 'Resize window end', 'ew-resize')}
+      {handle('thickness', 0, height / 2 + 30 / scale, 'Resize window thickness', 'ns-resize')}
+    </g>;
+  }
   const w = (el.widthInches || (el.type === 'door' ? 32 : 24)) * units;
   const h = (el.heightInches || (el.type === 'window' ? 4.5 : 24)) * units;
   return (
@@ -3620,6 +3646,8 @@ function Symbol({ el, selected, common, project }) {
   const w = (el.widthInches || 24) * project.unitsPerInch,
     h = (el.heightInches || 24) * project.unitsPerInch;
   const transform = `translate(${el.x} ${el.y}) rotate(${el.rotation || 0})`;
+  const extraFixture = EXTRA_FIXTURES.find(item => item.id === el.symbol);
+  if (extraFixture) return <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3">{extraFixture.draw(w, h)}</g>;
   if (el.symbol === 'toilet')
     return (
       <g {...common} transform={transform} stroke={stroke} fill="#fff" strokeWidth="3">
@@ -3871,6 +3899,8 @@ function Draft({ draft, project, zoom, wallAppearance }) {
 }
 
 function symbolLabel(symbol) {
+  const fixture = EXTRA_FIXTURES.find(item => item.id === symbol);
+  if (fixture) return fixture.label;
   return (
     {
       toilet: 'Toilet',
@@ -4003,7 +4033,7 @@ function Properties({
             <button onClick={() => set('rotation', (selected.rotation || 0) + 90)}>↷ 90°</button>
           </div>
           <div className="hint compactHint">
-            Drag the blue handle to resize. Windows resize in both width and height/depth. Press{' '}
+            {selected.type === 'window' ? 'Drag either endpoint to resize the width; use the offset handle for depth.' : 'Drag the endpoint handle to resize the door.'} Press{' '}
             <b>R</b> to rotate 90°.
           </div>
         </>
@@ -4014,7 +4044,8 @@ function Properties({
             <span>Text</span>
             <input
               key={selected.id}
-              defaultValue={selected.text || ''}
+              value={selected.text || ''}
+              onChange={(e) => updateElement(selected.id, { text: e.target.value })}
               placeholder="Room name, note, or a known measurement"
               maxLength={2000}
               onBlur={(e) => set('text', e.target.value)}

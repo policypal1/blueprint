@@ -20,7 +20,7 @@ test('live checkout validates fixed server prices and keeps live renewal consent
   const requests = [];
   let livePrice = true;
   const stripe = { prices: { retrieve: async id => ({ id, active: true, livemode: livePrice, currency: 'usd',
-    unit_amount: id === prices.project ? 1000 : 1900,
+    unit_amount: id === prices.project ? 900 : 1900,
     ...(id === prices.monthly ? { recurring: { interval: 'month', interval_count: 1 } } : {}) }) },
   checkout: { sessions: { create: async params => {
     requests.push(params); return { livemode: true, url: 'https://checkout.stripe.com/live' };
@@ -44,7 +44,7 @@ test('live project access requires the correct price, settled customer payment a
   const writes = [];
   const checkout = { id: 'cs_liveFixture', metadata: metadata('project'), livemode: true, mode: 'payment',
     customer, status: 'complete', payment_status: 'paid', payment_intent: 'pi_liveFixture' };
-  const payment = { customer, livemode: true, status: 'succeeded', currency: 'usd', amount_received: 1000,
+  const payment = { customer, livemode: true, status: 'succeeded', currency: 'usd', amount_received: 900,
     latest_charge: { ...charge } };
   let price = prices.project;
   const stripe = { checkout: { sessions: { retrieve: async () => checkout,
@@ -67,7 +67,16 @@ test('live project access requires the correct price, settled customer payment a
   await billing.fulfillVerifiedEvent(event('checkout.session.completed', checkout), stripe, admin);
   assert.ok(writes.slice(-2).every(w => w.args.is_paid && w.args.grant_reference === checkout.id));
   assert.ok(writes.every(w => w.name === 'planpatch_record_live_grant'));
-  payment.latest_charge.amount_refunded = 1000;
+  payment.amount_received = 899;
+  await billing.fulfillVerifiedEvent(event('checkout.session.completed', checkout), stripe, admin);
+  assert.equal(writes.at(-1).args.is_paid, false);
+  payment.amount_received = 1000;
+  price = 'price_1UdgmRFQHJCPVJXE43gIaTyt';
+  await billing.fulfillVerifiedEvent(event('checkout.session.completed', checkout), stripe, admin);
+  assert.equal(writes.at(-1).args.is_paid, true);
+  price = prices.project;
+  payment.amount_received = 900;
+  payment.latest_charge.amount_refunded = 900;
   await billing.fulfillVerifiedEvent(event('charge.refunded', { payment_intent: checkout.payment_intent }), stripe, admin);
   assert.equal(writes.at(-1).args.is_paid, false);
   payment.latest_charge.amount_refunded = 0;

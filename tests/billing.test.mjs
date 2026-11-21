@@ -55,7 +55,7 @@ test('checkout uses only the two server-side sandbox prices', async () => {
   assert.equal(await createCheckout(stripe, { ...request, plan: 'unknown' }), null);
   assert.equal(await createCheckout(stripe, { ...request, plan: 'monthly', attempt: '' }), null);
   assert.deepEqual(requests.map(([data]) => [data.mode, data.line_items[0].price_data.unit_amount]),
-    [['payment', 1000], ['subscription', 1900]]);
+    [['payment', 900], ['subscription', 1900]]);
   assert.ok(requests.every(([data]) => data.customer === customer && data.client_reference_id === request.owner));
   assert.ok(requests[0][1].idempotencyKey.endsWith(attempt));
   assert.ok(requests[1][1].idempotencyKey.endsWith(reservation.id));

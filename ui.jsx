@@ -169,7 +169,7 @@ export function useDialog() {
       setState(options);
     });
   const dialog = state && (
-    <Modal title={state.title} onClose={() => finish(null)}>
+    <Modal title={state.title} className={state.danger ? 'dangerDialog' : ''} onClose={() => finish(null)}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -180,6 +180,7 @@ export function useDialog() {
           );
         }}
       >
+        {state.detail && <div className="dialogProject"><Icon name="file" /><strong>{state.detail}</strong></div>}
         <p className="modalLead">{state.message}</p>
         {!['confirm', 'notice'].includes(state.type) && (
           <label className="field">
