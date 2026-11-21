@@ -1035,75 +1035,86 @@ html:has(.authConfirmation) { overflow: hidden; }
 .priceOptions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(10px, 2vw, 18px);
+  gap: clamp(18px, 3vw, 28px);
 }
 .priceCard {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: clamp(24px, 3.5vw, 40px);
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: clamp(16px, 3vw, 28px);
+  border-radius: 14px;
 }
-.priceOptions:not(.compactPrices) .priceCard { display: flex; flex-direction: column; }
-.priceOptions:not(.compactPrices) .priceDetail { flex: 1; }
-.pricePurchase { width: 100%; min-height: 48px; margin-top: 22px; }
-.billingChoice[data-selected='true'] { border-color: var(--accent); }
-.priceIcon {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  flex: none;
-  border-radius: 8px;
-  background: var(--soft);
-  color: var(--accent);
+.priceCardFeatured {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px var(--orange);
 }
-.priceCard h2 {
-  margin: 13px 0 5px;
-  font-size: clamp(15px, 2.5vw, 20px);
+.priceCard h2, .priceCard h3 {
+  margin: 0 0 28px;
+  font-size: clamp(22px, 2.8vw, 28px);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
 }
 .price {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 14px;
   margin: 0;
-  line-height: 1.14;
+  line-height: 1.1;
 }
 .price strong {
-  font-size: clamp(35px, 7vw, 54px);
-  letter-spacing: -0.05em;
+  font-size: clamp(52px, 7vw, 76px);
+  font-weight: 700;
+  letter-spacing: -0.065em;
 }
-.price span {
+.price span { color: var(--muted); font-size: 16px; white-space: nowrap; }
+.priceDetail {
+  flex: 1;
+  margin: 20px 0 32px;
   color: var(--muted);
-  font-size: clamp(13px, 2vw, 16px);
-  white-space: nowrap;
+  font-size: 16px;
+  line-height: 1.65;
 }
-.priceDetail { margin: 14px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
-.compactPriceLabel { margin: 0 0 4px; color: var(--muted); font-size: 13px; font-weight: 600; }
-.compactPrices .priceCard {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: var(--site);
+.pricePurchase {
+  width: 100%;
+  min-height: 54px;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
 }
-.compactPrices .price strong { font-size: clamp(29px, 4.5vw, 42px); }
-@media (max-width: 640px) {
-  .pricingPage .priceOptions { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .pricingPage .priceCard { padding: 18px; }
-  .pricingPage .priceIcon { display: none; }
-  .pricingPage .priceCard > div {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 4px 12px;
-  }
-  .pricingPage .priceCard h2 { margin: 0; font-size: 20px; }
-  .pricingPage .price { margin-inline-start: auto; text-align: end; }
-  .pricingPage .price strong { font-size: 32px; }
-  .pricingPage .price span { display: block; }
-  .pricingPage .priceDetail { margin-top: 12px; }
-  .pricingPage .pricePurchase { margin-top: 16px; min-height: 44px; }
-}
-@media (max-width: 480px) {
-  .compactPrices .priceIcon { display: none; }
-  .compactPrices .price span { display: block; margin-top: 4px; }
+.pricePurchase:hover { background: var(--panel); }
+.priceCardFeatured .pricePurchase { background: var(--orange); border-color: var(--orange); }
+.priceCardFeatured .pricePurchase:hover { background: var(--orangeHover); border-color: var(--orangeHover); }
+.priceNote { margin: 15px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.billingChoice[data-selected='true'] { border-color: var(--accent); }
+.homePricing { max-width: 1100px; }
+.homePricing .priceSectionHeading { margin-bottom: 32px; }
+.pricingPage { width: min(100%, 1100px); }
+.workflowComparison { max-width: 1100px; padding-bottom: clamp(44px, 7vw, 80px); }
+.workflowComparison > h2 { max-width: 24ch; margin-bottom: 32px; text-wrap: balance; }
+.workflowComparisonGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(18px, 3vw, 28px); }
+.workflowCard { min-width: 0; padding: clamp(22px, 3.2vw, 34px); border: 1px solid var(--line); border-radius: 14px; }
+.workflowCard h3 { margin: 0 0 24px; font-size: clamp(22px, 2.8vw, 28px); font-weight: 600; line-height: 1.2; letter-spacing: -0.035em; }
+.workflowCard ul { list-style: none; padding: 0; margin: 0; }
+.workflowCard li { display: flex; align-items: flex-start; gap: 14px; padding: 20px 0; border-top: 1px solid var(--line); font-size: 16px; font-weight: 500; line-height: 1.55; }
+.workflowCard li:last-child { padding-bottom: 0; }
+.workflowCard li svg { flex: none; margin-top: 1px; }
+.workflowCardOld { background: var(--site); color: var(--muted); }
+.workflowCardOld li svg { color: var(--danger); }
+.workflowCardBlueprint { border-color: var(--ink); background: var(--paper); box-shadow: 7px 7px 0 var(--orange); }
+.workflowCardBlueprint li svg { color: var(--accent); }
+@media (max-width: 680px) {
+  .priceOptions, .workflowComparisonGrid { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+  .priceCard h2, .priceCard h3 { margin-bottom: 22px; }
+  .priceDetail { margin: 16px 0 26px; }
+  .workflowCard li { padding-block: 17px; }
+  .workflowCard h3 { margin-bottom: 22px; }
 }
 .faqSection { margin-top: clamp(36px, 6vw, 60px); }
 .faqSection h2 {
