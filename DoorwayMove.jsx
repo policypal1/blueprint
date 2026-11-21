@@ -1,6 +1,6 @@
 import React from 'react';
 import { DOORS } from './EditorControls.jsx';
-import { wallStyle } from './wall-tools.js';
+import { wallStyle, clampWallThickness } from './wall-tools.js';
 
 const prompts = {
   start: 'Tap the old hinge, or tap a door you added.',
@@ -78,8 +78,11 @@ export function movedDoorwayElements(project, move, nearestWall, fallbackStyle) 
   const covered = elements.some(wall => wall.type === 'wall' &&
     nearestWall(a, [wall], 2) && nearestWall(b, [wall], 2));
   if (move.tip) elements.push(swingMask(move));
-  if (!covered && (!source || adjacent))
-    elements.push({ id: move.wallId, type: 'wall', a, b, ...wallStyle(adjacent || fallbackStyle) });
+  if (!covered && (!source || adjacent)) {
+    const style = wallStyle(adjacent || fallbackStyle);
+    elements.push({ id: move.wallId, type: 'wall', a, b, ...style,
+      thicknessInches: clampWallThickness(style.thicknessInches, project.unitsPerInch) });
+  }
 
   const hinge = move.swap ? along(move.destination, move.angle, width) : move.destination;
   elements.push({
