@@ -74,3 +74,6 @@
   .tourCard p { font-size:.8rem; margin-bottom:5px; }
   .canvasArea .canvasWelcome { padding:24px; }
 }
+
+.editorTour { z-index:110; }
+@media(max-width:800px) { .tourCard.tourPanelCard { top:auto; bottom:20px; } }
