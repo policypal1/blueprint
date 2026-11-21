@@ -354,7 +354,7 @@ export default function Root() {
       {(showWorkspace || visitedEditor) && editorAvailable && (
         <div className="editorRoot" hidden={!showWorkspace} inert={editorDialog ? '' : undefined} aria-hidden={editorDialog || undefined}>
           {showRecentPlans && <SiteHeader page={route} account={accountNav} />}
-          {showRecentPlans && !policy?.monthly && timedAccessActive(policy?.trialEndsAt) && (
+          {showRecentPlans && !policy?.ownerAccess && !policy?.monthly && timedAccessActive(policy?.trialEndsAt) && (
             <TrialStatus expiresAt={policy.trialEndsAt} />
           )}
           <div className="editorSurface">

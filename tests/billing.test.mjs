@@ -11,6 +11,36 @@ const charge = { livemode: false, captured: true, paid: true, amount_refunded: 0
 const metadata = (plan) => ({ application: 'planpatch-sandbox', plan });
 const event = (type, object, livemode = false) => ({ type, livemode, data: { object } });
 
+test('permanent owner access comes from the server account and cannot be purchased or spoofed', async () => {
+  let permanent = true;
+  const record = () => ({ owner_access: permanent });
+  const handler = accountHandler({ siteOrigin: origin, webhookSecret: 'whsec_fixture', test: {
+    customers: { create() { throw new Error('An owner must never create a checkout customer.'); } },
+  }, clientFor: () => ({ rpc: name => ({ maybeSingle: async () => ({ data: name === 'planpatch_session'
+    ? { user_id: 'verified-owner' } : { payments_required: true, monthly: false } }) }) }),
+  admin: { from: () => ({ upsert: async () => ({}), select: fields => {
+    assert.ok(fields.includes('owner_access'));
+    return { eq: (column, id) => {
+      assert.equal(column, 'user_id'); assert.equal(id, 'verified-owner');
+      return { maybeSingle: async () => ({ data: record() }) };
+    } };
+  } }), rpc: () => ({ maybeSingle: async () => ({ data: null }) }) } });
+  const request = body => new Request(origin, { method: 'POST', headers: { Authorization: 'Bearer fixture' },
+    body: JSON.stringify(body) });
+  const status = await (await handler(request({ action: 'status' }))).json();
+  assert.equal(status.ownerAccess, true);
+  assert.equal(status.monthly, false);
+  for (const plan of ['project', 'monthly']) {
+    const response = await handler(request({ action: 'checkout', plan, attempt,
+      consent: { accepted: true, version: MONTHLY_VERSION } }));
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /permanent access/);
+  }
+  permanent = false;
+  const spoofed = await (await handler(request({ action: 'status', ownerAccess: true, owner_id: 'someone-else' }))).json();
+  assert.equal(spoofed.ownerAccess, false);
+});
+
 test('checkout uses only the two server-side sandbox prices', async () => {
   const requests = [];
   const stripe = { checkout: { sessions: { create: async (data, options) => {
@@ -105,7 +135,7 @@ test('the custom domain and existing Vercel address can check a signed-in accoun
   const sites = ['https://www.editfloorplans.com', 'https://editfloorplans.com', 'https://blueprint-blue-theta.vercel.app'];
   const handler = accountHandler({
     siteOrigin: sites[2],
-    admin: { rpc: (_name, args) => {
+    admin: { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }) }) }), rpc: (_name, args) => {
       assert.equal(args.owner_id, 'fixture-owner');
       return { maybeSingle: async () => ({ data: null }) };
     } },
@@ -226,7 +256,7 @@ test('acceptance is acknowledged only from the initial paid invoice even after a
 
 test('a missing migration preserves ordinary access but makes monthly checkout unavailable', async () => {
   const handler = accountHandler({ siteOrigin: origin, webhookSecret: 'whsec_test', test: {},
-    admin: { rpc: () => ({ maybeSingle: async () => ({ error: { code: 'PGRST202' } }) }) },
+    admin: { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }) }) }), rpc: () => ({ maybeSingle: async () => ({ error: { code: 'PGRST202' } }) }) },
     clientFor: () => ({ rpc: name => ({ maybeSingle: async () => ({ data: name === 'planpatch_session'
       ? { user_id: 'owner' } : { project_credits: 2 } }) }) }),
   });

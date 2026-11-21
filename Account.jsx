@@ -4,7 +4,7 @@ import { Icon, Modal, PRODUCT_NAME } from './ui.jsx';
 import { authErrorText, MAX_DISPLAY_NAME_LENGTH, selectedBillingPlan } from './useAccount.js';
 import { canOpenEditor } from './access.js';
 import { PRICING } from './Marketing.jsx';
-import { MONTHLY_VERSION, LIVE_MONTHLY_VERSION, MONTHLY_AGREEMENT, MONTHLY_CANCELLATION, MONTHLY_DETAILS, MONTHLY_CANCELLATION_URL } from './supabase/functions/planpatch-account/monthly-offer.js';
+import { MONTHLY_VERSION, LIVE_MONTHLY_VERSION, MONTHLY_PRICE, MONTHLY_AGREEMENT, MONTHLY_CANCELLATION, MONTHLY_CANCELLATION_URL } from './supabase/functions/planpatch-account/monthly-offer.js';
 import { PolicyAgreement } from './Policies.jsx';
 
 const SANDBOX_PORTAL_URL = 'https://billing.stripe.com/p/login/test_00w8wIf8fdke23P1oO4ZG00';
@@ -242,6 +242,17 @@ function BillingSettings({ portalUrl, access, plan }) {
     }
   }
 
+  if (data?.ownerAccess) {
+    return (
+      <section className="accountCard ownerAccessCard" aria-labelledby="owner-access-title">
+        <h2 id="owner-access-title">Owner access</h2>
+        <p>Full access to edit and export all your plans.</p>
+        <p>No payment required. Your access does not expire.</p>
+        <div className="accountActions"><a className="button primary" href="#/editor">Open editor</a></div>
+      </section>
+    );
+  }
+
   return (
     <div className="accountStack">
       <section className="accountCard" aria-labelledby="plans-billing-title">
@@ -272,35 +283,34 @@ function BillingSettings({ portalUrl, access, plan }) {
         )}
         {!plan && policyAgreement}
         <div className="billingChoices">
-          {plan !== 'monthly' && <div className="billingChoice" data-selected={plan === 'project'}>
+          {plan !== 'monthly' && <div className="priceCard billingPlan" data-selected={plan === 'project'}>
             <h3>Single project</h3>
-            <p className="billingChoicePrice"><strong>${PRICING.project}</strong> USD once</p>
-            <p>Edit and download one original floor plan.</p>
+            <p className="price"><strong>${PRICING.project}</strong><span>USD once</span></p>
+            <p className="priceDetail">One original floor plan. Edit it and export as many times as you need.</p>
             {plan && policyAgreement}
-            <button className="primary" disabled={!data?.checkoutReady || !accepted || Boolean(pending)}
+            <button className="pricePurchase" disabled={!data?.checkoutReady || !accepted || Boolean(pending)}
               onClick={() => visitStripe('project')}>
               {pending === 'project' ? 'Opening Stripe…' : 'Buy a project credit'}
             </button>
           </div>}
-          {plan !== 'project' && <div className="billingChoice" data-selected={plan === 'monthly'}>
-            <h3>Monthly access · ${PRICING.monthly}/month</h3>
+          {plan !== 'project' && <div className="priceCard priceCardFeatured billingPlan" data-selected={plan === 'monthly'}>
+            <h3>Monthly access</h3>
+            <p className="price"><strong>${PRICING.monthly}</strong><span>USD per month</span></p>
+            <p className="priceDetail">For crews with more than one job going. Covers multiple projects.</p>
             {plan && policyAgreement}
             {data?.checkoutReady && !data.monthly && currentOffer && (
               <>
+                <p className="monthlyPrice" id="monthly-price">{MONTHLY_PRICE}</p>
+                <p className="monthlyCancellation" id="monthly-cancellation">{MONTHLY_CANCELLATION}</p>
                 <label className="policyAgreement">
-                  <input type="checkbox" checked={recurringAccepted} aria-describedby="monthly-cancellation"
+                  <input type="checkbox" checked={recurringAccepted} aria-describedby="monthly-price monthly-cancellation"
                     onChange={(event) => setAcceptedOfferVersion(event.target.checked ? offerVersion : null)} />
                   <span>{MONTHLY_AGREEMENT}</span>
                 </label>
-                <p id="monthly-cancellation">{MONTHLY_CANCELLATION}</p>
-                <details className="monthlyDetails">
-                  <summary>Billing details</summary>
-                  <p>{MONTHLY_DETAILS}</p>
-                </details>
               </>
             )}
             {data?.checkoutReady && !data.monthly && !currentOffer && <p>Refresh this page to review the latest monthly terms.</p>}
-            <button className="primary" disabled={!data?.checkoutReady || !accepted || !recurringAccepted || Boolean(pending) || data.monthly}
+            <button className="pricePurchase primary" disabled={!data?.checkoutReady || !accepted || !recurringAccepted || Boolean(pending) || data.monthly}
               onClick={() => visitStripe('monthly')}>
               {data?.monthly ? 'Active subscription' : pending === 'monthly' ? 'Opening Stripe…' : testMode ? 'Continue to test payment' : 'Continue to payment'}
             </button>

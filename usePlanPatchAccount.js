@@ -22,7 +22,7 @@ async function readAccess(client) {
     ...billing,
     trialEndsAt: details.data?.trial_ends_at,
     monthlyEndsAt: details.data?.monthly_ends_at,
-    canStartTrial: details.data?.can_start_trial,
+    canStartTrial: !billing.ownerAccess && details.data?.can_start_trial,
     lockedProjectIds: details.data?.locked_project_ids ?? billing.projectIds ?? [],
   };
 }
