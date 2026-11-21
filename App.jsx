@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Icon, Modal, PRODUCT_NAME, useDialog } from './ui.jsx';
 import { DOORS, FIXTURES, PhoneControls, ToolButton, ToolChoices, editorMode } from './EditorControls.jsx';
 import EditorGuide from './EditorGuide.jsx';
+import EditorTour from './EditorTour.jsx';
+import './conversion.css';
 import { DoorwayControls, DoorwayMarks, markDoorway, movedDoorwayElements } from './DoorwayMove.jsx';
 import {
   pdfLayout,
@@ -878,10 +880,13 @@ function hasHiddenDesktopTip() {
 
 export function BlueprintApp({
   active = true, showRecent = false, sampleRequested = false, onSampleOpened, onOpenWorkspace,
-  repository, projectAccess, lockedProjectIds = [], owner, authBusy = false, onRegisterSave, canDownload,
+  repository, projectAccess: paidProjectAccess, lockedProjectIds = [], owner, authBusy = false, onRegisterSave, canDownload,
   showMobileTip = false, showFirstUseGuide = false,
+  freeEditing = false,
   previewOnly = false, previewPlan, onPreviewPlanChange, onRequestEditing, onPreviewPlanOpened,
 }) {
+  const projectAccess = freeEditing ? null : paidProjectAccess;
+  const viewOnly = previewOnly && !freeEditing;
   const svgRef = useRef(null);
   const fileRef = useRef(null);
   const clipboardRef = useRef(null);
@@ -897,7 +902,7 @@ export function BlueprintApp({
     saveStatus, projectRef, cloud, accountId, accountIdRef, flush,
   } = useProjectStore(
     () => (previewOnly && previewPlan) || emptyProject('Untitled project'),
-    repository, active && showRecent, owner, previewOnly,
+    repository, active && showRecent, owner, viewOnly,
   );
   const singleProject = Boolean(projectAccess);
   const showPlans = !previewOnly && (showRecent || (singleProject && !accountId));
@@ -915,6 +920,7 @@ export function BlueprintApp({
   const [compact, setCompact] = useState(() => window.matchMedia?.(COMPACT_LAYOUT).matches ?? false);
   const [desktopTipDismissed, setDesktopTipDismissed] = useState(() => showMobileTip && hasHiddenDesktopTip());
   const [guideMode, setGuideMode] = useState(null);
+  const [tour, setTour] = useState(null);
   const [walkthroughStep, setWalkthroughStep] = useState(0);
   const checkedFirstUseGuide = useRef(false);
   const [paper, setPaper] = useState('tabloid');
@@ -935,6 +941,7 @@ export function BlueprintApp({
   const [projectMenu, setProjectMenu] = useState(false);
   const [exportMenu, setExportMenu] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const exportCheck = useRef(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importCode, setImportCode] = useState('');
   const [importReplace, setImportReplace] = useState(true);
@@ -952,7 +959,7 @@ export function BlueprintApp({
   }
 
   function openToolPanel(panel) {
-    if (previewOnly && panel !== 'properties') requestEditing();
+    if (viewOnly && panel !== 'properties') requestEditing();
     else setEditorPanel(panel);
   }
 
@@ -983,7 +990,7 @@ export function BlueprintApp({
   }, [active, showPlans, hydrated, compact, zoom, project.id]);
 
   const selected = project.elements.find((e) => e.id === selectedId) || null;
-  const showDoorPreview = doorMove?.step === 'preview' && doorMove.base === project && !previewOnly && !exporting;
+  const showDoorPreview = doorMove?.step === 'preview' && doorMove.base === project && !viewOnly && !exporting;
   const drawnElements = showDoorPreview
     ? movedDoorwayElements(project, doorMove, nearestWallSnap, wallDefaults.current)
     : project.elements;
@@ -993,7 +1000,7 @@ export function BlueprintApp({
   const showDesktopTip = showMobileTip && active && hydrated && compact && !desktopTipDismissed;
 
   useEffect(() => {
-    if (!showFirstUseGuide || checkedFirstUseGuide.current || !active || showPlans || !hydrated || busy
+    if (freeEditing || !showFirstUseGuide || checkedFirstUseGuide.current || !active || showPlans || !hydrated || busy
       || showDesktopTip || dialog || editorPanel || exportMenu || importOpen || guideMode) return;
     checkedFirstUseGuide.current = true;
     const storageKey = owner ? `${FIRST_USE_GUIDE_KEY}:${owner}` : FIRST_USE_GUIDE_KEY;
@@ -1109,7 +1116,7 @@ export function BlueprintApp({
     updateElement(id, patch);
   };
   const changeTool = (next) => {
-    if (previewOnly && next !== 'pan' && next !== 'select') {
+    if (viewOnly && next !== 'pan' && next !== 'select') {
       requestEditing();
       return;
     }
@@ -1124,11 +1131,11 @@ export function BlueprintApp({
   };
 
   useEffect(() => {
-    if (doorMove && (doorMove.base !== project || previewOnly || !active || showPlans)) changeTool('select');
+    if (doorMove && (doorMove.base !== project || viewOnly || !active || showPlans)) changeTool('select');
   }, [doorMove, project, previewOnly, active, showPlans]);
 
   function beginDoorMove() {
-    if (previewOnly) { requestEditing(); return; }
+    if (viewOnly) { requestEditing(); return; }
     if (busy || !active || !hydrated) return;
     changeTool('move-doorway');
     setDoorMove({ step: 'start', style: 'single-left', base: projectRef.current, doorId: uid(), wallId: uid(), maskId: uid() });
@@ -1139,7 +1146,7 @@ export function BlueprintApp({
   }
 
   function applyDoorMove() {
-    if (previewOnly) { requestEditing(); return; }
+    if (viewOnly) { requestEditing(); return; }
     if (!showDoorPreview || !active || busy || projectRef.current !== doorMove.base) return;
     if (drawnElements.length > MAX_ELEMENTS || countBrushPoints(drawnElements) > MAX_BRUSH_POINTS) {
       setStatus('Project is full. Remove an object or brush stroke before moving the doorway.');
@@ -1158,12 +1165,12 @@ export function BlueprintApp({
   }
 
   function tryWalkthroughTool(action) {
-    if (previewOnly && action !== 'pan' && action !== 'select') {
+    if (viewOnly && action !== 'pan' && action !== 'select') {
       requestEditing();
       return;
     }
     setGuideMode('practice');
-    if (action === 'export') setExportMenu(true);
+    if (action === 'export') void openExport();
     else if (['doors', 'cleanup', 'tools'].includes(action)) setEditorPanel(action);
     else changeTool(action);
   }
@@ -1295,7 +1302,7 @@ export function BlueprintApp({
         ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) ||
         document.activeElement?.isContentEditable;
       const unmodified = !e.ctrlKey && !e.metaKey && !e.altKey;
-      if (previewOnly && !typing) {
+      if (viewOnly && !typing) {
         const modifier = e.ctrlKey || e.metaKey;
         const key = e.key.toLowerCase();
         if ((modifier && ['z', 'y', 's'].includes(key)) ||
@@ -1740,7 +1747,7 @@ export function BlueprintApp({
     }
     if (draft?.type === 'clean') setDraft((d) => ({ ...d, b: raw }));
 
-    if (previewOnly && drag?.kind === 'move') {
+    if (viewOnly && drag?.kind === 'move') {
       dragRef.current = null;
       requestEditing();
       return;
@@ -1844,7 +1851,7 @@ export function BlueprintApp({
     if (doorMove) {
       const tap = wallTap.current;
       wallTap.current = null;
-      if (tap?.id !== e.pointerId || e.isPrimary === false || busy || exporting || previewOnly ||
+      if (tap?.id !== e.pointerId || e.isPrimary === false || busy || exporting || viewOnly ||
           Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > TAP_SLOP) return;
       const point = clientToWorld(e);
       if (![point.x, point.y].every(isProjectNumber) || point.x < 0 || point.x > W || point.y < 0 || point.y > H) return;
@@ -2002,7 +2009,7 @@ export function BlueprintApp({
     setBusy(true);
     try {
       if (
-        !previewOnly && !showPlans &&
+        !viewOnly && !showPlans &&
         (target.background || target.elements.length) &&
         !(await ask({
           title: 'Replace the background?',
@@ -2147,9 +2154,37 @@ export function BlueprintApp({
   };
   const checkDownload = async () => {
     if (canDownload && !(await canDownload(accountIdRef.current))) {
-      throw new Error('Your editing access has ended. Open Billing to choose a plan.');
+      throw new Error('Unlock a clean download with a $10 project credit or $19/month access. Your work is saved in this browser.');
     }
   };
+  async function openExport() {
+    if (busy || exporting || !hydrated || exportCheck.current) return;
+    exportCheck.current = true;
+    const onSamePage = captureRoute();
+    const exportPlan = projectRef.current;
+    setTour(null);
+    try {
+      if (freeEditing && canDownload && !(await canDownload(accountIdRef.current))) {
+        if (!onSamePage() || projectRef.current !== exportPlan) return;
+        const plan = exportPlan;
+        if (!accountIdRef.current && paidProjectAccess?.credits > 0 && plan.background) {
+          const saved = await cloud.saveNew(plan);
+          if (!saved) throw new Error('Could not unlock this project. Your local draft is saved. Try again.');
+          void paidProjectAccess.refresh();
+          if (!onSamePage() || projectRef.current !== exportPlan) return;
+          selectProject(saved.project, saved.id);
+          await checkDownload();
+        } else {
+          requestEditing();
+          return;
+        }
+      }
+      if (viewOnly) { requestEditing(); return; }
+      if (onSamePage()) setExportMenu(true);
+    } catch (error) {
+      if (onSamePage()) setAccountNotice(error.message || 'Could not check download access. Try again.');
+    } finally { exportCheck.current = false; }
+  }
   const backupProject = async () => {
     const onSamePage = captureRoute();
     const saved = projectRef.current;
@@ -2391,7 +2426,7 @@ export function BlueprintApp({
   };
   const openNewPlan = async (plan, navigate = onOpenWorkspace, existingDeviceDraft = false) => {
     if (previewOnly) {
-      chooseProject(plan, false);
+      chooseProject(plan, freeEditing);
       onPreviewPlanChange?.(plan);
       navigate?.();
       return true;
@@ -2435,7 +2470,11 @@ export function BlueprintApp({
       setBusy(false);
     }
   };
-  const loadSample = (navigate = onOpenWorkspace) => openNewPlan(sampleProject(uid()), navigate);
+  const loadSample = async (navigate = onOpenWorkspace) => {
+    if (await openNewPlan(sampleProject(uid()), navigate)) {
+      if (freeEditing) { setGuideMode(null); setPhoneMode('edit'); setTour({ step: 0, walls: 7, texts: 3 }); }
+    }
+  };
   useEffect(() => {
     if (hydrated && sampleRequested && window.location.hash === '#/editor/sample') {
       if (canCreateProject) void loadSample(onSampleOpened);
@@ -2578,7 +2617,7 @@ export function BlueprintApp({
     </>
   );
 
-  const objectProperties = selected && previewOnly ? (
+  const objectProperties = selected && viewOnly ? (
     <div className="propStack">
       <div className="badge">{selected.type.toUpperCase()}</div>
       <button className="wide" onClick={requestEditing}>{owner ? 'Unlock editing' : 'Sign up to edit'}</button>
@@ -2645,7 +2684,7 @@ export function BlueprintApp({
 
   let toolHint = TOOL_HINTS[tool];
   if (compact && tool === 'pan') toolHint = 'Drag to move. Pinch to zoom. Tap an object to edit.';
-  if (previewOnly) toolHint = tool === 'pan' ? 'Drag to pan. Pinch to zoom.' : 'Tap or click an object to select it.';
+  if (viewOnly) toolHint = tool === 'pan' ? 'Drag to pan. Pinch to zoom.' : 'Tap or click an object to select it.';
   if (useWallTaps) {
     toolHint = awaitingWallEnd ? 'Tap the other endpoint.' : 'Tap the first endpoint.';
   } else if (!toolHint) {
@@ -2700,7 +2739,9 @@ export function BlueprintApp({
   if (showPlans) {
     return (
       <>
-        {fileInputs}
+        {tour && active && <EditorTour step={tour.step} tool={tool} project={project} compact={compact} baseline={tour}
+        onStep={step => setTour(current => current ? { ...current, step } : null)} onClose={() => setTour(null)} />}
+      {fileInputs}
         <RecentPlans
           projects={projects}
           canCreate={canCreateProject}
@@ -2846,7 +2887,8 @@ export function BlueprintApp({
             title={guideMode === 'practice' ? 'Resume walkthrough' : 'Editor guide'}
             onClick={() => {
               if (guideMode !== 'practice') setWalkthroughStep(0);
-              setGuideMode('walkthrough');
+              if (freeEditing && project.elements.length) { setGuideMode(null); setPhoneMode('edit'); setTour({ step: 0, walls: project.elements.filter(e => e.type === 'wall').length, texts: project.elements.filter(e => e.type === 'text').length }); }
+              else setGuideMode('walkthrough');
             }}
           >
             <Icon name="help" /> <span>{guideMode === 'practice' ? 'Resume guide' : 'Guide'}</span>
@@ -2855,13 +2897,16 @@ export function BlueprintApp({
             aria-label="Export"
             className="primary"
             disabled={exporting || busy || !hydrated || !!doorMove}
-            onClick={previewOnly ? requestEditing : () => setExportMenu(true)}
+            onClick={openExport}
+            data-tour="export"
           >
             <Icon name="download" />
             <span>{exporting ? 'Exporting…' : 'Export'}</span>
           </button>
         </div>
       </div>
+      {tour && active && <EditorTour step={tour.step} tool={tool} project={project} compact={compact} baseline={tour}
+        onStep={step => setTour(current => current ? { ...current, step } : null)} onClose={() => setTour(null)} />}
       {fileInputs}
       <div className="workspace">
         {!compact && <aside className="sidebar leftbar" aria-label="Drawing tools">{toolPalette}</aside>}
@@ -2873,12 +2918,12 @@ export function BlueprintApp({
           {!originalLocked && !project.background && !project.elements.length && !busy && ['select', 'pan'].includes(tool) && (
             <div className="canvasWelcome">
               <h2>{previewOnly ? 'Upload or paste your floor plan' : 'Start with a plan'}</h2>
-              {previewOnly && <p className="hint">Upload a PDF or image, or paste a copied image to view it here.</p>}
+              {previewOnly && <p className="hint">Upload a PDF or image and edit for free. Unlock a clean download from $10.</p>}
               <div className="canvasImportActions">
                 <button className="primary" disabled={!hydrated} onClick={() => fileRef.current?.click()}>
                   Upload
                 </button>
-                {previewOnly && (
+                {(previewOnly || freeEditing) && (
                   <button type="button" disabled={!hydrated} onClick={() => loadSample()}>
                     Try a sample plan
                   </button>
@@ -2899,6 +2944,7 @@ export function BlueprintApp({
             style={{ transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})` }}
           >
             <svg
+              data-tour="canvas"
               key={project.id}
               ref={svgRef}
               className="planCanvas"
@@ -3003,7 +3049,7 @@ export function BlueprintApp({
                     displayScale={displayScale}
                   />
                 ))}
-              {!previewOnly && !exporting && selected && tool === 'select' && !wallMatch && (
+              {!viewOnly && !exporting && selected && tool === 'select' && !wallMatch && (
                 <SelectionHandles el={selected} project={project} onResizeDown={startResize}
                   displayScale={displayScale} onOpenProperties={() => setEditorPanel('properties')} />
               )}
