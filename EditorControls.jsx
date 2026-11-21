@@ -24,7 +24,6 @@ export const FIXTURES = [
 
 export function editorMode(tool) {
   if (tool === 'pan' || tool === 'select') return 'view';
-  if (tool === 'measure' || tool === 'dimension' || tool === 'calibrate') return 'measure';
   return 'edit';
 }
 
@@ -51,7 +50,6 @@ export function ToolChoices({ choices, tool, setTool }) {
 const MODES = [
   ['view', 'View', 'pan'],
   ['edit', 'Edit', 'edit'],
-  ['measure', 'Measure', 'measure'],
 ];
 const CONTROLS = {
   view: [['pan', 'Pan'], ['select', 'Select'], ['settings', 'Plan settings']],
@@ -62,24 +60,20 @@ const CONTROLS = {
     ['text', 'Text'],
     ['tools', 'More', 'more'],
   ],
-  measure: [['measure', 'Distance'], ['calibrate', 'Set scale']],
 };
 const PANELS = ['doors', 'tools', 'settings', 'cleanup'];
 
 export function PhoneControls({
   mode,
   tool,
-  calibrated,
   selected,
   hint,
   onCancelWall,
-  canSetDistance,
   onTool,
   onMode,
   onOpen,
-  onSetDistance,
 }) {
-  const modeTools = { view: 'pan', edit: 'wall', measure: calibrated ? 'measure' : 'calibrate' };
+  const modeTools = { view: 'pan', edit: 'wall' };
   return (
     <div className="phoneDock">
       <div className={tool === 'wall' ? 'phoneHint wallHint' : 'phoneHint'}>
@@ -89,9 +83,6 @@ export function PhoneControls({
           <button aria-haspopup="dialog" onClick={() => onOpen('properties')}>
             <Icon name="settings" size={16} /> Properties
           </button>
-        )}
-        {canSetDistance && (
-          <button className="primary" onClick={onSetDistance}>Set real distance</button>
         )}
       </div>
       <div className="phoneToolRow" role="group" aria-label={`${mode} controls`}>
