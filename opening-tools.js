@@ -18,12 +18,16 @@ export function snapOpening(opening, snap, elements, units, original = opening) 
     rotation, widthInches: width / units, attachedWallId: wall.id };
 }
 
-export function resizeWindow(base, handle, point, units, elements = []) {
+export function resizeWindow(base, handle, point, units, elements = [], start = null) {
   const angle = (base.rotation || 0) * Math.PI / 180;
   const ux = Math.cos(angle), uy = Math.sin(angle);
   const localX = (point.x - base.x) * ux + (point.y - base.y) * uy;
   const localY = -(point.x - base.x) * uy + (point.y - base.y) * ux;
-  if (handle === 'thickness') return { heightInches: Math.max(.25, Math.min(10000, Math.abs(localY) * 2 / units)) };
+  if (handle === 'thickness') {
+    const delta = start ? -(point.x-start.x)*uy + (point.y-start.y)*ux : null;
+    const height = delta === null ? Math.abs(localY)*2/units : (base.heightInches || 4.5)+delta*2/units;
+    return { heightInches: Math.max(.25, Math.min(10000,height)) };
+  }
   const half = base.widthInches * units / 2;
   const fixed = handle === 'start' ? half : -half;
   let moving = handle === 'start' ? Math.min(localX, fixed - units) : Math.max(localX, fixed + units);
