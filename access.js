@@ -15,7 +15,8 @@ export function trialTimeLeft(expiresAt, now = Date.now()) {
 
 export function fullEditorAccess(policy) {
   return Boolean(policy && !policy.deleting && (
-    !policy.paymentsRequired
+    policy.ownerAccess === true
+    || !policy.paymentsRequired
     || timedAccessActive(policy.trialEndsAt)
     || (policy.monthly && (policy.monthlyEndsAt === undefined || timedAccessActive(policy.monthlyEndsAt)))
   ));
