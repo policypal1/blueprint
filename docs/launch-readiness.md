@@ -40,8 +40,8 @@ Official resources consulted:
 
 ## Conversion changes and next measurement
 
-Visitors can open an animated sample before creating an account or uploading a drawing. The same sample appears in the first-use editor walkthrough. It demonstrates Pan, selecting a wall, changing thickness, drawing, doors, labels, cleanup, more tools, calibration, measurement and export. Playback can be paused, skipped, replayed and controlled manually; reduced-motion preferences are respected.
+Visitors can try a guided doorway edit below the homepage hero or open the recorded editor video. The video uses portrait footage on small screens. Visitors can also try the sample plan in the editor before uploading their own drawing.
 
-The homepage now explains file types, the upload limit and the skill level needed. Pricing makes clear that both options include editing and exports and that a single project does not require a subscription. FAQs explain how edits are layered over an imported drawing, which helps set expectations before signup.
+The homepage explains how to upload an existing plan, edit walls and doors, and export the revision. The mobile FAQs cover supported file types, the 25 MB limit, multipage PDFs, downloads, where drafts are saved and how project credits differ from monthly access.
 
-These are conversion hypotheses, not a measured lift. Compare qualified visits, sample opens, signups, completed first edits, exports and paid conversions after launch. Collect only consented, non-sensitive funnel counts. Use feedback from the first 5–10 unrelated paying customers to decide the next change.
+To evaluate conversion, compare qualified visits, demo starts, signups, completed first edits, exports and purchases. Use consented, non-sensitive funnel counts and feedback from five to ten unrelated paying customers.
