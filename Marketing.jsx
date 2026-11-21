@@ -32,7 +32,7 @@ function scrollToDemo() {
   document.getElementById('how-it-works')?.scrollIntoView?.();
 }
 
-function BlueprintDemo({ heading = 'How it works', labelledBy = 'guide-title', showGuidedLink = true }) {
+function BlueprintDemo({ heading = 'How it works' }) {
   const [mobile, setMobile] = useState(
     () => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 800px)').matches),
   );
@@ -91,7 +91,7 @@ function BlueprintDemo({ heading = 'How it works', labelledBy = 'guide-title', s
 
   return (
     <section id="how-it-works" className="blueprintDemo"
-      aria-labelledby={heading ? 'blueprint-demo-title' : labelledBy}>
+      aria-labelledby={heading ? 'blueprint-demo-title' : 'guide-title'}>
       {heading && <h2 id="blueprint-demo-title" tabIndex={-1}>{heading}</h2>}
       <video
         key={String(mobile)}
@@ -105,7 +105,7 @@ function BlueprintDemo({ heading = 'How it works', labelledBy = 'guide-title', s
         loop
         preload="none"
       />
-      {showGuidedLink && <a href={publicPages.revisionDemo.path} className="detailsLink">Try a guided edit <Icon name="arrow" size={16} /></a>}
+      <a href={publicPages.revisionDemo.path} className="detailsLink">Try a guided edit <Icon name="arrow" size={16} /></a>
     </section>
   );
 }
@@ -179,24 +179,6 @@ function PriceOptions({ compact = false }) {
   );
 }
 
-function TrialQualifier() {
-  return (
-    <p className="trialQualifier">
-      3-day free trial. <strong className="trialNoCard">No credit card needed.</strong>
-    </p>
-  );
-}
-
-function HomeVideo() {
-  const [open, setOpen] = useState(false);
-  return (
-    <details className="homeVideo" onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary id="home-video-label">Watch the editor video <Icon name="chevron" size={18} /></summary>
-      {open && <BlueprintDemo heading={null} labelledBy="home-video-label" showGuidedLink={false} />}
-    </details>
-  );
-}
-
 function HomeContent({ showTrial, showVideo }) {
   return (
     <>
@@ -204,7 +186,7 @@ function HomeContent({ showTrial, showVideo }) {
         <div className="heroBlueprint" aria-hidden="true"><PlanIllustration /></div>
         <div className="heroCopy">
           <h1 id="blueprint-hero-title">Edit your <span className="heroEmphasis">existing floor plan</span>.</h1>
-          <p>Upload a PDF or photo of your floor plan. Edit walls and doors, then export the revised plan.</p>
+          <p>Upload a PDF or photo of your floor plan. Make your edits, then export the revised plan.</p>
           <div className="heroActions">
             <EditorLink />
             <div><a href="#doorway-demo" className="detailsLink demoScrollLink" onClick={(event) => {
@@ -217,7 +199,7 @@ function HomeContent({ showTrial, showVideo }) {
         </div>
       </section>
       <RevisionDemo embedded />
-      {showVideo ? <BlueprintDemo /> : <HomeVideo />}
+      {showVideo && <BlueprintDemo />}
       <section className="homeSection" aria-labelledby="project-pricing-title">
         <div className="priceSectionHeading">
           <h2 id="project-pricing-title">One project or monthly access</h2>
@@ -280,12 +262,6 @@ function PricingContent({ showTrial }) {
   return (
     <>
       <h1>Pricing</h1>
-      {showTrial && (
-        <div className="pricingTrial">
-          <EditorLink />
-          <TrialQualifier />
-        </div>
-      )}
       <PriceOptions />
       <Faqs showTrial={showTrial} />
     </>

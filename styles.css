@@ -925,12 +925,6 @@ html:has(.authConfirmation) { overflow: hidden; }
   .footerMenuPanel a { padding-inline: 10px; font-size: 14px; }
   .footerMenuPanel small { display: block; border-top: 1px solid var(--line); padding: 10px; }
 }
-.heroActions .trialQualifier, .trialQualifier {
-  margin: 10px 0 0;
-  color: var(--muted);
-  font-size: 14px;
-}
-.pricingTrial { margin-block: 0 26px; text-align: center; }
 .guidePage {
   max-width: 960px;
   margin-inline: auto;

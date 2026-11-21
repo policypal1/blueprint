@@ -3,19 +3,6 @@
 .hero h1 { margin-bottom: clamp(22px, 2.5vw, 30px); }
 .heroActions { margin-top: clamp(28px, 3vw, 38px); }
 .demoScrollLink { margin-top: 8px; }
-.homeVideo {
-  max-width: 1000px;
-  margin: 0 auto clamp(28px, 5vw, 60px);
-  padding-inline: var(--site-gutter);
-}
-.homeVideo > summary {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  min-height: 50px; padding: 10px 15px; border: 1px solid var(--line);
-  border-radius: 8px; cursor: pointer; color: var(--ink); font-size: 15px; font-weight: 600;
-}
-.homeVideo > summary::-webkit-details-marker { display: none; }
-.homeVideo[open] > summary svg { transform: rotate(180deg); }
-.homeVideo .blueprintDemo { padding: 14px 0 0; }
 .mobileHomeFaq { display: none; }
 .blueprintDemo > .detailsLink { margin-top: 16px; }
 
@@ -31,6 +18,9 @@
   font-size: clamp(30px, 3.6vw, 48px);
   line-height: 1.08;
   letter-spacing: -.045em;
+}
+@media (min-width: 801px) {
+  .revisionTitle { text-align: center; }
 }
 .revisionTitle:focus { outline: 0; }
 .revisionPlayer {
@@ -75,11 +65,22 @@
   box-shadow: inset 3px 0 #ac4518;
 }
 .revisionTools button[data-next-action="true"]:hover { background: var(--soft); }
+.revisionTools button:first-child[data-next-action="true"] {
+  border-color: #813516;
+  background: #984221;
+  color: #fff;
+  box-shadow: 0 0 0 3px #98422124;
+}
+.revisionTools button:first-child[data-next-action="true"]:hover { background: #813516; }
 .revisionToolCue {
-  font-size: 10px;
-  font-weight: 700;
-  color: #7c3619;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   margin-left: auto;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 650;
 }
 .revisionCanvas {
   display: grid;
@@ -177,7 +178,6 @@
   .hero { min-height: min(530px, calc(100svh - 72px)); padding-block: clamp(44px, 9vw, 64px); }
   .heroCopy > p { max-width: 33ch; }
   .revisionTitle { margin-bottom: 16px; font-size: clamp(27px, 6vw, 36px); }
-  .homeVideo { padding-inline: max(12px, 3.5vw); }
   .marketingHome .mobileHomeFaq {
     display: block; margin: 0 auto; padding: 32px var(--site-gutter) 42px;
     border-top: 1px solid var(--line);
@@ -197,7 +197,8 @@
     padding: 6px 2px 16px;
     font-size: 13px;
   }
-  .revisionToolCue { position: absolute; bottom: 4px; right: 0; left: 0; text-align: center; }
+  .revisionToolCue { position: absolute; bottom: 4px; right: 0; left: 0; }
+  .revisionToolCue svg { transform: rotate(90deg); }
   .revisionTools button[data-next-action="true"] { box-shadow: inset 0 -2px #ac4518; }
   .revisionInstruction { min-height: 62px; padding: 12px 14px; }
   .revisionInstruction strong { line-height: 1.35; }
