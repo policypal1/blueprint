@@ -27,7 +27,6 @@ After creating an account, users can enter Blueprint Studio immediately and use:
 - All door types
 - Brush erase
 - Clean area
-- Set blueprint scale
 - Clear all / basic file preparation controls
 
 The rest of the drawing/annotation tools and Export are visibly marked **PRO** and open the upgrade prompt when clicked.
