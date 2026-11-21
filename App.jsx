@@ -1804,7 +1804,7 @@ export function BlueprintApp({
             heightInches: clamp((Math.abs(localY) * 2) / project.unitsPerInch, 1, MAX_PROJECT_NUMBER),
           });
         } else if (base.type === 'window') {
-          updateElement(base.id, resizeWindow(base, drag.handle, raw, project.unitsPerInch, project.elements));
+          updateElement(base.id, resizeWindow(base, drag.handle, raw, project.unitsPerInch, project.elements, drag.start));
         } else if (base.type === 'door') {
           updateElement(base.id, {
             widthInches: clamp(Math.abs(localX) / project.unitsPerInch, 1, MAX_PROJECT_NUMBER),
@@ -4033,7 +4033,7 @@ function Properties({
             <button onClick={() => set('rotation', (selected.rotation || 0) + 90)}>↷ 90°</button>
           </div>
           <div className="hint compactHint">
-            Drag the blue handle to resize. Windows resize in both width and height/depth. Press{' '}
+            {selected.type === 'window' ? 'Drag either endpoint to resize the width; use the offset handle for depth.' : 'Drag the endpoint handle to resize the door.'} Press{' '}
             <b>R</b> to rotate 90°.
           </div>
         </>
