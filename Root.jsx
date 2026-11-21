@@ -260,7 +260,8 @@ export default function Root() {
       if (isEditorRoute(next)) setVisitedEditor(true);
       else setSignInDialog(false);
       const cookieSettings = next === 'privacy' && window.location.hash === '#cookie-settings';
-      if (next !== 'demo' && !cookieSettings) window.scrollTo(0, 0);
+      const fragmentTarget = document.getElementById(window.location.hash.slice(1));
+      if (next !== 'demo' && !cookieSettings && !fragmentTarget) window.scrollTo(0, 0);
     };
     window.addEventListener('hashchange', navigate);
     window.addEventListener('popstate', navigate);
