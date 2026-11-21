@@ -105,6 +105,7 @@ function BlueprintDemo({ heading = 'How it works' }) {
         loop
         preload="none"
       />
+      <p className="hint">This recording shows an earlier toolbar. In the current editor, choose Text to add a note or a known measurement.</p>
       <a href={publicPages.revisionDemo.path} className="detailsLink">Try a guided edit <Icon name="arrow" size={16} /></a>
     </section>
   );
@@ -224,11 +225,11 @@ function GuideContent() {
         </li>
         <li>
           <h2>Mark up the layout</h2>
-          <p>Draw or mask walls, add doors and fixtures, and label the changes. <a className="accountTextLink" href={publicPages.measureGuide.path}>Set the scale before measuring</a>.</p>
+          <p>Draw or mask walls, add doors and fixtures, and label the changes. <a className="accountTextLink" href={publicPages.measureGuide.path}>Add a verified measurement as a text label</a>.</p>
         </li>
         <li>
           <h2>Export a revised plan</h2>
-          <p>Download a PDF or PNG for review. <a className="accountTextLink" href={publicPages.printGuide.path}>Print a scaled PDF at actual size</a>.</p>
+          <p>Download a PDF or PNG for review. <a className="accountTextLink" href={publicPages.printGuide.path}>Check the print scale on an original PDF</a>.</p>
         </li>
       </ol>
     </>
@@ -271,6 +272,7 @@ function PricingContent({ showTrial }) {
 function FooterLinks() {
   return (
     <>
+      <a href={publicPages.guides.path}>Floor plan guides</a>
       {Object.entries(POLICY_LINKS).map(([page, label]) => (
         <a key={page} href={publicPages[page].path}>{label}</a>
       ))}
