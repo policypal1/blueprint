@@ -1769,8 +1769,8 @@ test('the full editor sign-in page retries credentials and completes a valid sig
     editorEntry: true, trialOffer: true, onAuthenticated: () => { completed += 1; },
   }));
 
-  assert.ok(screen.getByRole('heading', { level: 1, name: 'Sign in to use the editor' }));
-  assert.ok(screen.getByText('3-day free trial. No credit card needed.'));
+  assert.ok(screen.getByRole('heading', { level: 1, name: 'Sign in to download your plan' }));
+  assert.ok(screen.getByText('Keep your edits. Unlock a clean download.'));
   assert.equal(screen.queryByRole('dialog'), null);
   fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'sam@example.test' } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'test-password-2026' } });
