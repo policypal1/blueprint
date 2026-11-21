@@ -2,15 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Icon, Modal, PRODUCT_NAME, useDialog } from './ui.jsx';
 import { DOORS, FIXTURES, PhoneControls, ToolButton, ToolChoices, editorMode } from './EditorControls.jsx';
 import EditorGuide from './EditorGuide.jsx';
+import { DoorwayControls, DoorwayMarks, markDoorway, movedDoorwayElements } from './DoorwayMove.jsx';
 import {
-  parseLength,
   pdfLayout,
   MAX_FILE_BYTES,
   MAX_ELEMENTS,
   MAX_BRUSH_POINTS,
   MAX_PROJECT_NUMBER,
   isProjectNumber,
-  isProjectScale,
   validateProject,
   downloadBlob,
   clientToWorkspace,
@@ -38,7 +37,6 @@ const CLIPBOARD_IMAGES = new Map([
 ]);
 const VIEW_TOOLS = [['select', 'Select'], ['pan', 'Pan']];
 const OTHER_DRAW_TOOLS = [['window', 'Window'], ['line', 'Line'], ['rect', 'Rectangle']];
-const MEASUREMENT_TOOLS = [['measure', 'Distance'], ['calibrate', 'Set scale']];
 const PANEL_TITLES = {
   doors: 'Choose a door',
   cleanup: 'Clean up',
@@ -54,16 +52,13 @@ const TOOL_HINTS = {
   rect: 'Drag to draw a rectangle.',
   clean: 'Drag a rectangle around the area to clear.',
   erase: 'Brush over the original or an object to erase it.',
-  dimension: 'Drag between two points to add a dimension.',
-  measure: 'Drag between two points to measure.',
-  text: 'Tap or click to place a label.',
+  text: 'Place a label for a note or a known measurement.',
   window: 'Tap or click a wall to place a window.',
 };
 
 const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
-const fmt = (n) => (Number.isFinite(n) ? n.toFixed(2) : '0.00');
 
 function inchesLabel(inches) {
   if (!Number.isFinite(inches)) return '';
@@ -79,7 +74,6 @@ function inchesLabel(inches) {
   return `${sign}${feet}' ${inchText}\"`;
 }
 
-const parseLengthInput = parseLength;
 
 function emptyProject(name = 'New Project') {
   return {
@@ -447,42 +441,6 @@ function normalizeBlueprintImport(raw, projectState) {
     return { x: pt.x * (W / 1000), y: pt.y * (H / 1000) };
   };
 
-  const scaleRef =
-    data.scaleReference ||
-    data.scale_reference ||
-    data.referenceDimension ||
-    data.reference_dimension ||
-    null;
-  const scaleRefInches = number(
-    scaleRef?.inches ?? scaleRef?.distanceInches ?? scaleRef?.distance_inches ?? scaleRef?.value,
-    NaN,
-  );
-  const scaleRefPoints =
-    scaleRef && Number.isFinite(scaleRefInches) && scaleRefInches > 0
-      ? (() => {
-          const a = scaleRef.a || { x: scaleRef.x1, y: scaleRef.y1 };
-          const b = scaleRef.b || { x: scaleRef.x2, y: scaleRef.y2 };
-          if (
-            !Number.isFinite(Number(a?.x)) ||
-            !Number.isFinite(Number(a?.y)) ||
-            !Number.isFinite(Number(b?.x)) ||
-            !Number.isFinite(Number(b?.y))
-          )
-            return null;
-          if (mode === 'canvas')
-            return {
-              a: mapCanvasLikePoint({ x: number(a.x), y: number(a.y) }),
-              b: mapCanvasLikePoint({ x: number(b.x), y: number(b.y) }),
-            };
-          if (mode === 'normalized')
-            return {
-              a: mapNormalizedPoint({ x: number(a.x), y: number(a.y) }),
-              b: mapNormalizedPoint({ x: number(b.x), y: number(b.y) }),
-            };
-          return null;
-        })()
-      : null;
-
   if (mode === 'canvas' || mode === 'normalized') {
     let elements = neutral.map((el) => {
       const out = { id: uid(), ...el };
@@ -519,23 +477,12 @@ function normalizeBlueprintImport(raw, projectState) {
       return out;
     });
 
-    let unitsPerInch = currentUnitsPerInch;
-    if (scaleRefPoints) {
-      const canvasDistance = dist(scaleRefPoints.a, scaleRefPoints.b);
-      const candidate = canvasDistance / scaleRefInches;
-      if (Number.isFinite(candidate) && candidate > 0 && candidate <= 1e5) unitsPerInch = candidate;
-      else throw new Error('Invalid scale reference.');
-    } else if (fit) {
-      unitsPerInch = clamp(Math.min(currentUnitsPerInch || 4, fit.scale), 0.35, 8);
-    }
+    const unitsPerInch = fit ? clamp(Math.min(currentUnitsPerInch, fit.scale), 0.35, 8) : currentUnitsPerInch;
     elements = regularizeImportedElements(elements, unitsPerInch);
     return {
       elements,
       unitsPerInch,
       name: data.name,
-      normalized: mode === 'normalized',
-      pixelAnchored: Boolean(fit),
-      autoCalibrated: Boolean(scaleRefPoints),
     };
   }
 
@@ -583,21 +530,19 @@ function normalizeBlueprintImport(raw, projectState) {
     return out;
   });
   elements = regularizeImportedElements(elements, unitsPerInch);
-  return { elements, unitsPerInch, name: data.name, autoCalibrated: false, pixelAnchored: false };
+  return { elements, unitsPerInch, name: data.name };
 }
 
 const CHATGPT_BLUEPRINT_PROMPT = `Analyze the attached floor-plan/blueprint image and return ONLY valid JSON for ${PRODUCT_NAME}. Do not use markdown fences or explanations.
 
 Preferred shape:
-{"version":2,"name":"Project name","units":"pixels","imageWidth":1320,"imageHeight":930,"scaleReference":{"x1":0,"y1":0,"x2":1000,"y2":0,"inches":409},"elements":[]}
+{"version":2,"name":"Project name","units":"pixels","imageWidth":1320,"imageHeight":930,"elements":[]}
 
 IMPORTANT IMPORT RULES:
 - Prefer units "pixels" whenever possible.
 - Use the FULL IMAGE pixel coordinate system of the attached blueprint, with (0,0) at the image's top-left corner.
 - Include imageWidth and imageHeight when using pixels.
-- If a clear printed dimension is visible, include ONE scaleReference using the clearest long dimension. inches must be the real-world distance in inches.
-- If exact pixel dimensions truly cannot be determined, use units "normalized" with x/y/x1/y1/x2/y2 in the 0..1000 range and include scaleReference if possible.
-- Only use units "inches" if the blueprint gives you enough information to confidently position the plan in real-world inch coordinates.
+- Use units "normalized" with coordinates from 0 to 1000 if image pixel dimensions are unknown. Copy legible printed dimensions as text labels.
 
 Supported editable elements:
 - wall: {"type":"wall","x1":0,"y1":0,"x2":120,"y2":0,"thickness":4.5}
@@ -973,7 +918,6 @@ export function BlueprintApp({
   const [walkthroughStep, setWalkthroughStep] = useState(0);
   const checkedFirstUseGuide = useRef(false);
   const [paper, setPaper] = useState('tabloid');
-  const [printScale, setPrintScale] = useState('fit');
   const [tool, setTool] = useState(() => compact ? 'pan' : 'select');
   const [selectedId, setSelectedId] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -981,13 +925,13 @@ export function BlueprintApp({
   const [future, setFuture] = useState([]);
   const [zoom, setZoom] = useState(1);
   const [displayScale, setDisplayScale] = useState(1);
+  const [doorMove, setDoorMove] = useState(null);
   const [wallMatch, setWallMatch] = useState(null);
   const wallDefaults = useRef(wallStyle(null));
   const matchTap = useRef(null);
   const matchRequest = useRef(0);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [status, setStatus] = useState('Ready');
-  const [calibration, setCalibration] = useState(null);
   const [projectMenu, setProjectMenu] = useState(false);
   const [exportMenu, setExportMenu] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -997,7 +941,6 @@ export function BlueprintApp({
   const [importError, setImportError] = useState('');
   const [eraseSize, setEraseSize] = useState(28);
   const [brushPoint, setBrushPoint] = useState(null);
-  const [measurement, setMeasurement] = useState(null);
 
   function requestEditing() {
     if (busy || !active) return;
@@ -1040,7 +983,11 @@ export function BlueprintApp({
   }, [active, showPlans, hydrated, compact, zoom, project.id]);
 
   const selected = project.elements.find((e) => e.id === selectedId) || null;
-  const backgroundEdits = project.elements.filter((el) => el.type === 'clean' || el.type === 'erase');
+  const showDoorPreview = doorMove?.step === 'preview' && doorMove.base === project && !previewOnly && !exporting;
+  const drawnElements = showDoorPreview
+    ? movedDoorwayElements(project, doorMove, nearestWallSnap, wallDefaults.current)
+    : project.elements;
+  const backgroundEdits = drawnElements.filter(el => el.type === 'clean' || el.type === 'erase');
   const useWallTaps = compact && tool === 'wall';
   const awaitingWallEnd = useWallTaps && draft?.awaitingEnd;
   const showDesktopTip = showMobileTip && active && hydrated && compact && !desktopTipDismissed;
@@ -1106,6 +1053,8 @@ export function BlueprintApp({
   };
 
   const resetPointerInput = () => {
+    setDoorMove(null);
+    setTool(current => current === 'move-doorway' ? 'select' : current);
     cancelWallMatch();
     panSelection.current = null;
     finishDrag(false);
@@ -1120,8 +1069,8 @@ export function BlueprintApp({
     routeVersion.current += 1;
     if (active && !showPlans) return;
     resetPointerInput();
-    setCalibration(null);
-    setMeasurement(null);
+
+
     setEditorPanel(null);
     setProjectMenu(false);
     setExportMenu(false);
@@ -1166,13 +1115,47 @@ export function BlueprintApp({
     }
     if (next === 'wall' && selected?.type === 'wall') wallDefaults.current = wallStyle(selected);
     resetPointerInput();
-    setCalibration(null);
-    setMeasurement(null);
+
+
     setTool(next);
     if (next !== 'select' && next !== 'pan') setSelectedId(null);
     setPhoneMode(editorMode(next));
     setEditorPanel(null);
   };
+
+  useEffect(() => {
+    if (doorMove && (doorMove.base !== project || previewOnly || !active || showPlans)) changeTool('select');
+  }, [doorMove, project, previewOnly, active, showPlans]);
+
+  function beginDoorMove() {
+    if (previewOnly) { requestEditing(); return; }
+    if (busy || !active || !hydrated) return;
+    changeTool('move-doorway');
+    setDoorMove({ step: 'start', style: 'single-left', base: projectRef.current, doorId: uid(), wallId: uid(), maskId: uid() });
+  }
+
+  function updateDoorMove(next, remember = true) {
+    if (next !== doorMove) setDoorMove(remember ? { ...next, previous: doorMove } : next);
+  }
+
+  function applyDoorMove() {
+    if (previewOnly) { requestEditing(); return; }
+    if (!showDoorPreview || !active || busy || projectRef.current !== doorMove.base) return;
+    if (drawnElements.length > MAX_ELEMENTS || countBrushPoints(drawnElements) > MAX_BRUSH_POINTS) {
+      setStatus('Project is full. Remove an object or brush stroke before moving the doorway.');
+      return;
+    }
+    const door = drawnElements.at(-1);
+    if (![door.x, door.y, door.widthInches, doorMove.b.x, doorMove.b.y].every(isProjectNumber)) {
+      setStatus('This doorway is outside the drawing limits.');
+      return;
+    }
+    pushHistory();
+    updateProject(p => ({ ...p, elements: drawnElements }));
+    changeTool('select');
+    setSelectedId(door.id);
+    setStatus('Doorway moved');
+  }
 
   function tryWalkthroughTool(action) {
     if (previewOnly && action !== 'pan' && action !== 'select') {
@@ -1240,8 +1223,8 @@ export function BlueprintApp({
     }));
     setSelectedId(null);
     setDraft(null);
-    setMeasurement(null);
-    setCalibration(null);
+
+
     setTool('select');
     setPhoneMode('view');
     setStatus('Canvas cleared');
@@ -1250,8 +1233,8 @@ export function BlueprintApp({
   const undo = () => {
     if (!history.length) return;
     resetPointerInput();
-    setCalibration(null);
-    setMeasurement(null);
+
+
     const snapshot = projectRef.current;
     setFuture((f) => [snapshot, ...f].slice(0, 50));
     setHistory((h) => h.slice(0, -1));
@@ -1263,8 +1246,8 @@ export function BlueprintApp({
   const redo = () => {
     if (!future.length) return;
     resetPointerInput();
-    setCalibration(null);
-    setMeasurement(null);
+
+
     const snapshot = projectRef.current;
     setHistory((h) => [...h, snapshot].slice(-50));
     setFuture((f) => f.slice(1));
@@ -1357,8 +1340,8 @@ export function BlueprintApp({
       if (e.key === 'Escape') {
         resetPointerInput();
         setSelectedId(null);
-        setCalibration(null);
-        setMeasurement(null);
+
+
         setProjectMenu(false);
       }
       if (!typing && unmodified) {
@@ -1368,7 +1351,6 @@ export function BlueprintApp({
           w: 'wall',
           l: 'line',
           t: 'text',
-          m: 'measure',
           e: 'erase',
         };
         if (shortcuts[e.key.toLowerCase()]) {
@@ -1507,6 +1489,11 @@ export function BlueprintApp({
     if (e.button !== 0 || busy || exporting || !hydrated) return;
     e.preventDefault();
     svgRef.current.setPointerCapture(e.pointerId);
+    if (doorMove) {
+      wallTap.current = e.isPrimary === false ? null : { id: e.pointerId, x: e.clientX, y: e.clientY,
+        elementId: e.target.closest?.('[data-element-id]')?.getAttribute('data-element-id') };
+      return;
+    }
     if (wallMatch) {
       if (e.isPrimary !== false) matchTap.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
       return;
@@ -1563,7 +1550,7 @@ export function BlueprintApp({
     }
     const linePrecision = tool === 'line' && e.shiftKey;
     const point =
-      linePrecision || tool === 'measure' || tool === 'dimension'
+      linePrecision
         ? raw
         : snapPoint(raw, project.elements, { grid: !e.shiftKey, align: true, magnet: true });
 
@@ -1572,24 +1559,17 @@ export function BlueprintApp({
       return;
     }
 
-    if (['wall', 'line', 'rect', 'measure', 'dimension'].includes(tool)) {
+    if (['wall', 'line', 'rect'].includes(tool)) {
       if (tool === 'wall') {
         setDraft(startWall(point, project.elements));
       } else {
         setDraft({ type: tool, a: point, b: point });
       }
-      if (tool === 'measure') setMeasurement(null);
       return;
     }
 
     if (tool === 'clean') {
       setDraft({ type: 'clean', a: raw, b: raw });
-      return;
-    }
-
-    if (tool === 'calibrate') {
-      if (!calibration) setCalibration({ a: raw, b: raw, stage: 1 });
-      else if (calibration.stage === 1) setCalibration({ ...calibration, b: raw, stage: 2 });
       return;
     }
 
@@ -1667,7 +1647,7 @@ export function BlueprintApp({
   };
 
   const handlePointerMove = (e) => {
-    if (useWallTaps) {
+    if (doorMove || useWallTaps) {
       const tap = wallTap.current;
       if (tap?.id === e.pointerId && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > TAP_SLOP) {
         wallTap.current = null;
@@ -1710,7 +1690,7 @@ export function BlueprintApp({
       if (drag?.kind === 'erase') extendBrush(drag, point);
       return;
     }
-    if (!draft && !drag && calibration?.stage !== 1) return;
+    if (!draft && !drag) return;
     if (drag?.origin && drag.before === projectRef.current &&
         Math.hypot(e.clientX - drag.origin.x, e.clientY - drag.origin.y) < DRAG_SLOP) return;
 
@@ -1743,26 +1723,22 @@ export function BlueprintApp({
       magnet: true,
     });
     if (draft && ['wall', 'line'].includes(draft.type)) setDraft((d) => ({ ...d, b: angledPoint }));
-    if (['measure', 'dimension'].includes(draft?.type)) setDraft((d) => ({ ...d, b: raw }));
     if (draft?.type === 'rect') setDraft((d) => ({ ...d, b: freePoint }));
     if (draft?.type === 'wall') {
-      const length = dist(draft.a, angledPoint) / project.unitsPerInch;
       setStatus(
         precisionWall
-          ? `Free precision · ${inchesLabel(length)} · release Shift to restore angle lock`
-          : `Angle lock ON · ${inchesLabel(length)} · hold Shift for free precision`,
+          ? `Free precision · release Shift to restore angle lock`
+          : `Angle lock ON · hold Shift for free precision`,
       );
     }
     if (draft?.type === 'line') {
-      const length = dist(draft.a, angledPoint) / project.unitsPerInch;
       setStatus(
         precisionLine
-          ? `Free line · ${inchesLabel(length)} · snapping bypassed while Shift is held`
-          : `Line snap ON · ${inchesLabel(length)} · hold Shift to bypass snapping`,
+          ? `Free line · snapping bypassed while Shift is held`
+          : `Line snap ON · hold Shift to bypass snapping`,
       );
     }
     if (draft?.type === 'clean') setDraft((d) => ({ ...d, b: raw }));
-    if (calibration?.stage === 1) setCalibration((c) => ({ ...c, b: raw }));
 
     if (previewOnly && drag?.kind === 'move') {
       dragRef.current = null;
@@ -1808,8 +1784,7 @@ export function BlueprintApp({
         });
         const patch = resizeWall(base, drag.handle, point, drag.start, project.unitsPerInch);
         updateElement(base.id, patch);
-        setStatus(drag.handle === 'thickness' ? `Wall thickness · ${fmt(patch.thicknessInches)} in`
-          : `Wall length · ${inchesLabel(dist((patch.a || base.a), (patch.b || base.b)) / project.unitsPerInch)}`);
+        setStatus(drag.handle === 'thickness' ? 'Wall thickness adjusted' : 'Wall endpoint moved');
       } else {
         const angle = (-(base.rotation || 0) * Math.PI) / 180;
         const dx = raw.x - (base.x || 0);
@@ -1866,6 +1841,18 @@ export function BlueprintApp({
   const handlePointerUp = (e) => {
     if (svgRef.current?.hasPointerCapture(e.pointerId))
       svgRef.current.releasePointerCapture(e.pointerId);
+    if (doorMove) {
+      const tap = wallTap.current;
+      wallTap.current = null;
+      if (tap?.id !== e.pointerId || e.isPrimary === false || busy || exporting || previewOnly ||
+          Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > TAP_SLOP) return;
+      const point = clientToWorld(e);
+      if (![point.x, point.y].every(isProjectNumber) || point.x < 0 || point.x > W || point.y < 0 || point.y > H) return;
+      const source = doorMove.step === 'start' && project.elements.find(el => el.id === tap.elementId && el.type === 'door');
+      const snap = doorMove.step === 'place' && nearestWallSnap(point, project.elements, 12 / Math.max(displayScale, 0.01));
+      updateDoorMove(markDoorway(doorMove, point, source, snap, project));
+      return;
+    }
     if (wallMatch) {
       const tap = matchTap.current;
       matchTap.current = null;
@@ -1924,12 +1911,6 @@ export function BlueprintApp({
       if (width > 3 && height > 3)
         addElement({ type: 'rect', x, y, width, height, strokeWidth: 2 });
     }
-    if (draft?.type === 'dimension' && dist(draft.a, draft.b) > 2)
-      addElement({ type: 'dimension', a: draft.a, b: draft.b });
-    if (draft?.type === 'measure' && dist(draft.a, draft.b) > 2) {
-      setMeasurement({ a: draft.a, b: draft.b });
-      setStatus(`Measured ${inchesLabel(dist(draft.a, draft.b) / project.unitsPerInch)}`);
-    }
     if (draft?.type === 'clean') {
       const x = Math.min(draft.a.x, draft.b.x),
         y = Math.min(draft.a.y, draft.b.y);
@@ -1945,7 +1926,7 @@ export function BlueprintApp({
   const handlePointerCancel = (e) => {
     if (tool === 'pan') {
       releasePanPointer(e.pointerId);
-    } else if (useWallTaps) {
+    } else if (doorMove || useWallTaps) {
       if (wallTap.current?.id === e.pointerId) wallTap.current = null;
     } else if (e.isPrimary !== false && (!dragRef.current || dragRef.current.pointerId === e.pointerId)) {
       resetPointerInput();
@@ -2026,7 +2007,7 @@ export function BlueprintApp({
         !(await ask({
           title: 'Replace the background?',
           message:
-            'Your drawn objects stay in place. Set scale again if the new plan has different dimensions. Undo restores the previous background.',
+            'Your drawn objects stay in place. Undo restores the previous background.',
           type: 'confirm',
           confirmLabel: 'Import plan',
         }))
@@ -2086,7 +2067,6 @@ export function BlueprintApp({
         background: dataUrl,
         showBackground: true,
         backgroundOpacity: 1,
-        calibrated: false,
       };
       if (previewOnly || showPlans) {
         const name = file.name.replace(/\.[^.]+$/, '').trim().slice(0, 100) || 'Untitled plan';
@@ -2210,35 +2190,32 @@ export function BlueprintApp({
       const normalized = normalizeBlueprintImport(parsed, project);
       if (normalized.elements.length + (importReplace ? 0 : project.elements.length) > MAX_ELEMENTS)
         throw new Error('This import would exceed 5,000 objects.');
-      validateProject({
-        ...project,
-        elements: normalized.elements,
-        unitsPerInch: normalized.unitsPerInch,
+      // The drawing factor belongs to the existing project. Appending a trace must
+      // keep its existing wall widths, symbols and historical dimension labels intact.
+      const unitsPerInch = importReplace ? normalized.unitsPerInch : project.unitsPerInch;
+      const ratio = normalized.unitsPerInch / unitsPerInch;
+      const imported = ratio === 1 ? normalized.elements : normalized.elements.map(element => {
+        const placed = { ...element };
+        for (const key of ['thicknessInches', 'widthInches', 'heightInches']) {
+          if (placed[key] !== undefined) placed[key] *= ratio;
+        }
+        return placed;
       });
+      const next = {
+        ...project,
+        name: String(normalized.name || '').trim() || project.name,
+        calibrated: importReplace ? false : project.calibrated,
+        unitsPerInch,
+        elements: importReplace ? imported : [...project.elements, ...imported],
+      };
+      validateProject(next);
       pushHistory();
-      updateProject((p) => ({
-        ...p,
-        calibrated: normalized.autoCalibrated === true,
-        name:
-          normalized.name && String(normalized.name).trim()
-            ? String(normalized.name).trim()
-            : p.name,
-        unitsPerInch: normalized.unitsPerInch,
-        elements: importReplace ? normalized.elements : [...p.elements, ...normalized.elements],
-      }));
+      updateProject(() => next);
       setSelectedId(null);
       setImportOpen(false);
       setImportError('');
       setImportCode('');
-      setStatus(
-        normalized.autoCalibrated
-          ? `Imported ${normalized.elements.length} editable objects · auto-scaled from blueprint dimensions`
-          : normalized.pixelAnchored
-            ? `Imported ${normalized.elements.length} editable objects · aligned to the uploaded blueprint image`
-            : normalized.normalized
-              ? `Imported ${normalized.elements.length} editable objects · calibrate scale if exact measurements are needed`
-              : `Imported ${normalized.elements.length} editable objects`,
-      );
+      setStatus(`Imported ${normalized.elements.length} editable objects`);
     } catch (err) {
       console.error(err);
       setImportError(err?.message || 'Could not read that project JSON.');
@@ -2259,20 +2236,11 @@ export function BlueprintApp({
     const onSamePage = captureRoute();
     let svgUrl = null;
     try {
-      const layout =
-        kind === 'pdf'
-          ? pdfLayout({
-              paper,
-              scale: printScale,
-              unitsPerInch: project.unitsPerInch,
-              calibrated: project.calibrated,
-            })
-          : null;
+      const layout = kind === 'pdf' ? pdfLayout({ paper }) : null;
       setExporting(true);
       setStatus(kind === 'pdf' ? 'Preparing PDF…' : 'Preparing PNG…');
 
-      // Give React a frame to render the clean export state without selection handles,
-      // temporary measurements, calibration marks, or an in-progress drawing.
+      // Wait for React to hide selection handles and unfinished edits before rendering.
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       if (!onSamePage()) return;
 
@@ -2341,9 +2309,7 @@ export function BlueprintApp({
         pdf.setFontSize(8);
         pdf.setTextColor(90);
         pdf.text(
-          printScale === 'fit'
-            ? 'Fit to page - not to a fixed drawing scale'
-            : `Scale 1:${printScale} - print at 100%, actual size`,
+          'Reference drawing - fit to page, not to scale',
           0.5,
           layout.pageHeight - 0.2,
         );
@@ -2415,8 +2381,8 @@ export function BlueprintApp({
     setExportMenu(false);
     setImportOpen(false);
     setGuideMode(null);
-    setCalibration(null);
-    setMeasurement(null);
+
+
     setTool(compact ? 'pan' : 'select');
     setPhoneMode('view');
     setEditorPanel(null);
@@ -2584,84 +2550,6 @@ export function BlueprintApp({
     }
   };
 
-  const applyExactLength = (value) => {
-    if (!selected || selected.type !== 'wall') return;
-    const inches = parseLengthInput(value);
-    if (!(inches > 0) || !Number.isFinite(inches)) {
-      setStatus('Enter a valid positive length');
-      return false;
-    }
-    if (Math.abs(inches - wallLengthInches) < 0.001) return;
-    const a = selected.a,
-      b = selected.b;
-    const angle = Math.atan2(b.y - a.y, b.x - a.x);
-    const units = inches * project.unitsPerInch;
-    const end = { x: a.x + Math.cos(angle) * units, y: a.y + Math.sin(angle) * units };
-    if (!isProjectNumber(end.x) || !isProjectNumber(end.y)) {
-      setStatus('Choose a shorter wall length');
-      return false;
-    }
-    pushHistory();
-    updateElement(selected.id, { b: end });
-  };
-
-  const finishCalibration = async () => {
-    if (!calibration || calibration.stage !== 2) return;
-
-    const canvasDistance = dist(calibration.a, calibration.b);
-    if (!Number.isFinite(canvasDistance) || canvasDistance <= 0) {
-      await ask({
-        title: 'Choose different points',
-        message: 'The two points must be a measurable distance apart.',
-        type: 'notice',
-      });
-      setCalibration(null);
-      setStatus('Blueprint scale not changed');
-      return;
-    }
-
-    const currentDistance = canvasDistance / project.unitsPerInch;
-    const value = await ask({
-      title: 'Set blueprint scale',
-      message: 'Enter the real distance between your two points. Use inches or feet and inches.',
-      label: 'Known distance',
-      initialValue: inchesLabel(currentDistance),
-      confirmLabel: 'Set scale',
-    });
-    if (value === null) return;
-
-    const inches = parseLengthInput(value);
-    if (!Number.isFinite(inches) || inches <= 0) {
-      await ask({
-        title: 'Check that distance',
-        message: 'Enter a positive distance, such as 120 or 10 feet.',
-        type: 'notice',
-      });
-      setStatus('Blueprint scale not changed');
-      return;
-    }
-
-    const nextUnitsPerInch = canvasDistance / inches;
-    if (!isProjectScale(nextUnitsPerInch)) {
-      await ask({
-        title: 'Could not set scale',
-        message: 'Use two different points and enter a realistic distance, such as 120 inches.',
-        type: 'notice',
-      });
-      setStatus('Blueprint scale not changed');
-      return;
-    }
-
-    pushHistory();
-    updateProject((p) => ({ ...p, unitsPerInch: nextUnitsPerInch, calibrated: true }));
-    setCalibration(null);
-    setTool('select');
-    setStatus(`Blueprint scale set · ${fmt(nextUnitsPerInch)} units/in`);
-  };
-
-  const wallLengthInches =
-    selected?.type === 'wall' ? dist(selected.a, selected.b) / project.unitsPerInch : null;
-
   const toolPalette = (
     <>
       <Section title="View">
@@ -2679,12 +2567,6 @@ export function BlueprintApp({
         </button>
         <ToolButton tool={tool} id="text" setTool={changeTool} label="Text" />
       </Section>
-      <Section title="Measure">
-        <ToolChoices choices={MEASUREMENT_TOOLS} tool={tool} setTool={changeTool} />
-        {calibration?.stage === 2 && (
-          <button className="wide primary" onClick={finishCalibration}>Set real distance</button>
-        )}
-      </Section>
       <div className="paletteActions">
         <button className="tool" aria-haspopup="dialog" onClick={() => openToolPanel('tools')}>
           <Icon name="more" size={17} /> More tools
@@ -2699,18 +2581,15 @@ export function BlueprintApp({
   const objectProperties = selected && previewOnly ? (
     <div className="propStack">
       <div className="badge">{selected.type.toUpperCase()}</div>
-      {wallLengthInches !== null && <div className="metric"><span>Wall length</span><strong>{inchesLabel(wallLengthInches)}</strong></div>}
       <button className="wide" onClick={requestEditing}>{owner ? 'Unlock editing' : 'Sign up to edit'}</button>
     </div>
   ) : selected ? (
     <Properties
       key={selected.id}
       selected={selected}
-      project={project}
+      drawingUnits={project.unitsPerInch}
       updateElement={commitElement}
       deleteSelected={deleteSelected}
-      wallLengthInches={wallLengthInches}
-      applyExactLength={applyExactLength}
       onMatchWall={beginWallMatch}
       matching={Boolean(wallMatch)}
     />
@@ -2746,14 +2625,6 @@ export function BlueprintApp({
           </label>
         </div>
       )}
-      <div className="metric">
-        <span>Scale</span>
-        <strong>{project.calibrated ? 'Calibrated' : 'Not set'}</strong>
-      </div>
-      <button className="wide" onClick={() => changeTool('calibrate')}>
-        <Icon name="calibrate" /> Set blueprint scale
-      </button>
-      <p className="hint">Use a known distance to set the scale.</p>
       <details className="projectUtilities">
         <summary>Project actions</summary>
         <div className="projectUtilityButtons">
@@ -2777,10 +2648,6 @@ export function BlueprintApp({
   if (previewOnly) toolHint = tool === 'pan' ? 'Drag to pan. Pinch to zoom.' : 'Tap or click an object to select it.';
   if (useWallTaps) {
     toolHint = awaitingWallEnd ? 'Tap the other endpoint.' : 'Tap the first endpoint.';
-  } else if (tool === 'calibrate') {
-    toolHint = calibration?.stage === 2
-      ? 'Enter the known distance.'
-      : 'Tap two points a known distance apart.';
   } else if (!toolHint) {
     toolHint = tool.startsWith('door-')
       ? 'Choose a spot on the plan for the door.'
@@ -2788,6 +2655,7 @@ export function BlueprintApp({
   }
 
   if (wallMatch) toolHint = 'Tap an existing wall to match its color and width.';
+  if (doorMove) toolHint = 'Move a doorway';
 
   const fileInputs = (
     <>
@@ -2986,7 +2854,7 @@ export function BlueprintApp({
           <button
             aria-label="Export"
             className="primary"
-            disabled={exporting || busy || !hydrated}
+            disabled={exporting || busy || !hydrated || !!doorMove}
             onClick={previewOnly ? requestEditing : () => setExportMenu(true)}
           >
             <Icon name="download" />
@@ -2999,10 +2867,9 @@ export function BlueprintApp({
         {!compact && <aside className="sidebar leftbar" aria-label="Drawing tools">{toolPalette}</aside>}
 
         <main className="canvasArea" aria-label="Drawing workspace">
-          <div className="canvasCaption">
-            {!compact && <span key={tool} className="currentToolHint">{toolHint}</span>}
-            <span>{project.calibrated ? 'Scale calibrated' : 'Scale not calibrated'}</span>
-          </div>
+          {!compact && <div className="canvasCaption">
+            <span key={tool} className="currentToolHint">{toolHint}</span>
+          </div>}
           {!originalLocked && !project.background && !project.elements.length && !busy && ['select', 'pan'].includes(tool) && (
             <div className="canvasWelcome">
               <h2>{previewOnly ? 'Upload or paste your floor plan' : 'Start with a plan'}</h2>
@@ -3084,7 +2951,7 @@ export function BlueprintApp({
                   mask={backgroundEdits.length ? 'url(#blueprintBackgroundMask)' : undefined}
                 />
               )}
-              {project.elements
+              {drawnElements
                 .filter((e) => ['wall', 'line', 'rect', 'dimension', 'ellipse'].includes(e.type))
                 .map((el) => (
                   <Element
@@ -3097,7 +2964,7 @@ export function BlueprintApp({
                     displayScale={displayScale}
                   />
                 ))}
-              {project.elements
+              {drawnElements
                 .filter((e) => ['door', 'window'].includes(e.type))
                 .map((el) => (
                   <Element
@@ -3110,7 +2977,7 @@ export function BlueprintApp({
                     displayScale={displayScale}
                   />
                 ))}
-              {project.elements
+              {drawnElements
                 .filter((e) => e.type === 'symbol')
                 .map((el) => (
                   <Element
@@ -3123,7 +2990,7 @@ export function BlueprintApp({
                     displayScale={displayScale}
                   />
                 ))}
-              {project.elements
+              {drawnElements
                 .filter((e) => e.type === 'text')
                 .map((el) => (
                   <Element
@@ -3140,28 +3007,11 @@ export function BlueprintApp({
                 <SelectionHandles el={selected} project={project} onResizeDown={startResize}
                   displayScale={displayScale} onOpenProperties={() => setEditorPanel('properties')} />
               )}
-              {!exporting && measurement && (
-                <MeasureOverlay measurement={measurement} project={project} />
-              )}
+              {!exporting && doorMove && <DoorwayMarks move={doorMove} />}
               {!exporting && draft && <Draft draft={draft} project={project} zoom={zoom} wallAppearance={wallDefaults.current} />}
               {!exporting && tool === 'erase' && brushPoint && (
                 <circle data-editor-only pointerEvents="none" cx={brushPoint.x} cy={brushPoint.y} r={eraseSize / 2}
                   fill="none" stroke={DRAWING_ACCENT} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-              )}
-              {!exporting && calibration && (
-                <g pointerEvents="none">
-                  <line
-                    x1={calibration.a.x}
-                    y1={calibration.a.y}
-                    x2={calibration.b.x}
-                    y2={calibration.b.y}
-                    stroke="#e5484d"
-                    strokeWidth="4"
-                    strokeDasharray="10 8"
-                  />
-                  <circle cx={calibration.a.x} cy={calibration.a.y} r="7" fill="#e5484d" />
-                  <circle cx={calibration.b.x} cy={calibration.b.y} r="7" fill="#e5484d" />
-                </g>
               )}
             </svg>
           </div>
@@ -3201,26 +3051,24 @@ export function BlueprintApp({
           </aside>
         )}
       </div>
-      {compact && (
+      {doorMove && <DoorwayControls move={doorMove} onUpdate={updateDoorMove} onBack={() => setDoorMove(doorMove.previous)}
+        onCancel={() => changeTool('select')} onApply={applyDoorMove} />}
+      {compact && !doorMove && (
         <PhoneControls
           mode={phoneMode}
           tool={tool}
-          calibrated={project.calibrated}
           selected={Boolean(selected)}
           hint={toolHint}
           onCancelWall={wallMatch ? cancelWallMatch : awaitingWallEnd ? () => changeTool('wall') : undefined}
-          canSetDistance={calibration?.stage === 2}
           onTool={changeTool}
           onMode={previewOnly ? setPhoneMode : undefined}
           onOpen={openToolPanel}
-          onSetDistance={finishCalibration}
         />
       )}
       <footer className="editorStatus">
         <span role="status">{status}</span>
         <span>
-          {project.elements.length - backgroundEdits.length} objects ·{' '}
-          {project.calibrated ? 'Calibrated' : 'Set scale for measurements'}
+          {project.elements.filter(el => el.type !== 'clean' && el.type !== 'erase').length} objects
         </span>
       </footer>
       {editorPanel && (
@@ -3230,7 +3078,10 @@ export function BlueprintApp({
           onClose={() => setEditorPanel(null)}
         >
           {editorPanel === 'doors' && (
-            <div className="sheetTools"><ToolChoices choices={DOORS} tool={tool} setTool={changeTool} /></div>
+            <>
+              <button type="button" className="doorwayStart" onClick={beginDoorMove}><Icon name="door-single-left" size={18} />Move a doorway</button>
+              <div className="sheetTools"><ToolChoices choices={DOORS} tool={tool} setTool={changeTool} /></div>
+            </>
           )}
           {editorPanel === 'cleanup' && (
             <>
@@ -3252,7 +3103,6 @@ export function BlueprintApp({
             <>
               <Section title="Draw">
                 <ToolChoices choices={OTHER_DRAW_TOOLS} tool={tool} setTool={changeTool} />
-                <ToolButton tool={tool} id="dimension" setTool={changeTool} label="Dimension" />
               </Section>
               <Section title="Fixtures">
                 <ToolChoices choices={FIXTURES} tool={tool} setTool={changeTool} />
@@ -3279,7 +3129,7 @@ export function BlueprintApp({
         >
           <details className="printSettings">
             <summary>PDF print settings</summary>
-            <div className="sizeGrid">
+            <div>
               <label className="field">
                 <span>PDF sheet</span>
                 <select value={paper} onChange={(e) => setPaper(e.target.value)}>
@@ -3288,17 +3138,8 @@ export function BlueprintApp({
                   <option value="a3">A3 · landscape</option>
                 </select>
               </label>
-              <label className="field">
-                <span>PDF scale</span>
-                <select value={printScale} onChange={(e) => setPrintScale(e.target.value)}>
-                  <option value="fit">Fit to page</option>
-                  <option value="24">1:24 · ½ inch = 1 foot</option>
-                  <option value="48">1:48 · ¼ inch = 1 foot</option>
-                  <option value="96">1:96 · ⅛ inch = 1 foot</option>
-                </select>
-              </label>
             </div>
-            <p className="hint">For a fixed drawing scale, calibrate the plan and print at 100%.</p>
+            <p className="hint">The drawing fits the selected sheet for review.</p>
           </details>
           <div className="modalActions exportActions">
             <button
@@ -3356,7 +3197,7 @@ export function BlueprintApp({
               setImportCode(e.target.value);
               setImportError('');
             }}
-            placeholder={'Paste JSON here…\n\n{"version":1,"units":"inches","elements":[…]}'}
+            placeholder={'Paste JSON here…\n\n{"version":2,"units":"normalized","elements":[…]}'}
           />
           <label className="replaceCheck">
             <input
@@ -3380,8 +3221,7 @@ export function BlueprintApp({
             </button>
           </div>
           <div className="modalFootnote">
-            AI tracing can be approximate. If the source image has no reliable dimensions, use
-            normalized coordinates and then <b>Set blueprint scale</b>.
+            Check the traced objects against the original drawing before sharing.
           </div>
         </Modal>
       )}
@@ -3617,10 +3457,6 @@ function SelectionHandles({ el, project, onResizeDown, displayScale = 1, onOpenP
         {handle('a', el.a.x, el.a.y, 'Resize wall start', 'move')}
         {handle('b', el.b.x, el.b.y, 'Resize wall end', 'move')}
         {handle('thickness', thickness.x, thickness.y, 'Resize wall thickness', 'ns-resize')}
-        <text x={thickness.x + 14 / scale} y={thickness.y + 4 / scale} fontSize={12 / scale}
-          fill={DRAWING_ACCENT} stroke="#fff" strokeWidth={3 / scale} paintOrder="stroke" fontWeight="600">
-          {fmt(wallStyle(el).thicknessInches)} in
-        </text>
       </g>
     );
   }
@@ -3971,30 +3807,6 @@ function Draft({ draft, project, zoom, wallAppearance }) {
         strokeWidth="2"
       />
     );
-  if (draft.type === 'measure' || draft.type === 'dimension') {
-    const inches = dist(draft.a, draft.b) / project.unitsPerInch;
-    const mx = (draft.a.x + draft.b.x) / 2,
-      my = (draft.a.y + draft.b.y) / 2;
-    return (
-      <g pointerEvents="none">
-        <line
-          x1={draft.a.x}
-          y1={draft.a.y}
-          x2={draft.b.x}
-          y2={draft.b.y}
-          stroke={DRAWING_ACCENT}
-          strokeWidth="3"
-          strokeDasharray="8 6"
-        />
-        <circle cx={draft.a.x} cy={draft.a.y} r="5" fill={DRAWING_ACCENT} />
-        <circle cx={draft.b.x} cy={draft.b.y} r="5" fill={DRAWING_ACCENT} />
-        <rect x={mx - 52} y={my - 31} width="104" height="26" rx="6" fill="#fff" stroke={DRAWING_ACCENT} />
-        <text x={mx} y={my - 13} textAnchor="middle" fill="#111827" fontWeight="700" fontSize="17">
-          {inchesLabel(inches)}
-        </text>
-      </g>
-    );
-  }
   if (draft.type === 'clean')
     return (
       <rect
@@ -4010,30 +3822,6 @@ function Draft({ draft, project, zoom, wallAppearance }) {
       />
     );
   return null;
-}
-
-function MeasureOverlay({ measurement, project }) {
-  const inches = dist(measurement.a, measurement.b) / project.unitsPerInch;
-  const mx = (measurement.a.x + measurement.b.x) / 2,
-    my = (measurement.a.y + measurement.b.y) / 2;
-  return (
-    <g pointerEvents="none">
-      <line
-        x1={measurement.a.x}
-        y1={measurement.a.y}
-        x2={measurement.b.x}
-        y2={measurement.b.y}
-        stroke={DRAWING_ACCENT}
-        strokeWidth="3"
-      />
-      <circle cx={measurement.a.x} cy={measurement.a.y} r="5" fill={DRAWING_ACCENT} />
-      <circle cx={measurement.b.x} cy={measurement.b.y} r="5" fill={DRAWING_ACCENT} />
-      <rect x={mx - 56} y={my - 31} width="112" height="27" rx="6" fill="#fff" stroke={DRAWING_ACCENT} />
-      <text x={mx} y={my - 13} textAnchor="middle" fill="#111827" fontWeight="800" fontSize="17">
-        {inchesLabel(inches)}
-      </text>
-    </g>
-  );
 }
 
 function symbolLabel(symbol) {
@@ -4099,11 +3887,9 @@ function WallColorInput({ value, onCommit }) {
 
 function Properties({
   selected,
-  project,
+  drawingUnits,
   updateElement,
   deleteSelected,
-  wallLengthInches,
-  applyExactLength,
   onMatchWall,
   matching,
 }) {
@@ -4114,28 +3900,13 @@ function Properties({
       {selected.type === 'wall' && (
         <>
           <label className="field">
-            <span>Exact wall length</span>
-            <input
-              key={selected.id + fmt(wallLengthInches)}
-              defaultValue={inchesLabel(wallLengthInches)}
-              placeholder={`8' 10" or 106`}
-              onBlur={(e) => {
-                if (applyExactLength(e.target.value) === false)
-                  e.target.value = inchesLabel(wallLengthInches);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') e.currentTarget.blur();
-              }}
-            />
-          </label>
-          <label className="field">
-            <span>Wall thickness (inches)</span>
+            <span>Wall thickness (px)</span>
             <NumberInput
-              value={selected.thicknessInches || 4.5}
-              min={0.25}
-              step="0.25"
-              max={120}
-              onCommit={(v) => set('thicknessInches', v)}
+              value={(selected.thicknessInches || 4.5) * drawingUnits}
+              min={0.25 * drawingUnits}
+              step="any"
+              max={120 * drawingUnits}
+              onCommit={(pixels) => set('thicknessInches', pixels / drawingUnits)}
             />
           </label>
           <label className="field wallColorField">
@@ -4144,7 +3915,7 @@ function Properties({
           </label>
           <button className="wide" onClick={onMatchWall}>{matching ? 'Cancel matching' : 'Match another wall'}</button>
           <p className="hint compactHint">Drag the end handles to change length. Drag the middle handle to change thickness.</p>
-          <p className="hint compactHint">Match copies color and visual width. Set scale for accurate inches.</p>
+          <p className="hint compactHint">Match copies the other wall’s color and thickness.</p>
         </>
       )}
       {['door', 'window'].includes(selected.type) && (
@@ -4166,22 +3937,15 @@ function Properties({
             </label>
           )}
           <label className="field">
-            <span>Width (inches)</span>
-            <NumberInput
-              value={selected.widthInches || (selected.type === 'door' ? 36 : 48)}
-              min={1}
-              onCommit={(v) => set('widthInches', v)}
-            />
+            <span>Drawing width (px)</span>
+            <NumberInput value={(selected.widthInches || 36) * drawingUnits} min={drawingUnits} step="any"
+              onCommit={(pixels) => set('widthInches', pixels / drawingUnits)} />
           </label>
           {selected.type === 'window' && (
             <label className="field">
-              <span>Height / wall depth (inches)</span>
-              <NumberInput
-                value={selected.heightInches || 4.5}
-                min={0.25}
-                step="0.25"
-                onCommit={(v) => set('heightInches', v)}
-              />
+              <span>Drawing depth (px)</span>
+              <NumberInput value={(selected.heightInches || 4.5) * drawingUnits} min={0.25 * drawingUnits} step="any"
+                onCommit={(pixels) => set('heightInches', pixels / drawingUnits)} />
             </label>
           )}
           <label className="field">
@@ -4205,6 +3969,7 @@ function Properties({
             <input
               key={selected.id}
               defaultValue={selected.text || ''}
+              placeholder="Room name, note, or a known measurement"
               maxLength={2000}
               onBlur={(e) => set('text', e.target.value)}
               onKeyDown={(e) => {
@@ -4231,20 +3996,14 @@ function Properties({
           <div className="objectName">{symbolLabel(selected.symbol)}</div>
           <div className="sizeGrid">
             <label className="field">
-              <span>Width (in)</span>
-              <NumberInput
-                value={selected.widthInches || 24}
-                min={1}
-                onCommit={(v) => set('widthInches', v)}
-              />
+              <span>Drawing width (px)</span>
+              <NumberInput value={(selected.widthInches || 24) * drawingUnits} min={drawingUnits} step="any"
+                onCommit={(pixels) => set('widthInches', pixels / drawingUnits)} />
             </label>
             <label className="field">
-              <span>Height (in)</span>
-              <NumberInput
-                value={selected.heightInches || 24}
-                min={1}
-                onCommit={(v) => set('heightInches', v)}
-              />
+              <span>Drawing height (px)</span>
+              <NumberInput value={(selected.heightInches || 24) * drawingUnits} min={drawingUnits} step="any"
+                onCommit={(pixels) => set('heightInches', pixels / drawingUnits)} />
             </label>
           </div>
           <label className="field">
