@@ -204,7 +204,7 @@ function WorkflowComparison() {
           <ul>{oldWay.map((text) => <li key={text}><Icon name="close" size={23} /><span>{text}</span></li>)}</ul>
         </div>
         <div className="workflowCard workflowCardBlueprint">
-          <h3>With Blueprint</h3>
+          <h3>With editfloorplans.com</h3>
           <ul>{withBlueprint.map((text) => <li key={text}><Icon name="check" size={23} /><span>{text}</span></li>)}</ul>
         </div>
       </div>
