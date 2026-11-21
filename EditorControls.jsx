@@ -1,5 +1,6 @@
 import React from 'react';
 import { Icon } from './ui.jsx';
+import { EXTRA_FIXTURES } from './fixtures.jsx';
 
 export const DOORS = [
   ['door-single-left', 'Single left'],
@@ -20,6 +21,7 @@ export const FIXTURES = [
   ['washerdryer', 'Washer / dryer'],
   ['counter', 'Counter'],
   ['stove', 'Stove'],
+  ...EXTRA_FIXTURES.map(({ id, label }) => [id, label]),
 ];
 
 export function editorMode(tool) {
