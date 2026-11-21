@@ -146,10 +146,10 @@ export default function Root() {
   const showAuthPage = route === 'signIn' || route === 'resetPassword';
   const showTrial = route === 'trial';
 
-  async function requestEditing() {
+  async function requestEditing(plan) {
     const location = window.location.href;
     const trigger = document.activeElement;
-    const ready = await preview.prepareNavigation();
+    const ready = await preview.prepareNavigation(plan);
     if (ready && window.location.href === location) {
       editOrigin.current = { location, trigger };
       navigateTo(owner ? `/${ACCESS_HASH}` : EDITOR_SIGN_UP);
@@ -369,20 +369,21 @@ export default function Root() {
               {account.loading || preview.restoring ? (
                 <div className="loadingScreen" role="status">Opening your workspace…</div>
               ) : <Editor
-                key={`${owner || 'guest'}:${previewOnly ? 'preview' : 'edit'}`}
+                key={`${owner || 'guest'}:editor`}
                 active={showWorkspace && !editorDialog}
                 previewOnly={previewOnly}
+                freeEditing
                 previewPlan={preview.plan}
                 onPreviewPlanChange={preview.setPlan}
                 onPreviewPlanOpened={preview.clear}
                 onRequestEditing={requestEditing}
-                repository={previewOnly ? null : repository}
+                repository={repository}
                 projectAccess={projectAccess}
                 lockedProjectIds={policy?.lockedProjectIds}
                 owner={owner}
                 showMobileTip={!previewOnly}
                 showFirstUseGuide={!previewOnly}
-                canDownload={policy?.paymentsRequired ? access.canDownload : undefined}
+                canDownload={requireSignIn ? (id => owner ? access.canDownload(id) : Promise.resolve(false)) : undefined}
                 authBusy={account.busy}
                 onRegisterSave={registerSave}
                 showRecent={showRecentPlans}
@@ -405,9 +406,6 @@ export default function Root() {
           {editorSignIn ? (
             <SignInPage {...signInProps} initialMode={createFromEditor ? 'create' : 'signIn'}
               editorEntry trialOffer={trialOffer} previewWarning={preview.redirectWarning}
-              onClose={closeEditorDialog} />
-          ) : policy.canStartTrial ? (
-            <TrialPage account={account} access={access} offer={trialOffer}
               onClose={closeEditorDialog} />
           ) : (
             <ExpiredTrialPlans expired={Boolean(policy.trialEndsAt)} onClose={closeEditorDialog}
