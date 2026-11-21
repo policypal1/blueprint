@@ -231,8 +231,8 @@ function HomeContent({ showTrial, showVideo }) {
       </section>
       <section className="homeBeforeAfter" aria-label="Before and after floor plan">
         <div className="comparisonPair">
-          <figure><figcaption>Before</figcaption><img src="/planpatch-original.webp" alt="Original laundry and hall floor plan with the old doorway" width="1000" height="650" /></figure>
-          <figure><figcaption>After</figcaption><img src="/planpatch-revised.webp" alt="Revised floor plan with the doorway moved to clear the hall" width="1000" height="650" /></figure>
+          <figure><figcaption>Before</figcaption><img src="/planpatch-original.webp" alt="Original floor plan with the existing doorway" width="1000" height="650" /></figure>
+          <figure><figcaption>After</figcaption><img src="/planpatch-revised.webp" alt="Revised floor plan showing the changed doorway" width="1000" height="650" /></figure>
         </div>
         <p>Same floor plan. New doorway.</p>
         <a className="button" href="/#/editor/sample">Try the editor</a>
