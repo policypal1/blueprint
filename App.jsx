@@ -396,7 +396,7 @@ function normalizeBlueprintImport(raw, projectState) {
         washerdryer: [30, 18],
         counter: [48, 24],
         stove: [30, 26],
-      }[symbol];
+      }[symbol] || (() => { const item = EXTRA_FIXTURES.find(item => item.id === symbol); return [item.width,item.height]; })();
       neutral.push({
         type: 'symbol',
         symbol,
@@ -2476,11 +2476,12 @@ export function BlueprintApp({
   const checkedSampleIntro = useRef(false);
   useEffect(() => {
     if (!freeEditing || !active || !hydrated || busy || sampleRequested || checkedSampleIntro.current) return;
+    if (showPlans && repository && cloud.listStatus !== 'ready') return;
     checkedSampleIntro.current = true;
     try { if (localStorage.getItem('editfloorplans-sample-guide:' + (owner || 'guest'))) return; } catch {}
-    if (project.background || project.elements.length || projects.some(plan => plan.background || plan.elements.length) || cloud.plans?.length) return;
+    if (project.background || project.elements.length || projects.some(plan => plan.background || plan.elements.length) || cloud.list?.length) return;
     void loadSample();
-  }, [freeEditing, active, hydrated, busy, sampleRequested]);
+  }, [freeEditing, active, hydrated, busy, sampleRequested, cloud.listStatus]);
   useEffect(() => {
     if (!tour) return;
     if (tour.step === 5 || tour.step === 7) setEditorPanel('tools');
