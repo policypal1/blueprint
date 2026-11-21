@@ -1344,6 +1344,19 @@ test('guest landing opens the editor and exposes the same policy links in the mo
   assert.doesNotMatch(screen.getByRole('main').textContent, /free trial|no credit card needed/i);
 });
 
+test('following the mobile FAQ fragment preserves the browser scroll position', async (t) => {
+  window.history.replaceState(null, '', '/');
+  render(React.createElement(Root));
+  const heading = await screen.findByRole('heading', { name: 'FAQs' });
+  const scroll = t.mock.method(window, 'scrollTo', () => {});
+  await act(async () => {
+    window.history.pushState(null, '', '#' + heading.id);
+    window.dispatchEvent(new window.Event('hashchange'));
+  });
+  assert.equal(scroll.mock.callCount(), 0);
+  window.history.replaceState(null, '', '/');
+});
+
 test('the PDF editing guide shows the video followed by three steps', () => {
   render(React.createElement(Marketing, { page: 'guide', trialOffer: true }));
   const main = screen.getByRole('main');
