@@ -73,7 +73,9 @@ export default function RevisionDemo({ embedded = false }) {
                 <button key={name} type="button" disabled={!prompt} data-current={position === frame.tool}
                   data-next-action={prompt} aria-label={`Choose ${name}`} onClick={(event) => go(index + 1, event)}>
                   <Icon name={icon} size={18} /><span>{name}</span>
-                  {index === 0 && prompt && <span className="revisionToolCue" aria-hidden="true">Start here</span>}
+                  {index === 0 && prompt && <span className="revisionToolCue" aria-hidden="true">
+                    <Icon name="back" size={13} />Start here
+                  </span>}
                 </button>
               );
             })}
