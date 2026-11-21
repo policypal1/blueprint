@@ -60,8 +60,8 @@ export function SignInPage({
   const creating = mode === 'create';
   const credentialForm = mode === 'signIn' || creating;
   const waiting = account.loading || Boolean(pending);
-  const title = creating && editorEntry && onClose ? 'Create an account to edit this plan'
-    : editorEntry && mode === 'signIn' ? 'Sign in to use the editor' : copy.title;
+  const title = creating && editorEntry && onClose ? 'Create an account to download your plan'
+    : editorEntry && mode === 'signIn' ? 'Sign in to download your plan' : copy.title;
 
   function selectMode(next) {
     setMode(next);
@@ -166,9 +166,7 @@ export function SignInPage({
       {account.loading || account.client ? (
         <>
           {creating && editorEntry && onClose && (
-            <p className="editorSignUpOffer">{trialOffer
-              ? <>New accounts get a <strong>3-day free trial</strong>. No credit card needed.</>
-              : 'Choose editing access after you create your account.'}</p>
+            <p className="editorSignUpOffer">Your edits are saved in this browser. Choose a plan after signing in to unlock a clean download.</p>
           )}
           {previewWarning && !error && <p role="status">{previewWarning}</p>}
           {mode === 'signIn' && account.emailConfirmed && (
@@ -229,7 +227,7 @@ export function SignInPage({
           <div className="authAlternate">
             {creating && editorEntry && <span>Already have an account?</span>}
             {mode === 'signIn' && (
-              <span>{trialOffer && editorEntry ? '3-day free trial. No credit card needed.' : `New to ${PRODUCT_NAME}?`}</span>
+              <span>{editorEntry ? 'Keep your edits. Unlock a clean download.' : `New to ${PRODUCT_NAME}?`}</span>
             )}
             <button className="authTextButton" type="button" disabled={waiting}
               onClick={() => selectMode(mode === 'signIn' ? 'create' : 'signIn')}>
