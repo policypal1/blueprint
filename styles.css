@@ -553,6 +553,9 @@ p {
 .billingChoice p { font-size: 14px; }
 .billingChoicePrice { display: flex; align-items: baseline; gap: 6px; }
 .billingChoicePrice strong { color: var(--ink); font-size: 30px; font-weight: 600; letter-spacing: -0.045em; line-height: 1.2; }
+.monthlyDetails { width: 100%; border-top: 1px solid var(--line); }
+.monthlyDetails summary { padding: 10px 0; cursor: pointer; font-size: 14px; font-weight: 600; }
+.monthlyDetails[open] p { padding-bottom: 6px; }
 .billingChoice > button { min-width: 0; min-height: 44px; width: 100%; margin-top: 6px; }
 .billingNotice { margin-block: 14px 0; }
 .deletionCard { border-color: #e9c8bd; }
@@ -2167,3 +2170,33 @@ hr {
 .privacyActions button { flex: 1 1 auto; }
 .privacyActions button[aria-pressed="true"] { border-color: var(--accent); }
 @media print { .privacyChoices { display: none; } }
+
+.doorwayStart {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  border-color: var(--accent);
+}
+.doorwayControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 10px clamp(12px, 3vw, 36px);
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+.doorwayControls strong, .doorwayControls [role="status"] { display: block; }
+.doorwayControls [role="status"] { font-size: 14px; }
+.doorwayButtons { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.compactEditor .doorwayControls { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+.compactEditor .doorwayButtons :is(button, select) { min-height: 44px; }
+@media (orientation: landscape) and (max-height: 520px) {
+  .compactEditor .doorwayControls {
+    grid-column: 2; grid-row: 2;
+    align-self: stretch; align-content: start;
+    overflow: auto; border-left: 1px solid var(--line);
+  }
+}
