@@ -388,7 +388,12 @@ test('landing and pricing explain the product and lead to the editor', async () 
   assert.equal(hero.nextElementSibling, demo);
   assert.equal(screen.queryByText('Watch the editor video'), null);
   assert.equal(document.querySelector('video'), null);
-  assert.equal(demo.nextElementSibling, pricing.closest('section'));
+  const comparison = screen.getByRole('region', { name: 'A simpler way to revise a floor plan' });
+  assert.equal(demo.nextElementSibling, comparison);
+  assert.equal(comparison.nextElementSibling, pricing.closest('section'));
+  assert.equal(within(comparison).getAllByRole('listitem').length, 8);
+  assert.equal(screen.getByRole('link', { name: 'See single project pricing' }).getAttribute('href'), '/pricing');
+  assert.equal(screen.getByRole('link', { name: 'See monthly access pricing' }).getAttribute('href'), '/pricing');
   const cleanUp = within(demo).getByRole('button', { name: 'Choose Clean up' });
   assert.ok(within(cleanUp).getByText('Start here'));
   fireEvent.click(cleanUp);
