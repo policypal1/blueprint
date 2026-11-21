@@ -285,7 +285,7 @@ test('live billing uses live consent and keeps purchases disabled during Stripe 
   view.rerender(React.createElement(AccountPage, { account, access, billing: true }));
   const [terms] = screen.getAllByRole('checkbox');
   assert.equal(screen.getAllByRole('checkbox').length, 1);
-  assert.ok(screen.getByText('$19/month until canceled. Cancel anytime in Billing.'));
+  assert.equal(screen.queryByText('$19/month until canceled. Cancel anytime in Billing.'), null);
   assert.equal(screen.queryByText('Billing details'), null);
   assert.ok(screen.getByRole('link', { name: 'Terms of Service' }));
   assert.equal(terms.checked, false);
@@ -386,7 +386,7 @@ test('landing and pricing explain the product and lead to the editor', async () 
   render(React.createElement(Marketing, { page: 'home' }));
   const hero = screen.getByRole('region', { name: /Edit your existing floor plan/ });
   assert.ok(within(hero).getByRole('heading', { name: /Edit your existing floor plan/ }));
-  assert.ok(within(hero).getByText('Upload a PDF, PNG, or photo. Make changes and export, no AutoCAD needed.'));
+  assert.ok(within(hero).getByText('Upload a PDF or photo of your floor plan. Make changes and export. No CAD needed.'));
   assert.equal(within(hero).getByRole('link', { name: 'Try the editor with a sample plan' }).getAttribute('href'), '/#/editor/sample');
   assert.equal(
     within(hero).getByRole('link', { name: 'Open editor' }).getAttribute('href'),
@@ -417,8 +417,8 @@ test('landing and pricing explain the product and lead to the editor', async () 
   assert.doesNotMatch(screen.getByRole('main').textContent, /\bbeta\b/i);
   cleanup();
   render(React.createElement(Marketing, { page: 'pricing' }));
-  assert.ok(screen.getByRole('heading', { name: 'Start with one project.', level: 1 }));
-  assert.ok(screen.getByText('$10'));
+  assert.ok(screen.getByRole('heading', { name: 'Project plans', level: 1 }));
+  assert.ok(screen.getByText('$9'));
   assert.ok(screen.getByText('$19'));
   assert.equal(screen.getByRole('link', { name: 'Buy single project' }).getAttribute('href'), '/?plan=project#/account/billing');
   assert.equal(screen.getByRole('link', { name: 'Get monthly access' }).getAttribute('href'), '/?plan=monthly#/account/billing');
@@ -436,7 +436,7 @@ test('editor regression: draw, undo, property changes, switching, restore, PDF p
   render(React.createElement(Editor));
   await waitSaved();
   assert.equal(count(), 0);
-  assert.ok(screen.getByRole('heading', { name: 'Start with a plan' }));
+  assert.ok(screen.getByRole('heading', { name: 'Upload or paste your floor plan' }));
   assert.ok(screen.getByRole('button', { name: 'Upload', exact: true }));
   assert.equal(screen.queryByText('Open a PDF or a photo of the drawing.'), null);
   fireEvent.click(document.querySelector('.projectButton'));
@@ -938,7 +938,7 @@ test('all door and fixture choices place objects and copy, delete, and undo stay
   await waitSaved();
   await newProject('Tool choices');
   const doors = ['Single left', 'Single right', 'Double', 'Pocket', 'Sliding', 'Bifold'];
-  const fixtures = ['Toilet', 'Sink', 'Shower', 'Bathtub', 'Bed', 'Water heater', 'Washer / dryer', 'Counter', 'Stove'];
+  const fixtures = ['Toilet', 'Sink', 'Shower', 'Bathtub', 'Bed', 'Water heater', 'Washer / dryer', 'Counter', 'Stove', 'Couch', 'Armchair', 'Dining table', 'Coffee table', 'Desk', 'Wardrobe', 'Refrigerator', 'Dishwasher', 'Cabinet', 'Stairs'];
   const choices = [...doors, ...fixtures];
   for (const [index, choice] of choices.entries()) {
     click('button', index < doors.length ? 'Door' : 'More tools');
@@ -1097,7 +1097,7 @@ test('leaving Recent plans during an import keeps the destination page and allow
     upload(file);
     assert.equal(typeof finishReading, 'function');
     await navigate('#/pricing');
-    await screen.findByRole('heading', { name: 'Start with one project.', level: 1 });
+    await screen.findByRole('heading', { name: 'Project plans', level: 1 });
     await act(async () => finishReading(new ArrayBuffer(4)));
     assert.equal(window.location.hash, '#/pricing');
     assert.equal(screen.queryByRole('dialog'), null);
@@ -1552,7 +1552,7 @@ test('expired trials link to each billing option and keep purchased plans access
   const view = render(React.createElement(TrialPage, { account, access: { data }, offer: true }));
   assert.ok(screen.getByRole('heading', { name: 'Your trial ended. Your work is saved.' }));
   const options = within(screen.getByRole('navigation', { name: 'Choose a plan' }));
-  assert.equal(options.getByRole('link', { name: /Single project.*\$10/i }).getAttribute('href'), '/?plan=project#/account/billing');
+  assert.equal(options.getByRole('link', { name: /Single project.*\$9/i }).getAttribute('href'), '/?plan=project#/account/billing');
   assert.equal(options.getByRole('link', { name: /Monthly access.*\$19/i }).getAttribute('href'), '/?plan=monthly#/account/billing');
   assert.equal(screen.queryByRole('button', { name: /start free trial/i }), null);
   view.rerender(React.createElement(TrialPage, { account, access: { data: { ...data, projectCredits: 1 } }, offer: true }));
@@ -2046,11 +2046,9 @@ test('guests and expired accounts can edit freely and reach the paywall only at 
         account: { enabled: true, ...(guest ? { client: {} } : { user: { id: state, email: state + '@example.test' } }) },
         access: { canDownload: async () => false, data: guest ? null : { paymentsRequired: true, trialEndsAt: '2020-01-01T00:00:00Z' } },
       };
+      localStorage.removeItem('editfloorplans-sample-guide:' + state);
       window.history.replaceState(null, '', '/#/editor');
       render(React.createElement(GatedRoot));
-      const sample = await screen.findByRole('button', { name: 'Try a sample plan' });
-      await waitFor(() => assert.equal(sample.disabled, false));
-      fireEvent.click(sample);
       await screen.findByRole('region', { name: 'Guided sample edit' });
       click('button', 'Skip guide and explore');
       const canvas = svg();
@@ -2196,4 +2194,37 @@ test('phone doorway move preserves an editable door and existing wall and ignore
   assert.equal(door().getAttribute('transform'), 'translate(600 200) rotate(0)');
   click('button', 'Undo');
   assert.equal(door().getAttribute('transform'), before);
+});
+
+for (const compact of [false, true]) test(`first-time ${compact ? 'mobile' : 'desktop'} guide teaches wall, text, window and couch without export`, async (t) => {
+  const previousMedia = window.matchMedia;
+  window.matchMedia = () => ({ matches: compact, addEventListener() {}, removeEventListener() {} });
+  t.after(() => { window.matchMedia = previousMedia; });
+  const owner = 'tutorial-new-visitor-' + compact;
+  localStorage.removeItem('editfloorplans-sample-guide:' + owner);
+  render(React.createElement(Editor, { owner, freeEditing:true }));
+  await screen.findByRole('heading', {name:'Choose Wall'});
+  click('button','Wall');
+  await screen.findByRole('heading',{name:'Draw a new wall'});
+  assert.ok(svg().querySelector('[data-tour-marks]'));
+  if(compact) { tap(300,590); tap(940,590); } else draw(300,590,940,590);
+  await screen.findByRole('heading',{name:'Choose Text'});
+  click('button','Text'); tap(800,450);
+  await screen.findByRole('heading',{name:'Edit your text'});
+  fireEvent.change(screen.getByRole('textbox',{name:'Room name'}),{target:{value:'Living room'}});
+  click('button','Continue');
+  await screen.findByRole('heading',{name:'Choose Window'});
+  click('button','Window'); tap(300,700);
+  await screen.findByRole('heading',{name:'Choose Couch'});
+  click('button','Couch'); tap(780,740);
+  await screen.findByRole('heading',{name:'Tutorial complete'});
+  assert.ok(screen.getByRole('button',{name:'Open your own plan'}));
+  assert.equal(screen.queryByRole('dialog',{name:'Export plan'}),null);
+  click('button','Keep exploring');
+  assert.equal(screen.queryByRole('region',{name:'Guided sample edit'}),null);
+  assert.ok([...svg().querySelectorAll('text')].some(el=>el.textContent==='Living room'));
+  await waitSaved(); cleanup();
+  render(React.createElement(Editor,{owner,freeEditing:true}));
+  await waitSaved();
+  assert.equal(screen.queryByRole('region',{name:'Guided sample edit'}),null);
 });
