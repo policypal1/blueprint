@@ -40,7 +40,7 @@ Official resources consulted:
 
 ## Conversion changes and next measurement
 
-Visitors can try a guided doorway edit below the homepage hero or open the recorded editor video. The video uses portrait footage on small screens. Visitors can also try the sample plan in the editor before uploading their own drawing.
+Visitors can try a guided doorway edit below the homepage hero. The PDF editing guide includes a recorded walkthrough with portrait footage on small screens. Visitors can also try the sample plan in the editor before uploading their own drawing.
 
 The homepage explains how to upload an existing plan, edit walls and doors, and export the revision. The mobile FAQs cover supported file types, the 25 MB limit, multipage PDFs, downloads, where drafts are saved and how project credits differ from monthly access.
 
