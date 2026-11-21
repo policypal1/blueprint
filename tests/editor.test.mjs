@@ -283,15 +283,14 @@ test('live billing uses live consent and keeps purchases disabled during Stripe 
   assert.equal(rechecks, 1);
   access.data.checkoutReady = true;
   view.rerender(React.createElement(AccountPage, { account, access, billing: true }));
-  const [terms, renewal] = screen.getAllByRole('checkbox');
-  assert.equal(renewal.labels[0].textContent, MONTHLY_AGREEMENT);
-  const describedBy = renewal.getAttribute('aria-describedby').split(' ').map(id => document.getElementById(id).textContent);
-  assert.deepEqual(describedBy, [MONTHLY_PRICE, MONTHLY_CANCELLATION]);
+  const [terms] = screen.getAllByRole('checkbox');
+  assert.equal(screen.getAllByRole('checkbox').length, 1);
+  assert.ok(screen.getByText('$19/month until canceled. Cancel anytime in Billing.'));
   assert.equal(screen.queryByText('Billing details'), null);
   assert.ok(screen.getByRole('link', { name: 'Terms of Service' }));
-  assert.equal(renewal.checked, false);
-  fireEvent.click(terms); fireEvent.click(renewal);
-  click('button', 'Continue to payment');
+  assert.equal(terms.checked, false);
+  fireEvent.click(terms);
+  click('button', 'Subscribe for $19/month');
   await waitFor(() => assert.equal(calls.length, 1));
   assert.deepEqual(calls[0][2], { accepted: true, version: LIVE_MONTHLY_VERSION });
 });
@@ -318,7 +317,7 @@ test('billing keeps the selected order through sign-in and shows checkout failur
       const order = within(screen.getByRole('region', { name: 'Your order' }));
       assert.deepEqual(order.getAllByRole('heading', { level: 3 }).map(el => el.textContent), [title]);
       for (const agreement of order.getAllByRole('checkbox')) fireEvent.click(agreement);
-      fireEvent.click(order.getByRole('button', { name: plan === 'project' ? 'Buy a project credit' : 'Continue to payment' }));
+      fireEvent.click(order.getByRole('button', { name: plan === 'project' ? 'Buy a project credit' : 'Subscribe for $19/month' }));
       assert.equal((await order.findByRole('alert')).textContent, 'Could not open Stripe. Try again.');
       assert.equal(order.getByRole('link', { name: 'View both plans' }).getAttribute('href'), '/#/account/billing');
       view.unmount();
@@ -357,7 +356,7 @@ test('a Stripe return rechecks access automatically until the delayed webhook ca
   }
 });
 
-test('the demo cues the arrow once when it comes into view', () => {
+test('the standalone demo cues its first tool once when it comes into view', () => {
   const original = window.IntersectionObserver;
   let notify, target;
   let disconnected = false;
@@ -367,7 +366,7 @@ test('the demo cues the arrow once when it comes into view', () => {
     disconnect() { disconnected = true; }
   };
   try {
-    render(React.createElement(Marketing, { page: 'home' }));
+    render(React.createElement(Marketing, { page: 'revisionDemo' }));
     const demo = within(screen.getByRole('region', { name: 'Try the floor plan demo' }));
     assert.equal(target, demo.getByText('Start here'));
     notify([{ intersectionRatio: 0 }]);
@@ -387,8 +386,8 @@ test('landing and pricing explain the product and lead to the editor', async () 
   render(React.createElement(Marketing, { page: 'home' }));
   const hero = screen.getByRole('region', { name: /Edit your existing floor plan/ });
   assert.ok(within(hero).getByRole('heading', { name: /Edit your existing floor plan/ }));
-  assert.ok(within(hero).getByText('Upload a PDF or photo of your floor plan. Make your edits, then export the revised plan.'));
-  assert.equal(within(hero).getByRole('link', { name: 'Try demo below' }).getAttribute('href'), '#doorway-demo');
+  assert.ok(within(hero).getByText('Upload a PDF, PNG, or photo. Make changes and export, no AutoCAD needed.'));
+  assert.equal(within(hero).getByRole('link', { name: 'Try the editor with a sample plan' }).getAttribute('href'), '/#/editor/sample');
   assert.equal(
     within(hero).getByRole('link', { name: 'Open editor' }).getAttribute('href'),
     '/#/editor',
@@ -396,22 +395,18 @@ test('landing and pricing explain the product and lead to the editor', async () 
   assert.equal(document.querySelector('.stickyEdit'), null);
   assert.equal(screen.queryByText('Bring your plan'), null);
   const pricing = screen.getByRole('heading', { name: 'One project or monthly access' });
-  const demo = screen.getByRole('region', { name: 'Try the floor plan demo' });
+  const demo = screen.getByRole('region', { name: 'Before and after floor plan' });
   assert.equal(hero.nextElementSibling, demo);
+  assert.equal(within(demo).getAllByRole('img').length, 2);
   assert.equal(screen.queryByText('Watch the editor video'), null);
   assert.equal(document.querySelector('video'), null);
   const comparison = screen.getByRole('region', { name: 'A simpler way to revise a floor plan' });
-  assert.equal(demo.nextElementSibling, comparison);
+  assert.equal(demo.nextElementSibling.getAttribute('aria-labelledby'), 'audience-title');
   assert.equal(comparison.nextElementSibling, pricing.closest('section'));
   assert.equal(within(comparison).getAllByRole('listitem').length, 8);
   assert.equal(screen.getByRole('link', { name: 'See single project pricing' }).getAttribute('href'), '/pricing');
   assert.equal(screen.getByRole('link', { name: 'See monthly access pricing' }).getAttribute('href'), '/pricing');
-  const cleanUp = within(demo).getByRole('button', { name: 'Choose Clean up' });
-  assert.ok(within(cleanUp).getByText('Start here'));
-  fireEvent.click(cleanUp);
-  assert.equal(within(cleanUp).queryByText('Start here'), null);
-  fireEvent.click(within(hero).getByRole('link', { name: 'Try demo below' }));
-  assert.equal(document.activeElement, within(demo).getByRole('heading', { level: 2 }));
+  assert.equal(within(demo).getByRole('link', { name: 'Try the editor' }).getAttribute('href'), '/#/editor/sample');
   assert.ok(document.querySelector('.mobileMenu .siteNav a.navEditorLink[href="/#/editor"]'));
   const desktopNav = within(document.querySelector('.siteHeaderActions > nav'));
   assert.equal(desktopNav.queryByRole('link', { name: 'How it works' }), null);
@@ -422,7 +417,7 @@ test('landing and pricing explain the product and lead to the editor', async () 
   assert.doesNotMatch(screen.getByRole('main').textContent, /\bbeta\b/i);
   cleanup();
   render(React.createElement(Marketing, { page: 'pricing' }));
-  assert.ok(screen.getByRole('heading', { name: 'Pricing', level: 1 }));
+  assert.ok(screen.getByRole('heading', { name: 'Start with one project.', level: 1 }));
   assert.ok(screen.getByText('$10'));
   assert.ok(screen.getByText('$19'));
   assert.equal(screen.getByRole('link', { name: 'Buy single project' }).getAttribute('href'), '/?plan=project#/account/billing');
@@ -1102,7 +1097,7 @@ test('leaving Recent plans during an import keeps the destination page and allow
     upload(file);
     assert.equal(typeof finishReading, 'function');
     await navigate('#/pricing');
-    await screen.findByRole('heading', { name: 'Pricing', level: 1 });
+    await screen.findByRole('heading', { name: 'Start with one project.', level: 1 });
     await act(async () => finishReading(new ArrayBuffer(4)));
     assert.equal(window.location.hash, '#/pricing');
     assert.equal(screen.queryByRole('dialog'), null);
@@ -1362,7 +1357,8 @@ test('reduced-motion visitors control sample playback and pricing keeps billing 
     const pricing = within(screen.getByRole('main'));
     assert.equal(pricing.queryByRole('link', { name: 'Open editor' }), null);
     assert.doesNotMatch(screen.getByRole('main').textContent, /No credit card needed/i);
-    assert.equal(pricing.getByRole('heading', { name: 'Pricing' }).nextElementSibling.firstElementChild, pricing.getAllByRole('article')[0]);
+    assert.ok(pricing.getAllByRole('article')[0].classList.contains('priceCardFeatured'));
+    assert.match(pricing.getByText(/Try your first project risk-free/).textContent, /7 days/);
     assert.equal(screen.queryByRole('link', { name: 'Start 3-day free trial' }), null);
     assert.ok(document.querySelector('.accountMenuLinks a[href="#/account/billing"]'));
   } finally {
@@ -1377,7 +1373,7 @@ test('guest landing opens the editor and exposes the same policy links in the mo
   assert.equal(hero.getByRole('link', { name: 'Open editor' }).getAttribute('href'), '/#/editor');
   assert.equal(hero.queryByText(/free trial|No credit card needed/i), null);
   assert.equal(hero.queryByText(/ends automatically/i), null);
-  assert.equal(hero.getByRole('link', { name: 'Try demo below' }).getAttribute('href'), '#doorway-demo');
+  assert.equal(hero.getByRole('link', { name: 'Try the editor with a sample plan' }).getAttribute('href'), '/#/editor/sample');
   const footer = within(screen.getByRole('navigation', { name: 'Footer' }));
   assert.deepEqual(footer.getAllByRole('link').map((link) => link.getAttribute('href')), [
     '/floor-plan-guides', '/terms', '/privacy', '/refunds-and-cancellation', '/support', '/privacy#cookie-settings',
@@ -1554,7 +1550,7 @@ test('expired trials link to each billing option and keep purchased plans access
   const account = { user: { id: 'expired-trial' } };
   const data = { trialEndsAt: '2020-01-01T00:00:00Z', paymentsRequired: true };
   const view = render(React.createElement(TrialPage, { account, access: { data }, offer: true }));
-  assert.ok(screen.getByRole('heading', { name: 'Your free trial has ended' }));
+  assert.ok(screen.getByRole('heading', { name: 'Your trial ended. Your work is saved.' }));
   const options = within(screen.getByRole('navigation', { name: 'Choose a plan' }));
   assert.equal(options.getByRole('link', { name: /Single project.*\$10/i }).getAttribute('href'), '/?plan=project#/account/billing');
   assert.equal(options.getByRole('link', { name: /Monthly access.*\$19/i }).getAttribute('href'), '/?plan=monthly#/account/billing');
@@ -1840,24 +1836,24 @@ test('account deletion requires a typed confirmation from the account owner', as
   assert.deepEqual(requests, ['DELETE']);
 });
 
-test('monthly checkout requires its own agreement and only confirmed purchases offer a downloadable acknowledgment', async () => {
+test('monthly checkout records the terms agreement and only confirmed purchases offer a downloadable acknowledgment', async () => {
   const { MONTHLY_VERSION, MONTHLY_AGREEMENT } = await import('../supabase/functions/planpatch-account/monthly-offer.js');
   const calls = [];
   const account = { user: { id: 'subscription-ui-test' } };
   const access = { data: { checkoutReady: true, billingAvailable: true, monthlyOfferVersion: MONTHLY_VERSION },
     checkout: async (...args) => { calls.push(args); } };
   const view = render(React.createElement(AccountPage, { billing: true, account, access }));
-  const [policies, recurring] = screen.getAllByRole('checkbox');
+  const [policies] = screen.getAllByRole('checkbox');
   const monthly = screen.getByRole('button', { name: 'Continue to test payment' });
   const project = screen.getByRole('button', { name: 'Buy a project credit' });
-  assert.equal(recurring.checked, false);
-  assert.equal(recurring.labels[0].textContent, MONTHLY_AGREEMENT);
+  assert.equal(screen.getAllByRole('checkbox').length, 1);
+  assert.equal(policies.checked, false);
+  assert.equal(policies.labels[0].textContent, MONTHLY_AGREEMENT);
   assert.equal(monthly.disabled, true);
   fireEvent.click(policies);
   assert.equal(project.disabled, false);
-  assert.equal(monthly.disabled, true);
+  assert.equal(monthly.disabled, false);
   assert.equal(screen.queryByText('Save subscription confirmation'), null);
-  fireEvent.click(recurring);
   fireEvent.click(monthly);
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0][2], { accepted: true, version: MONTHLY_VERSION });
@@ -2037,59 +2033,43 @@ test('the editor sign-up page uses the full account form and can return to the p
 });
 
 
-test('door access dialog keeps the drawing visible for guests, eligible users and expired accounts', async () => {
+test('guests and expired accounts can edit freely and reach the paywall only at export', async () => {
   const { default: GatedRoot } = await import('../.test-build/gatedRoot.mjs');
   const previous = window.location.href;
   const previousKeyRange = globalThis.IDBKeyRange;
   globalThis.IDBKeyRange = IDBKeyRange;
   try {
-    for (const state of ['guest', 'eligible', 'expired']) {
+    for (const state of ['guest', 'expired']) {
+      globalThis.indexedDB = new IDBFactory();
       const guest = state === 'guest';
-      const account = guest ? { client: {} } : { user: { id: state, email: state + '@example.test' } };
       globalThis.__editorAccess = {
-        account: { ...account, enabled: true },
-        access: { data: guest ? null : { paymentsRequired: true, canStartTrial: state === 'eligible',
-          trialEndsAt: state === 'expired' ? '2020-01-01T00:00:00Z' : null } },
+        account: { enabled: true, ...(guest ? { client: {} } : { user: { id: state, email: state + '@example.test' } }) },
+        access: { canDownload: async () => false, data: guest ? null : { paymentsRequired: true, trialEndsAt: '2020-01-01T00:00:00Z' } },
       };
       window.history.replaceState(null, '', '/#/editor');
       render(React.createElement(GatedRoot));
-      fireEvent.click(await screen.findByRole('button', { name: 'Try a sample plan' }));
-      await waitFor(() => assert.equal(window.location.hash, '#/editor/workspace'));
-      const door = screen.getByRole('button', { name: 'Door', exact: true });
+      const sample = await screen.findByRole('button', { name: 'Try a sample plan' });
+      await waitFor(() => assert.equal(sample.disabled, false));
+      fireEvent.click(sample);
+      await screen.findByRole('region', { name: 'Guided sample edit' });
+      click('button', 'Skip guide and explore');
       const canvas = svg();
-      const original = canvas.innerHTML;
-      door.focus();
-      fireEvent.click(door);
+      const before = count();
+      click('button', 'Wall');
+      draw(400, 700, 700, 700);
+      assert.ok(count() > before);
+      assert.equal(screen.queryByRole('dialog'), null);
+      click('button', 'Export');
       const dialog = await screen.findByRole('dialog');
-      assert.equal(dialog.getAttribute('aria-modal'), 'true');
-      assert.equal(canvas.closest('.editorRoot').hidden, false);
       assert.ok(canvas.closest('.editorRoot').hasAttribute('inert'));
-      assert.ok(dialog.contains(document.activeElement));
-      if (guest) {
-        assert.ok(within(dialog).getByRole('button', { name: 'Create account' }));
-        assert.match(dialog.textContent, /No credit card needed/);
-      } else if (state === 'eligible') {
-        assert.equal(within(dialog).getByRole('button', { name: 'Start free trial' }).disabled, true);
-        assert.ok(within(dialog).getByRole('checkbox'));
-      } else {
-        assert.equal(within(dialog).getByRole('link', { name: /Single project/ }).getAttribute('href'), '/?plan=project#/account/billing');
-        assert.equal(within(dialog).getByRole('link', { name: /Monthly access/ }).getAttribute('href'), '/?plan=monthly#/account/billing');
-      }
-      fireEvent.keyDown(document.activeElement, { key: 'Escape' });
-      await waitFor(() => assert.ok(!screen.queryByRole('dialog'), 'dialog closed'));
-      assert.ok(svg() === canvas, 'same drawing node');
-      assert.equal(canvas.innerHTML, original);
-      assert.equal(canvas.closest('.editorRoot').hasAttribute('inert'), false);
-      assert.equal(window.location.hash, '#/editor/workspace');
-      assert.ok(document.activeElement === door, 'focus returns to Door');
-      cleanup();
-      sessionStorage.clear();
+      if (guest) assert.ok(within(dialog).getByRole('button', { name: 'Create account' }));
+      else assert.ok(within(dialog).getByRole('link', { name: /Unlock to download/ }));
+      assert.ok(count() > before);
+      cleanup(); sessionStorage.clear();
     }
   } finally {
-    cleanup();
-    window.history.replaceState(null, '', previous);
-    globalThis.IDBKeyRange = previousKeyRange;
-    delete globalThis.__editorAccess;
+    cleanup(); window.history.replaceState(null, '', previous);
+    globalThis.IDBKeyRange = previousKeyRange; delete globalThis.__editorAccess;
   }
 });
 
