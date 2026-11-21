@@ -3,11 +3,12 @@ import { Brand, Icon, PRODUCT_NAME } from './ui.jsx';
 import AccountMenu from './AccountMenu.jsx';
 import PlanIllustration from './PlanIllustration.jsx';
 import RevisionDemo from './RevisionDemo.jsx';
+import { BEFORE_IMAGE, AFTER_IMAGE } from './comparison-images.js';
 import './conversion.css';
 import { POLICY_LINKS } from './Policies.jsx';
 import { publicPages } from './seo-pages.js';
 
-export const PRICING = { project: 10, monthly: 19 };
+export const PRICING = { project: 9, monthly: 19 };
 export const DEMO_HASH = '#/how-it-works';
 
 const plans = [
@@ -20,7 +21,7 @@ const plans = [
 const faqs = [
   ['Is this a CAD program?', 'No. This is a simple editor for marking up an existing floor plan. Upload a PDF or image, erase what changes, add walls, doors or notes, and export. No AutoCAD experience needed.'],
   ['Can I try it before paying?', 'Yes. Upload and edit for free, or try the sample plan without an account. Pay when you need a clean PDF or PNG download. Drafts stay in this browser.'],
-  ['Do I need a subscription?', 'A $10 project credit is a one-time purchase for a single original blueprint. The $19 USD monthly plan covers unlimited projects while active.'],
+  ['Do I need a subscription?', 'A $9 project credit is a one-time purchase for a single original blueprint. The $19 USD monthly plan covers unlimited projects while active.'],
   ['Can I use my existing blueprint?', 'Yes. Upload a PDF, PNG, JPG or WebP up to 25 MB. Choose the sheet you want when a PDF has more than one page.'],
   ['What can I download?', 'Export your revised plan as a PDF or PNG with a project credit or active monthly access. Eligible accounts with an active 72-hour trial can also download.'],
   ['Where are my plans saved?', 'New drafts stay in this browser. Plans unlocked with a project credit are saved to your account.'],
@@ -168,7 +169,7 @@ function PriceOptions({ compact = false }) {
     <div className="priceOptions">
       {plans.map(({ label, unit, amount, description }, index) => (
         <article className={`priceCard${index === 0 ? ' priceCardFeatured' : ''}`} key={unit}>
-          {index === 0 && <span className="priceEyebrow">Start with one plan</span>}{compact ? <h3>{label}</h3> : <h2>{label}</h2>}
+          {compact ? <h3>{label}</h3> : <h2>{label}</h2>}
           <p className="price"><strong>${amount}</strong><span>USD {unit}</span></p>
           <p className="priceDetail">{description}</p>
           <a className={`button pricePurchase${index === 0 ? ' primary' : ''}`}
@@ -177,7 +178,7 @@ function PriceOptions({ compact = false }) {
             {compact ? 'See pricing' : index === 0 ? 'Buy single project' : 'Get monthly access'}
           </a>
           {!compact && <p className="priceNote">{index === 0
-            ? 'One-time payment. 7-day money-back guarantee on your first project purchase.'
+            ? '* One-time payment. 7-day money-back guarantee on your first project purchase.'
             : 'Renews monthly until you cancel in Billing.'}</p>}
         </article>
       ))}
@@ -222,7 +223,7 @@ function HomeContent({ showTrial, showVideo }) {
         <div className="heroBlueprint" aria-hidden="true"><PlanIllustration /></div>
         <div className="heroCopy">
           <h1 id="blueprint-hero-title">Edit your <span className="heroEmphasis">existing floor plan</span>.</h1>
-          <p>Upload a PDF, PNG, or photo. Make changes and export, no AutoCAD needed.</p>
+          <p>Upload a PDF or photo of your floor plan. Make changes and export. No CAD needed.</p>
           <div className="heroActions">
             <EditorLink />
             <div><a href="/#/editor/sample" className="detailsLink">Try the editor with a sample plan</a></div>
@@ -231,22 +232,19 @@ function HomeContent({ showTrial, showVideo }) {
       </section>
       <section className="homeBeforeAfter" aria-label="Before and after floor plan">
         <div className="comparisonPair">
-          <figure><figcaption>Before</figcaption><img src="/planpatch-original.webp" alt="Original floor plan with the existing doorway" width="1000" height="650" /></figure>
-          <figure><figcaption>After</figcaption><img src="/planpatch-revised.webp" alt="Revised floor plan showing the changed doorway" width="1000" height="650" /></figure>
+          <figure><figcaption>Before</figcaption><img src={BEFORE_IMAGE} alt="Original primary bedroom, bathroom and walk-in closet" width="1426" height="892" /></figure>
+          <figure><figcaption>After <span className="changeKey">Changes highlighted</span></figcaption><div className="comparisonAfter"><img src={AFTER_IMAGE} alt="Revised plan with a living room, divided bedroom, moved entrance, added windows and rearranged fixtures" width="1594" height="996" /><svg viewBox="0 0 1594 996" aria-hidden="true"><g fill="#ed7a261a" stroke="#ed7a26" strokeWidth="7" strokeLinejoin="round"><rect x="275" y="249" width="150" height="148" rx="12" /><rect x="281" y="425" width="665" height="146" rx="12" /><rect x="305" y="630" width="164" height="221" rx="12" /><rect x="450" y="837" width="412" height="41" rx="12" /><rect x="1170" y="480" width="112" height="75" rx="12" /><rect x="900" y="641" width="55" height="144" rx="12" /></g></svg></div></figure>
         </div>
-        <p>Same floor plan. New doorway.</p>
-        <a className="button" href="/#/editor/sample">Try the editor</a>
-        <p className="hint">Free to edit. Unlock a clean download from $10.</p>
+        <a className="button primary comparisonCta" href="/#/editor/sample">Try the editor</a>
       </section>
       {showVideo && <BlueprintDemo />}
       <section className="homeSection audienceSection" aria-labelledby="audience-title">
         <h2 id="audience-title">Who this is for</h2>
         <div className="audienceGrid">
-          <article><h3>Remodelers</h3><p>Move a doorway before your next client meeting.</p></article>
-          <article><h3>Contractors</h3><p>Mark a wall change and send the revision to your crew.</p></article>
-          <article><h3>Homeowners &amp; designers</h3><p>Sketch a layout idea on the plan you already have.</p></article>
+          <article><span className="audienceIcon"><Icon name="wall" size={25} /></span><h3>Remodel contractors</h3><p>Move a doorway before your next client meeting.</p></article>
+          <article><span className="audienceIcon"><Icon name="door" size={25} /></span><h3>Builders &amp; trades</h3><p>Mark a wall change and send the revision to your crew.</p></article>
+          <article><span className="audienceIcon"><Icon name="file" size={25} /></span><h3>Homeowners &amp; designers</h3><p>Sketch a layout idea on the plan you already have.</p></article>
         </div>
-        <p className="fileSupport">PDF, PNG, JPG and WebP · Up to 25 MB · Images up to 40 megapixels · Choose one sheet from a multipage PDF</p>
       </section>
       <WorkflowComparison />
       <section className="homeSection homePricing" aria-labelledby="project-pricing-title">
@@ -309,8 +307,7 @@ function Faqs({ showTrial, mobileHome = false }) {
 function PricingContent({ showTrial }) {
   return (
     <>
-      <h1>Start with one project.</h1>
-      <p className="pricingIntro">Edit for free. Pay when you’re ready to download.</p>
+      <h1>Project plans</h1>
       <PriceOptions />
       <p className="guaranteeLine">Try your first project risk-free. Request a refund within 7 days of your first project purchase. <a href="/refunds-and-cancellation">See guarantee details</a>.</p>
       <Faqs showTrial={showTrial} />
