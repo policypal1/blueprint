@@ -70,6 +70,7 @@ const symbols = new Set([
   'range',
   'sofa',
   'stairs',
+  'armchair', 'dining-table', 'coffee-table', 'desk', 'wardrobe', 'dishwasher',
 ]);
 const styles = new Set(['single-left', 'single-right', 'double', 'pocket', 'sliding', 'bifold']);
 const point = (p) => p && isProjectNumber(p.x) && isProjectNumber(p.y);
