@@ -216,6 +216,25 @@ function WorkflowComparison() {
   );
 }
 
+function PlanComparison() {
+  const [position, setPosition] = useState(50);
+  return (
+    <figure className="planComparison">
+      <div className="planComparisonStage" style={{ '--reveal': position + '%' }}>
+        <img className="comparisonRevised" src={AFTER_IMAGE}
+          alt="After: A living room and new partition, with a moved entrance and added windows." width="1594" height="996" />
+        <img className="comparisonOriginal" src={BEFORE_IMAGE}
+          alt="Before: The original bedroom, bathroom and walk-in closet." width="1426" height="892" />
+        <div className="comparisonLabels" aria-hidden="true"><span>Before</span><span>After</span></div>
+        <div className="comparisonDivider" aria-hidden="true"><span>‹ ›</span></div>
+        <input type="range" className="comparisonRange" min="0" max="100" value={position}
+          aria-label="Compare before and after" aria-valuetext={position + '% before, ' + (100 - position) + '% after'}
+          onChange={event => setPosition(Number(event.target.value))} />
+      </div>
+    </figure>
+  );
+}
+
 function HomeContent({ showTrial, showVideo }) {
   return (
     <>
@@ -231,20 +250,17 @@ function HomeContent({ showTrial, showVideo }) {
         </div>
       </section>
       <section className="homeBeforeAfter" aria-label="Before and after floor plan">
-        <div className="comparisonPair">
-          <figure><figcaption>Before</figcaption><img src={BEFORE_IMAGE} alt="Original primary bedroom, bathroom and walk-in closet" width="1426" height="892" /></figure>
-          <figure><figcaption>After <span className="changeKey">Changes highlighted</span></figcaption><div className="comparisonAfter"><img src={AFTER_IMAGE} alt="Revised plan with a living room, divided bedroom, moved entrance, added windows and rearranged fixtures" width="1594" height="996" /><svg viewBox="0 0 1594 996" aria-hidden="true"><g fill="#ed7a261a" stroke="#ed7a26" strokeWidth="7" strokeLinejoin="round"><rect x="275" y="249" width="150" height="148" rx="12" /><rect x="281" y="425" width="665" height="146" rx="12" /><rect x="305" y="630" width="164" height="221" rx="12" /><rect x="450" y="837" width="412" height="41" rx="12" /><rect x="1170" y="480" width="112" height="75" rx="12" /><rect x="900" y="641" width="55" height="144" rx="12" /></g></svg></div></figure>
-        </div>
+        <PlanComparison />
         <a className="button primary comparisonCta" href="/#/editor/sample">Try the editor</a>
       </section>
       {showVideo && <BlueprintDemo />}
       <section className="homeSection audienceSection" aria-labelledby="audience-title">
         <h2 id="audience-title">Who this is for</h2>
-        <div className="audienceGrid">
-          <article><span className="audienceIcon"><Icon name="wall" size={25} /></span><h3>Remodel contractors</h3><p>Move a doorway before your next client meeting.</p></article>
-          <article><span className="audienceIcon"><Icon name="door" size={25} /></span><h3>Builders &amp; trades</h3><p>Mark a wall change and send the revision to your crew.</p></article>
-          <article><span className="audienceIcon"><Icon name="file" size={25} /></span><h3>Homeowners &amp; designers</h3><p>Sketch a layout idea on the plan you already have.</p></article>
-        </div>
+        <dl className="audienceList">
+          <div><dt>Remodel contractors</dt><dd>Show a client where a new doorway will go.</dd></div>
+          <div><dt>Builders &amp; trades</dt><dd>Mark the wall that’s moving and send the revised sheet to your crew.</dd></div>
+          <div><dt>Homeowners &amp; designers</dt><dd>Try a different room layout using the plan you already have.</dd></div>
+        </dl>
       </section>
       <WorkflowComparison />
       <section className="homeSection homePricing" aria-labelledby="project-pricing-title">
@@ -290,7 +306,7 @@ function Faqs({ showTrial, mobileHome = false }) {
         {showTrial && (
           <details>
             <summary>What happens when the free trial ends?<Icon name="chevron" size={20} /></summary>
-            <p>The trial ends automatically after 72 hours without charging you. Your saved drafts stay in this browser, and you can keep editing. Choose “Unlock to download” when you’re ready for a clean export.</p>
+            <p>The trial ends automatically after 72 hours without charging you. Your saved drafts stay in this browser, and you can keep editing. Choose “Export this project” when you’re ready to download.</p>
           </details>
         )}
         {faqs.map(([question, answer]) => (
