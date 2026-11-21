@@ -392,8 +392,6 @@ export default function Root() {
                 sampleRequested={route === 'sample'}
                 showUpload={route === 'uploadPlan'}
                 onOpenUpload={() => navigateTo('/#/editor/upload')}
-                watermarkPreview={requireSignIn && !fullAccess}
-                downloadableProjectIds={policy?.projectIds}
                 onOpenWorkspace={() => {
                   if (window.location.hash !== WORKSPACE_HASH) window.location.hash = WORKSPACE_HASH;
                   setRoute('workspace');

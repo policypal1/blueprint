@@ -883,7 +883,7 @@ function hasHiddenDesktopTip() {
 
 export function BlueprintApp({
   active = true, showRecent = false, sampleRequested = false, onSampleOpened, onOpenWorkspace,
-  showUpload = false, onOpenUpload, watermarkPreview = false, downloadableProjectIds = [],
+  showUpload = false, onOpenUpload,
   repository, projectAccess: paidProjectAccess, lockedProjectIds = [], owner, authBusy = false, onRegisterSave, canDownload,
   showMobileTip = false, showFirstUseGuide = false,
   freeEditing = false,
@@ -3126,19 +3126,6 @@ export function BlueprintApp({
               {!exporting && tool === 'erase' && brushPoint && (
                 <circle data-editor-only pointerEvents="none" cx={brushPoint.x} cy={brushPoint.y} r={eraseSize / 2}
                   fill="none" stroke={DRAWING_ACCENT} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-              )}
-              {watermarkPreview && !downloadableProjectIds.includes(accountId) && (project.background || project.elements.length > 0) && (
-                <g data-editor-only data-preview-watermark pointerEvents="none" aria-hidden="true">
-                  <defs>
-                    <pattern id="previewWatermark" width="400" height="190" patternUnits="userSpaceOnUse" patternTransform="rotate(-26)">
-                      <text x="200" y="104" textAnchor="middle" fontSize="33" fontWeight="700"
-                        fill="#662902" fillOpacity=".25" stroke="#fff" strokeOpacity=".65" strokeWidth="2" paintOrder="stroke">
-                        editfloorplans.com
-                      </text>
-                    </pattern>
-                  </defs>
-                  <rect width={W} height={H} fill="url(#previewWatermark)" />
-                </g>
               )}
               {tour && !exporting && <TourMarks step={tour.step} />}
             </svg>

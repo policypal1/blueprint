@@ -255,12 +255,23 @@ function HomeContent({ showTrial, showVideo }) {
       </section>
       {showVideo && <BlueprintDemo />}
       <section className="homeSection audienceSection" aria-labelledby="audience-title">
-        <h2 id="audience-title">Who this is for</h2>
-        <dl className="audienceList">
-          <div><dt>Remodel contractors</dt><dd>Show a client where a new doorway will go.</dd></div>
-          <div><dt>Builders &amp; trades</dt><dd>Mark the wall that’s moving and send the revised sheet to your crew.</dd></div>
-          <div><dt>Homeowners &amp; designers</dt><dd>Try a different room layout using the plan you already have.</dd></div>
-        </dl>
+        <div className="audiencePanel">
+          <h2 id="audience-title">Who this<br className="audienceBreak" /> is for</h2>
+          <dl className="audienceList">
+            <div>
+              <dt>Remodel contractors</dt>
+              <dd>Show clients a proposed doorway or layout change before work starts.</dd>
+            </div>
+            <div>
+              <dt>Builders &amp; trades</dt>
+              <dd>Mark up the existing plan and send your crew the revised sheet.</dd>
+            </div>
+            <div>
+              <dt>Homeowners &amp; designers</dt>
+              <dd>Try a new room layout on the floor plan you already have.</dd>
+            </div>
+          </dl>
+        </div>
       </section>
       <WorkflowComparison />
       <section className="homeSection homePricing" aria-labelledby="project-pricing-title">

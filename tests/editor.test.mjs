@@ -2205,14 +2205,13 @@ for (const compact of [false, true]) test(`first-time ${compact ? 'mobile' : 'de
   function TutorialEditor() {
     const [showUpload, setShowUpload] = React.useState(false);
     return React.createElement(Editor, {
-      owner, freeEditing: true, showUpload, watermarkPreview: true,
+      owner, freeEditing: true, showUpload,
       onOpenUpload: () => setShowUpload(true),
       onOpenWorkspace: () => setShowUpload(false),
     });
   }
   render(React.createElement(TutorialEditor));
   await screen.findByRole('heading', {name:'Choose Wall'});
-  assert.ok(svg().querySelector('[data-preview-watermark]'));
   click('button','Wall');
   await screen.findByRole('heading',{name:'Draw a new wall'});
   assert.ok(svg().querySelector('[data-tour-marks]'));
