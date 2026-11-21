@@ -30,4 +30,5 @@ test('window endpoint resizing holds the other endpoint and thickness steady', (
   const end = resizeWindow(vertical,'end',{x:180,y:620},4);
   assert.ok(Math.abs(end.x-200)<1e-8); assert.equal(end.y,530); assert.equal(end.widthInches,45);
   assert.deepEqual(resizeWindow(window,'thickness',{x:500,y:210},4),{heightInches:5});
+  assert.deepEqual(resizeWindow(window,'thickness',{x:500,y:247},4,[],{x:500,y:247}),{heightInches:4.5});
 });
