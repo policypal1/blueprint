@@ -13,14 +13,14 @@ function walkthroughSteps(compact) {
     {
       title: 'Select and edit an object', icon: 'select', action: 'select', label: 'Try Select',
       text: compact
-        ? 'Open View, choose Select, and tap a wall you added. Tap Properties to change Exact wall length or Wall thickness (inches). Watch the sample change from 4.5 to 6 inches.'
-        : 'Choose Select and click a wall you added. In Object properties, change Exact wall length or Wall thickness (inches). Watch the sample change from 4.5 to 6 inches.',
+        ? 'Open View, choose Select, and tap a wall you added. Tap Properties to adjust Wall thickness (px). The sample shows a heavier line.'
+        : 'Choose Select and click a wall you added. In Object properties, adjust Wall thickness (px). The sample shows a heavier line.',
     },
     {
       title: 'Draw a wall', icon: 'wall', action: 'wall', label: 'Try Wall',
       text: compact
         ? 'Choose Edit, then Wall. Tap one end, then tap the other end. Use Cancel to clear the first point.'
-        : 'Choose Wall and drag from one end to the other. Hold Shift while drawing when you need a free angle. Select the wall to enter an exact length.',
+        : 'Choose Wall and drag from one end to the other. Hold Shift while drawing when you need a free angle. Drag its end handles to adjust it later.',
     },
     {
       title: 'Place a door', icon: 'door', action: 'doors', label: 'Choose a door',
@@ -28,7 +28,7 @@ function walkthroughSteps(compact) {
     },
     {
       title: 'Add a label', icon: 'text', action: 'text', label: 'Try Text',
-      text: 'Choose Text, place a label on the plan, and enter a note. Use it to describe a change, such as where an opening should move.',
+      text: `Choose Text and place the label beside the change. ${compact ? 'Tap Properties and type' : 'In Object properties, type'} a note or a measurement you already know, such as “36 in clear opening”.`,
     },
     {
       title: 'Clean up a drawing', icon: 'clean', action: 'cleanup', label: 'Open Clean up',
@@ -36,19 +36,11 @@ function walkthroughSteps(compact) {
     },
     {
       title: 'Find windows and fixtures', icon: 'more', action: 'tools', label: 'Open More tools',
-      text: `Open ${compact ? 'Edit → More' : 'More tools'} to add windows, fixtures, lines, rectangles, or dimension labels. Select an object after placing it to adjust its properties.`,
-    },
-    {
-      title: 'Set the scale', icon: 'calibrate', action: 'calibrate', label: 'Try Set scale',
-      text: 'Choose two points a known distance apart, then choose Set real distance. Enter the measurement with units, such as 10 ft. Check another known span before relying on the scale.',
-    },
-    {
-      title: 'Measure a distance', icon: 'measure', action: 'measure', label: 'Try Distance',
-      text: 'After setting the scale, choose Distance and drag between two points. To leave a measurement on the drawing, choose Dimension under More tools.',
+      text: `Open ${compact ? 'Edit → More' : 'More tools'} to add windows, fixtures, lines, or rectangles. Select an object after placing it to adjust its properties.`,
     },
     {
       title: 'Export your plan', icon: 'download', action: 'export', label: 'Open Export',
-      text: 'Choose Download PDF or PNG image. Use PDF print settings for a fixed scale. Back to plans takes you to your drawings, account, and billing.',
+      text: 'Choose Download PDF or PNG image. Choose your sheet size under PDF print settings. Back to plans takes you to your drawings, account, and billing.',
     },
   ];
 }
@@ -127,7 +119,6 @@ export default function EditorGuide({ compact, mode, step, onStep, onReplay, onT
             <span>V · Select</span>
             <span>H · Pan</span>
             <span>W · Wall</span>
-            <span>M · Distance</span>
             <span>E · Brush eraser</span>
             <span>R · Rotate selected object</span>
             <span>Esc · Cancel</span>
