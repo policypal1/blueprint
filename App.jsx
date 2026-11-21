@@ -21,7 +21,7 @@ import {
 import { embedExportFont } from './export-font.js';
 import { useProjectStore } from './useProjectStore.js';
 import { sampleProject } from './sample-project.js';
-import { isWallColor, wallStyle, wallControls, resizeWall, sampleWallStyle } from './wall-tools.js';
+import { isWallColor, wallStyle, wallControls, resizeWall, sampleWallStyle, maxWallThickness, clampWallThickness } from './wall-tools.js';
 import RecentPlans from './RecentPlans.jsx';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 
@@ -883,6 +883,7 @@ function hasHiddenDesktopTip() {
 
 export function BlueprintApp({
   active = true, showRecent = false, sampleRequested = false, onSampleOpened, onOpenWorkspace,
+  showUpload = false, onOpenUpload, watermarkPreview = false, downloadableProjectIds = [],
   repository, projectAccess: paidProjectAccess, lockedProjectIds = [], owner, authBusy = false, onRegisterSave, canDownload,
   showMobileTip = false, showFirstUseGuide = false,
   freeEditing = false,
@@ -1077,7 +1078,7 @@ export function BlueprintApp({
 
   useEffect(() => {
     routeVersion.current += 1;
-    if (active && !showPlans) return;
+    if (active && !showPlans && !showUpload) return;
     resetPointerInput();
 
 
@@ -1087,7 +1088,7 @@ export function BlueprintApp({
     setImportOpen(false);
     setGuideMode(null);
     dismissDialog();
-  }, [active, showPlans]);
+  }, [active, showPlans, showUpload]);
 
   useEffect(() => {
     onRegisterSave?.(async () => {
@@ -1115,7 +1116,12 @@ export function BlueprintApp({
       return;
     }
     pushHistory();
-    if (current.type === 'wall') wallDefaults.current = { ...wallStyle(current), ...patch };
+    if (current.type === 'wall') {
+      if (patch.thicknessInches !== undefined) {
+        patch = { ...patch, thicknessInches: clampWallThickness(patch.thicknessInches, projectRef.current.unitsPerInch) };
+      }
+      wallDefaults.current = { ...wallStyle(current), ...patch };
+    }
     updateElement(id, patch);
   };
   const changeTool = (next) => {
@@ -1185,6 +1191,9 @@ export function BlueprintApp({
     }
     pushHistory();
     const element = { id: uid(), ...(el.type === 'wall' ? wallDefaults.current : {}), ...el };
+    if (element.type === 'wall') {
+      element.thicknessInches = clampWallThickness(element.thicknessInches, projectRef.current.unitsPerInch);
+    }
     updateProject((p) => ({ ...p, elements: [...p.elements, element] }));
     if (['text', 'symbol', 'door', 'window'].includes(el.type)) {
       setSelectedId(element.id);
@@ -1292,7 +1301,7 @@ export function BlueprintApp({
     const onKey = (e) => {
       if (
         !active ||
-        showPlans ||
+        (showPlans || showUpload) ||
         e.defaultPrevented ||
         document.querySelector('[role=dialog]') ||
         busy ||
@@ -1370,7 +1379,7 @@ export function BlueprintApp({
       }
     };
     const onPaste = (event) => {
-      if (!active || (!showPlans && !previewOnly) || !canCreateProject || busy || !hydrated || document.querySelector('[role=dialog]')) return;
+      if (!active || (!showUpload && !showPlans && !previewOnly) || !canCreateProject || busy || !hydrated || document.querySelector('[role=dialog]')) return;
       const clipboard = event.clipboardData;
       const file = Array.from(clipboard?.files ?? []).find((item) =>
         CLIPBOARD_IMAGES.has(item.type),
@@ -1982,7 +1991,7 @@ export function BlueprintApp({
 
   async function handleImport(file) {
     if (!file || busy || importPending.current || !active || !hydrated) return;
-    if (!showPlans && originalLocked) return;
+    if (!showUpload && !showPlans && originalLocked) return;
     if (file.size > MAX_FILE_BYTES) {
       await ask({
         title: 'File is too large',
@@ -2006,7 +2015,7 @@ export function BlueprintApp({
     setBusy(true);
     try {
       if (
-        !viewOnly && !showPlans &&
+        !viewOnly && !showUpload && !showPlans &&
         (target.background || target.elements.length) &&
         !(await ask({
           title: 'Replace the background?',
@@ -2072,7 +2081,7 @@ export function BlueprintApp({
         showBackground: true,
         backgroundOpacity: 1,
       };
-      if (previewOnly || showPlans) {
+      if (showUpload || previewOnly || showPlans) {
         const name = file.name.replace(/\.[^.]+$/, '').trim().slice(0, 100) || 'Untitled plan';
         if (!(await openNewPlan({ ...emptyProject(name), ...background }))) return;
       } else {
@@ -2226,10 +2235,13 @@ export function BlueprintApp({
       // keep its existing wall widths, symbols and historical dimension labels intact.
       const unitsPerInch = importReplace ? normalized.unitsPerInch : project.unitsPerInch;
       const ratio = normalized.unitsPerInch / unitsPerInch;
-      const imported = ratio === 1 ? normalized.elements : normalized.elements.map(element => {
+      const imported = normalized.elements.map(element => {
         const placed = { ...element };
         for (const key of ['thicknessInches', 'widthInches', 'heightInches']) {
           if (placed[key] !== undefined) placed[key] *= ratio;
+        }
+        if (placed.type === 'wall') {
+          placed.thicknessInches = clampWallThickness(placed.thicknessInches, unitsPerInch);
         }
         return placed;
       });
@@ -2468,20 +2480,21 @@ export function BlueprintApp({
     }
   };
   const loadSample = async (navigate = onOpenWorkspace) => {
-    if (await openNewPlan(sampleProject(uid()), navigate)) {
-      if (freeEditing) { setGuideMode(null); setPhoneMode('edit'); setTour(tourBaseline(projectRef.current));
+    const sample = sampleProject(uid());
+    if (await openNewPlan(sample, navigate)) {
+      if (freeEditing) { setGuideMode(null); setPhoneMode('edit'); setTour({ ...tourBaseline(sample), sampleId: sample.id });
         try { localStorage.setItem('editfloorplans-sample-guide:' + (owner || 'guest'), 'seen'); } catch {} }
     }
   };
   const checkedSampleIntro = useRef(false);
   useEffect(() => {
-    if (!freeEditing || !active || !hydrated || busy || sampleRequested || checkedSampleIntro.current) return;
+    if (!freeEditing || !active || !hydrated || busy || showUpload || sampleRequested || checkedSampleIntro.current) return;
     if (showPlans && repository && cloud.listStatus !== 'ready') return;
     checkedSampleIntro.current = true;
     try { if (localStorage.getItem('editfloorplans-sample-guide:' + (owner || 'guest'))) return; } catch {}
     if (project.background || project.elements.length || projects.some(plan => plan.background || plan.elements.length) || cloud.list?.length) return;
     void loadSample();
-  }, [freeEditing, active, hydrated, busy, sampleRequested, cloud.listStatus]);
+  }, [freeEditing, active, hydrated, busy, showUpload, sampleRequested, cloud.listStatus]);
   useEffect(() => {
     if (!tour) return;
     if (tour.step === 5 || tour.step === 7) setEditorPanel('tools');
@@ -2501,12 +2514,29 @@ export function BlueprintApp({
   // The same tab can carry a preview through sign-in and trial activation.
   // Credit-based projects require an explicit purchase decision on Recent plans.
   useEffect(() => {
-    if (!previewOnly && active && hydrated && previewPlan && !singleProject) {
+    if (!showUpload && !previewOnly && active && hydrated && previewPlan && !singleProject) {
       chooseProject(previewPlan);
       onPreviewPlanOpened?.();
       onOpenWorkspace?.();
     }
-  }, [previewOnly, active, hydrated, previewPlan, singleProject]);
+  }, [showUpload, previewOnly, active, hydrated, previewPlan, singleProject]);
+
+  const openOwnPlan = () => {
+    setTour(null);
+    setEditorPanel(null);
+    if (!onOpenUpload) {
+      fileRef.current?.click();
+      return;
+    }
+
+    // Only discard the draft created by this sample walkthrough.
+    if (tour?.sampleId === projectRef.current.id && !accountIdRef.current) {
+      setProjects(list => list.filter(plan => plan.id !== tour.sampleId));
+      if (previewPlan?.id === tour.sampleId) onPreviewPlanOpened?.();
+      chooseProject(emptyProject('Untitled project'), false);
+    }
+    onOpenUpload();
+  };
 
   const deleteProject = async (id) => {
     if (
@@ -2748,13 +2778,35 @@ export function BlueprintApp({
       </Modal>
     );
 
+  if (showUpload) {
+    return (
+      <main className="ownPlanPage" aria-labelledby="own-plan-title">
+        {fileInputs}
+        <section className="ownPlanIntake">
+          <h1 id="own-plan-title">Open your own plan</h1>
+          <p>Upload a PDF or photo, or paste a copied image.</p>
+          <div className="ownPlanActions">
+            <button className="primary" disabled={!hydrated || busy} onClick={() => fileRef.current?.click()}>
+              <Icon name="upload" /> {busy ? 'Opening plan…' : 'Upload a plan'}
+            </button>
+            {navigator.clipboard?.read && (
+              <button disabled={!hydrated || busy} onClick={pastePlan}>Paste image</button>
+            )}
+          </div>
+          <a href="/#/editor" className="detailsLink">Back to editor</a>
+        </section>
+        {dialog}
+      </main>
+    );
+  }
+
   if (showPlans) {
     return (
       <>
         {tour && active && <EditorTour step={tour.step} tool={tool} project={project} compact={compact} baseline={tour}
         onStep={step => setTour(current => current ? { ...current, step } : null)} onClose={() => { setTour(null); setEditorPanel(null); }}
         onEditLabel={(id,text) => updateElement(id,{text})}
-        onOpenPlan={() => { setTour(null); setEditorPanel(null); fileRef.current?.click(); }} />}
+        onOpenPlan={openOwnPlan} />}
       {fileInputs}
         <RecentPlans
           projects={projects}
@@ -2922,7 +2974,7 @@ export function BlueprintApp({
       {tour && active && <EditorTour step={tour.step} tool={tool} project={project} compact={compact} baseline={tour}
         onStep={step => setTour(current => current ? { ...current, step } : null)} onClose={() => { setTour(null); setEditorPanel(null); }}
         onEditLabel={(id,text) => updateElement(id,{text})}
-        onOpenPlan={() => { setTour(null); setEditorPanel(null); fileRef.current?.click(); }} />}
+        onOpenPlan={openOwnPlan} />}
       {fileInputs}
       <div className="workspace">
         {!compact && <aside className="sidebar leftbar" aria-label="Drawing tools">{toolPalette}</aside>}
@@ -3074,6 +3126,19 @@ export function BlueprintApp({
               {!exporting && tool === 'erase' && brushPoint && (
                 <circle data-editor-only pointerEvents="none" cx={brushPoint.x} cy={brushPoint.y} r={eraseSize / 2}
                   fill="none" stroke={DRAWING_ACCENT} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+              )}
+              {watermarkPreview && !downloadableProjectIds.includes(accountId) && (project.background || project.elements.length > 0) && (
+                <g data-editor-only data-preview-watermark pointerEvents="none" aria-hidden="true">
+                  <defs>
+                    <pattern id="previewWatermark" width="400" height="190" patternUnits="userSpaceOnUse" patternTransform="rotate(-26)">
+                      <text x="200" y="104" textAnchor="middle" fontSize="33" fontWeight="700"
+                        fill="#662902" fillOpacity=".25" stroke="#fff" strokeOpacity=".65" strokeWidth="2" paintOrder="stroke">
+                        editfloorplans.com
+                      </text>
+                    </pattern>
+                  </defs>
+                  <rect width={W} height={H} fill="url(#previewWatermark)" />
+                </g>
               )}
               {tour && !exporting && <TourMarks step={tour.step} />}
             </svg>
@@ -3854,7 +3919,7 @@ function Draft({ draft, project, zoom, wallAppearance }) {
         y2={draft.b.y}
         stroke={wallAppearance?.color || '#000'}
         strokeOpacity="0.82"
-        strokeWidth={Math.max(3, (wallAppearance?.thicknessInches || 4.5) * project.unitsPerInch)}
+        strokeWidth={Math.max(3, clampWallThickness(wallAppearance?.thicknessInches || 4.5, project.unitsPerInch) * project.unitsPerInch)}
         strokeLinecap="square"
       />
     );
@@ -3979,10 +4044,10 @@ function Properties({
             <span>Wall thickness (px)</span>
             <NumberInput
               value={(selected.thicknessInches || 4.5) * drawingUnits}
-              min={0.25 * drawingUnits}
+              min={Math.min(0.25, maxWallThickness(drawingUnits)) * drawingUnits}
               step="any"
-              max={120 * drawingUnits}
-              onCommit={(pixels) => set('thicknessInches', pixels / drawingUnits)}
+              max={maxWallThickness(drawingUnits) * drawingUnits}
+              onCommit={(pixels) => set('thicknessInches', clampWallThickness(pixels / drawingUnits, drawingUnits))}
             />
           </label>
           <label className="field wallColorField">
@@ -4020,7 +4085,7 @@ function Properties({
           {selected.type === 'window' && (
             <label className="field">
               <span>Drawing depth (px)</span>
-              <NumberInput value={(selected.heightInches || 4.5) * drawingUnits} min={0.25 * drawingUnits} step="any"
+              <NumberInput value={(selected.heightInches || 4.5) * drawingUnits} min={Math.min(0.25, maxWallThickness(drawingUnits)) * drawingUnits} step="any"
                 onCommit={(pixels) => set('heightInches', pixels / drawingUnits)} />
             </label>
           )}

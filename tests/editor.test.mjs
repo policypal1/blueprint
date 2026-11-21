@@ -1552,7 +1552,7 @@ test('expired trials link to each billing option and keep purchased plans access
   const view = render(React.createElement(TrialPage, { account, access: { data }, offer: true }));
   assert.ok(screen.getByRole('heading', { name: 'Your trial ended. Your work is saved.' }));
   const options = within(screen.getByRole('navigation', { name: 'Choose a plan' }));
-  assert.equal(options.getByRole('link', { name: /Single project.*\$9/i }).getAttribute('href'), '/?plan=project#/account/billing');
+  assert.equal(options.getByRole('link', { name: /Export this project.*\$9/i }).getAttribute('href'), '/?plan=project#/account/billing');
   assert.equal(options.getByRole('link', { name: /Monthly access.*\$19/i }).getAttribute('href'), '/?plan=monthly#/account/billing');
   assert.equal(screen.queryByRole('button', { name: /start free trial/i }), null);
   view.rerender(React.createElement(TrialPage, { account, access: { data: { ...data, projectCredits: 1 } }, offer: true }));
@@ -2061,7 +2061,7 @@ test('guests and expired accounts can edit freely and reach the paywall only at 
       const dialog = await screen.findByRole('dialog');
       assert.ok(canvas.closest('.editorRoot').hasAttribute('inert'));
       if (guest) assert.ok(within(dialog).getByRole('button', { name: 'Create account' }));
-      else assert.ok(within(dialog).getByRole('link', { name: /Unlock to download/ }));
+      else assert.ok(within(dialog).getByRole('link', { name: /Export this project/ }));
       assert.ok(count() > before);
       cleanup(); sessionStorage.clear();
     }
@@ -2202,8 +2202,17 @@ for (const compact of [false, true]) test(`first-time ${compact ? 'mobile' : 'de
   t.after(() => { window.matchMedia = previousMedia; });
   const owner = 'tutorial-new-visitor-' + compact;
   localStorage.removeItem('editfloorplans-sample-guide:' + owner);
-  render(React.createElement(Editor, { owner, freeEditing:true }));
+  function TutorialEditor() {
+    const [showUpload, setShowUpload] = React.useState(false);
+    return React.createElement(Editor, {
+      owner, freeEditing: true, showUpload, watermarkPreview: true,
+      onOpenUpload: () => setShowUpload(true),
+      onOpenWorkspace: () => setShowUpload(false),
+    });
+  }
+  render(React.createElement(TutorialEditor));
   await screen.findByRole('heading', {name:'Choose Wall'});
+  assert.ok(svg().querySelector('[data-preview-watermark]'));
   click('button','Wall');
   await screen.findByRole('heading',{name:'Draw a new wall'});
   assert.ok(svg().querySelector('[data-tour-marks]'));
@@ -2220,9 +2229,14 @@ for (const compact of [false, true]) test(`first-time ${compact ? 'mobile' : 'de
   await screen.findByRole('heading',{name:'Tutorial complete'});
   assert.ok(screen.getByRole('button',{name:'Open your own plan'}));
   assert.equal(screen.queryByRole('dialog',{name:'Export plan'}),null);
-  click('button','Keep exploring');
-  assert.equal(screen.queryByRole('region',{name:'Guided sample edit'}),null);
   assert.ok([...svg().querySelectorAll('text')].some(el=>el.textContent==='Living room'));
+  click('button','Open your own plan');
+  await screen.findByRole('heading',{name:'Open your own plan'});
+  assert.equal(svg(),null);
+  const input = document.querySelector('input[type=file]');
+  fireEvent.change(input,{target:{files:[new File(['scanned plan'],'my-plan.png',{type:'image/png'})]}});
+  await waitFor(() => assert.ok(svg()?.querySelector('image')));
+  assert.equal(count(),0);
   await waitSaved(); cleanup();
   render(React.createElement(Editor,{owner,freeEditing:true}));
   await waitSaved();

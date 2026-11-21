@@ -1,6 +1,13 @@
 import { isProjectNumber } from './editor-core.js';
 
 const clamp = (n, low, high) => Math.max(low, Math.min(high, n));
+const MAX_WALL_INCHES = 24;
+const MAX_WALL_PIXELS = 96;
+export const maxWallThickness = unitsPerInch => Math.min(MAX_WALL_INCHES, MAX_WALL_PIXELS / unitsPerInch);
+export const clampWallThickness = (inches, unitsPerInch) => {
+  const max = maxWallThickness(unitsPerInch);
+  return clamp(inches, Math.min(0.25, max), max);
+};
 export const isWallColor = value => typeof value === 'string' && /^#[\da-f]{6}$/i.test(value);
 
 export function wallStyle(wall) {
@@ -25,8 +32,8 @@ export function resizeWall(wall, handle, point, start, unitsPerInch) {
   if (handle !== 'thickness' || !start || !(unitsPerInch > 0)) return {};
   const { normal } = wallControls(wall, unitsPerInch);
   const delta = (point.x - start.x) * normal.x + (point.y - start.y) * normal.y;
-  const thicknessInches = clamp(wallStyle(wall).thicknessInches + 2 * delta / unitsPerInch, 0.25, 120);
-  return { thicknessInches: Math.round(thicknessInches * 100) / 100 };
+  const thicknessInches = clampWallThickness(wallStyle(wall).thicknessInches + 2 * delta / unitsPerInch, unitsPerInch);
+  return { thicknessInches: clampWallThickness(Math.round(thicknessInches * 100) / 100, unitsPerInch) };
 }
 
 // Read the visible ink around a tap. Width is an estimate of a solid stroke,
@@ -75,5 +82,5 @@ export function sampleWallStyle(image, x, y, pixelsPerUnit, unitsPerInch) {
   const color = '#' + tone.map(part => part.toString(16).padStart(2, '0')).join('');
   const inches = narrowest / pixelsPerUnit / unitsPerInch;
   return { color, ...(Number.isFinite(inches) && inches > 0
-    ? { thicknessInches: Math.round(clamp(inches, 0.25, 120) * 100) / 100 } : {}) };
+    ? { thicknessInches: clampWallThickness(Math.round(inches * 100) / 100, unitsPerInch) } : {}) };
 }

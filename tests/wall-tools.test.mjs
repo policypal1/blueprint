@@ -65,3 +65,10 @@ test('custom wall tones survive saving and backups while unsafe paint values are
   }
   assert.deepEqual(wallStyle({}), { color: '#000000', thicknessInches: 4.5 });
 });
+
+test('wall thickness stays within 24 inches and 96 drawing pixels at larger scales', () => {
+  const to = { x:400, y:2000 };
+  const from = { x:400, y:100 };
+  assert.equal(resizeWall(wall, 'thickness', to, from, 4).thicknessInches, 24);
+  assert.equal(resizeWall(wall, 'thickness', to, from, 12).thicknessInches, 8);
+});

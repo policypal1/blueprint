@@ -25,6 +25,7 @@ const APP_ROUTE_HASHES = {
   recent: RECENT_HASH,
   workspace: WORKSPACE_HASH,
   sample: '#/editor/sample',
+  uploadPlan: '#/editor/upload',
   editorAccess: ACCESS_HASH,
   account: '#/account',
   security: '#/account/security',
@@ -38,6 +39,7 @@ const PAGE_TITLES = {
   recent: 'Recent plans',
   workspace: 'Editor',
   sample: 'Editor',
+  uploadPlan: 'Upload your floor plan',
   editorAccess: 'Editing access',
   account: 'Account',
   security: 'Sign-in & security',
@@ -56,7 +58,7 @@ function readRoute() {
   return hash.startsWith('#/') ? publicPageAt(hash.slice(1)) || 'notFound' : page;
 }
 function isEditorRoute(route) {
-  return ['recent', 'workspace', 'sample', 'editorAccess'].includes(route);
+  return ['recent', 'workspace', 'sample', 'uploadPlan', 'editorAccess'].includes(route);
 }
 function editorAuthDestination() {
   const params = new URLSearchParams(window.location.search);
@@ -353,7 +355,7 @@ export default function Root() {
       )}
       {(showWorkspace || visitedEditor) && editorAvailable && (
         <div className="editorRoot" hidden={!showWorkspace} inert={editorDialog ? '' : undefined} aria-hidden={editorDialog || undefined}>
-          {showRecentPlans && <SiteHeader page={route} account={accountNav} />}
+          {(showRecentPlans || route === 'uploadPlan') && <SiteHeader page={route} account={accountNav} />}
           {showRecentPlans && !policy?.ownerAccess && !policy?.monthly && timedAccessActive(policy?.trialEndsAt) && (
             <TrialStatus expiresAt={policy.trialEndsAt} />
           )}
@@ -388,6 +390,10 @@ export default function Root() {
                 onRegisterSave={registerSave}
                 showRecent={showRecentPlans}
                 sampleRequested={route === 'sample'}
+                showUpload={route === 'uploadPlan'}
+                onOpenUpload={() => navigateTo('/#/editor/upload')}
+                watermarkPreview={requireSignIn && !fullAccess}
+                downloadableProjectIds={policy?.projectIds}
                 onOpenWorkspace={() => {
                   if (window.location.hash !== WORKSPACE_HASH) window.location.hash = WORKSPACE_HASH;
                   setRoute('workspace');
