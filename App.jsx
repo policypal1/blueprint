@@ -101,13 +101,17 @@ function fitRasterToWorkspace(source) {
   canvas.width = W * 2;
   canvas.height = H * 2;
   const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not prepare the drawing. Try a smaller image or sheet.');
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   const scale = Math.min(canvas.width / source.width, canvas.height / source.height);
   const dw = source.width * scale,
     dh = source.height * scale;
   ctx.drawImage(source, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
-  return canvas.toDataURL('image/png');
+  const image = canvas.toDataURL('image/png');
+  if (!image.startsWith('data:image/png;base64,') || image.length <= 'data:image/png;base64,'.length)
+    throw new Error('Could not read the drawing image. Try a smaller image or sheet.');
+  return image;
 }
 
 function fitBoxToWorkspace(width, height) {
@@ -2012,7 +2016,7 @@ export function BlueprintApp({
     }
     const target = projectRef.current;
     const onSamePage = captureRoute();
-    let pdf, objectUrl;
+    let pdfTask, pdf, objectUrl;
     importPending.current = true;
     setBusy(true);
     try {
@@ -2036,7 +2040,8 @@ export function BlueprintApp({
         const [data, pdfjs] = await Promise.all([file.arrayBuffer(), import('pdfjs-dist')]);
         if (!onSamePage()) return;
         pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
-        pdf = await pdfjs.getDocument({ data, isEvalSupported: false }).promise;
+        pdfTask = pdfjs.getDocument({ data, isEvalSupported: false });
+        pdf = await pdfTask.promise;
         if (!onSamePage()) return;
         if (pdf.numPages > 1) {
           const choice = await ask({
@@ -2105,7 +2110,8 @@ export function BlueprintApp({
       });
     } finally {
       try {
-        await pdf?.destroy();
+        if (pdf) await pdf.destroy();
+        else await pdfTask?.destroy();
       } catch {
         /* Release UI state even if the worker has already stopped. */
       }
@@ -2274,8 +2280,7 @@ export function BlueprintApp({
       if (!svg) throw new Error('Blueprint canvas is not available.');
 
       const clone = svg.cloneNode(true);
-      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-      clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+      // XMLSerializer emits the SVG namespace from the namespaced DOM node.
       clone.setAttribute('width', String(W * 2));
       clone.setAttribute('height', String(H * 2));
       clone.setAttribute('viewBox', `0 0 ${W} ${H}`);
