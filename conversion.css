@@ -1,0 +1,38 @@
+.hero h1 { font-size: clamp(44px, 9vw, 88px); }
+.hero { min-height: 0; padding-block: clamp(54px, 7vw, 90px) 36px; }
+.heroCopy > p { max-width: 45ch; }
+.heroActions .detailsLink { display: inline-block; margin-top: 18px; font-size: 1rem; }
+.homeBeforeAfter { max-width: 1100px; padding: 8px 5% 36px; margin: 0 auto; text-align: center; }
+.comparisonPair { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(10px, 3vw, 28px); }
+.comparisonPair figure { min-width: 0; margin: 0; overflow: hidden; border: 1px solid var(--line); background: #fff; border-radius: 12px; }
+.comparisonPair figcaption { padding: 13px 18px 0; text-align: left; font-weight: 600; font-size: 1rem; }
+.comparisonPair img { width: 100%; height: auto; display: block; aspect-ratio: 1.5; object-fit: contain; }
+.homeBeforeAfter > p { color: var(--muted); font-size: 1rem; margin: 18px 0; }
+.homeBeforeAfter .hint { font-size: .875rem; margin: 12px 0 0; }
+.priceEyebrow { color: var(--orange); text-transform: uppercase; letter-spacing: .08em; font-size: .875rem; font-weight: 700; margin-bottom: 14px; }
+.priceCard:not(:has(.priceEyebrow)) { padding-top: clamp(57px, 6vw, 74px); }
+.priceCard.billingPlan { padding-top: clamp(20px, 3vw, 30px); }
+.pricingIntro { font-size: 1.125rem; color: var(--muted); margin-bottom: 32px; }
+.guaranteeLine { border: 1px solid var(--line); border-radius: 10px; padding: 20px; font-size: 1rem; line-height: 1.6; }
+.guaranteeLine a { text-decoration: underline; }
+.audienceGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+.audienceGrid article { border-top: 2px solid var(--line); padding-top: 18px; }
+.audienceGrid h3 { font-size: 1.125rem; margin: 0 0 10px; }
+.audienceGrid p, .fileSupport { color: var(--muted); font-size: 1rem; line-height: 1.6; }
+.fileSupport { margin-top: 28px; font-size: .875rem; }
+.editorTour { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
+.tourSpotlight { position: fixed; border: 3px solid var(--orange, #d36b36); border-radius: 8px; box-shadow: 0 0 0 100vmax #0c182ca6; pointer-events: none; }
+.tourCard { pointer-events: auto; position: absolute; width: min(340px, calc(100vw - 32px)); left: 50%; top: 84px; transform: translateX(-50%); padding: 18px; background: var(--paper, #fff); color: var(--ink, #132238); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 40px #0003; }
+.tourCanvasCard { top: 80px; }
+.tourHeading { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: .875rem; color: var(--muted); }
+.tourHeading button { border: 0; padding: 0 8px; min-height: 32px; font-size: 1.5rem; background: transparent; }
+.tourCard h2 { font-size: 1.25rem; margin: 8px 0; }
+.tourCard p { font-size: 1rem; line-height: 1.5; margin: 0 0 12px; }
+.tourSkip { font-size: .875rem; background: transparent; text-decoration: underline; border: 0; padding: 4px 0; }
+@media(max-width: 800px) {
+  .hero h1 { font-size: clamp(44px, 10.4vw, 65px); }
+  .hero { padding-top: 42px; }
+  .audienceGrid { grid-template-columns: 1fr; gap: 14px; }
+  .tourCard { top: 90px; padding: 14px; }
+  .tourCard p { font-size: .875rem; }
+}
