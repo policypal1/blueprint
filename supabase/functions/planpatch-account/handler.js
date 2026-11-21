@@ -3,7 +3,7 @@ import { createBilling, validAttempt } from './billing.js';
 import { MONTHLY_VERSION, LIVE_MONTHLY_VERSION } from './monthly-offer.js';
 
 const ACCOUNT = 'planpatch_accounts';
-const ACCOUNT_FIELDS = 'stripe_customer_id,stripe_test_customer_id,deletion_started_at';
+const ACCOUNT_FIELDS = 'stripe_customer_id,stripe_test_customer_id,deletion_started_at,owner_access';
 const PAGE = 100;
 const DEV_ORIGIN = 'http://localhost:5173';
 
@@ -160,6 +160,7 @@ export function accountHandler({ admin, test, live, clientFor, siteOrigin, webho
       const { createCheckout, monthlyCheckout, openBillingPortal } = services(config, isLive);
       if (body.action === 'status') {
         const access = deleting ? null : checked(await client.rpc('planpatch_sandbox_access').maybeSingle());
+        const account = deleting ? null : await readAccount(admin, userId);
         const confirmation = deleting ? null : await admin.rpc(confirmationRpc, {
           owner_id: userId,
         }).maybeSingle();
@@ -168,6 +169,7 @@ export function accountHandler({ admin, test, live, clientFor, siteOrigin, webho
           activationPending: isLive && !config.checkout_enabled,
           monthlyOfferVersion: confirmation && !confirmation.error ? monthlyVersion : null,
           monthlyConfirmation: confirmation?.data ?? null,
+          ownerAccess: account?.owner_access === true,
           paymentsRequired: Boolean(access?.payments_required), monthly: Boolean(access?.monthly),
           projectCredits: Number(access?.project_credits ?? 0), projectIds: access?.project_ids ?? [],
         });
@@ -186,6 +188,9 @@ export function accountHandler({ admin, test, live, clientFor, siteOrigin, webho
         }
         const account = await ensureAccount(admin, userId);
         if (!account || account.deletion_started_at) return reply(409, { error: 'Account deletion is in progress.' });
+        if (body.action === 'checkout' && account.owner_access === true) {
+          return reply(409, { error: 'Your owner account already has permanent access. No payment is needed.' });
+        }
         const customer = await getStripeCustomer(admin, stripe, isLive ? 'stripe_customer_id' : 'stripe_test_customer_id', userId, account, client);
         if (!customer) return reply(409, { error: 'Account deletion is in progress.' });
         const returnOrigin = requestOrigin && requestOrigin !== DEV_ORIGIN ? requestOrigin : origin;
