@@ -133,26 +133,25 @@
   border-top: 0;
   padding-block: clamp(12px, 3vw, 32px) clamp(32px, 5vw, 60px);
 }
-.audiencePanel {
+.audienceGrid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-  gap: clamp(24px, 5vw, 68px);
-  padding: clamp(26px, 5vw, 54px);
-  background: #f0ebe2;
-  border-radius: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+  margin: 22px 7px 7px 0;
 }
-.audiencePanel h2 {
-  font-size: clamp(32px, 5vw, 52px);
-  line-height: 1.04;
+.audienceGrid .audienceCard {
+  padding: clamp(20px, 2.5vw, 27px);
 }
-.audienceList { margin: 0; }
-.audienceList > div + div {
-  border-top: 1px solid #d6ccbf;
-  margin-top: 16px;
-  padding-top: 16px;
+.audienceGrid .audienceCard h3 {
+  margin-bottom: 10px;
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
 }
-.audienceList dt { font-size: 1rem; line-height: 1.35; font-weight: 700; }
-.audienceList dd { margin: 5px 0 0; color: #514b43; line-height: 1.5; }
+.audienceCard p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
 
 .ownPlanPage { height: 100%; overflow: auto; padding: clamp(45px, 10vh, 108px) 20px; }
 .ownPlanIntake {
@@ -170,7 +169,6 @@
 
 @media (max-width: 800px) {
   .homeBeforeAfter { padding-inline: 16px; }
-  .audiencePanel { grid-template-columns: 1fr; gap: 20px; }
-  .audienceBreak { display: none; }
+  .audienceGrid { grid-template-columns: 1fr; gap: 17px; }
   .comparisonLabels { inset: 8px 8px auto; font-size: .72rem; }
 }
