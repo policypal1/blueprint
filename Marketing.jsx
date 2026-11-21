@@ -32,7 +32,7 @@ function scrollToDemo() {
   document.getElementById('how-it-works')?.scrollIntoView?.();
 }
 
-function BlueprintDemo({ heading = 'How it works' }) {
+function BlueprintDemo({ heading = 'How it works', labelledBy = 'guide-title', showGuidedLink = true }) {
   const [mobile, setMobile] = useState(
     () => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 800px)').matches),
   );
@@ -91,7 +91,7 @@ function BlueprintDemo({ heading = 'How it works' }) {
 
   return (
     <section id="how-it-works" className="blueprintDemo"
-      aria-labelledby={heading ? 'blueprint-demo-title' : 'guide-title'}>
+      aria-labelledby={heading ? 'blueprint-demo-title' : labelledBy}>
       {heading && <h2 id="blueprint-demo-title" tabIndex={-1}>{heading}</h2>}
       <video
         key={String(mobile)}
@@ -105,7 +105,7 @@ function BlueprintDemo({ heading = 'How it works' }) {
         loop
         preload="none"
       />
-      <a href={publicPages.revisionDemo.path} className="detailsLink">Try a guided edit <Icon name="arrow" size={16} /></a>
+      {showGuidedLink && <a href={publicPages.revisionDemo.path} className="detailsLink">Try a guided edit <Icon name="arrow" size={16} /></a>}
     </section>
   );
 }
@@ -182,8 +182,18 @@ function PriceOptions({ compact = false }) {
 function TrialQualifier() {
   return (
     <p className="trialQualifier">
-      <Icon name="card" size={16} /> <span>3-day free trial for new accounts · <strong className="trialNoCard">No credit card needed</strong></span>
+      3-day free trial. <strong className="trialNoCard">No credit card needed.</strong>
     </p>
+  );
+}
+
+function HomeVideo() {
+  const [open, setOpen] = useState(false);
+  return (
+    <details className="homeVideo" onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary id="home-video-label">Watch the editor video <Icon name="chevron" size={18} /></summary>
+      {open && <BlueprintDemo heading={null} labelledBy="home-video-label" showGuidedLink={false} />}
+    </details>
   );
 }
 
@@ -194,21 +204,20 @@ function HomeContent({ showTrial, showVideo }) {
         <div className="heroBlueprint" aria-hidden="true"><PlanIllustration /></div>
         <div className="heroCopy">
           <h1 id="blueprint-hero-title">Edit your <span className="heroEmphasis">existing floor plan</span>.</h1>
-          <p>Show your remodeling client where a door or wall could move. Mark the change on their PDF or image and export the revision for review.</p>
+          <p>Upload a PDF or photo of your floor plan. Edit walls and doors, then export the revised plan.</p>
           <div className="heroActions">
             <EditorLink />
-            {showTrial && <TrialQualifier />}
             <div><a href="#doorway-demo" className="detailsLink demoScrollLink" onClick={(event) => {
               if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
               event.preventDefault();
               document.getElementById('revision-title')?.focus({ preventScroll: true });
               document.getElementById('doorway-demo')?.scrollIntoView?.({ block: 'start' });
-            }}>Try the demo below <Icon name="chevron" size={18} /></a></div>
+            }}>Try demo below <Icon name="chevron" size={18} /></a></div>
           </div>
         </div>
       </section>
-      <RevisionDemo embedded videoHref={showVideo ? undefined : DEMO_HASH} />
-      {showVideo && <BlueprintDemo />}
+      <RevisionDemo embedded />
+      {showVideo ? <BlueprintDemo /> : <HomeVideo />}
       <section className="homeSection" aria-labelledby="project-pricing-title">
         <div className="priceSectionHeading">
           <h2 id="project-pricing-title">One project or monthly access</h2>
@@ -216,6 +225,7 @@ function HomeContent({ showTrial, showVideo }) {
         </div>
         <PriceOptions compact />
       </section>
+      <Faqs showTrial={showTrial} mobileHome />
     </>
   );
 }
@@ -243,6 +253,29 @@ function GuideContent() {
   );
 }
 
+function Faqs({ showTrial, mobileHome = false }) {
+  const headingId = mobileHome ? 'home-faq-title' : 'faq-title';
+  return (
+    <section className={mobileHome ? "faqSection mobileHomeFaq" : "faqSection"} aria-labelledby={headingId}>
+      <h2 id={headingId} tabIndex={-1}>FAQs</h2>
+      <div className="faqList">
+        {showTrial && (
+          <details>
+            <summary>What happens when the free trial ends?<Icon name="chevron" size={20} /></summary>
+            <p>The trial ends automatically after 72 hours. Choose a plan if you want to keep editing and downloading your work.</p>
+          </details>
+        )}
+        {faqs.map(([question, answer]) => (
+          <details key={question}>
+            <summary>{question}<Icon name="chevron" size={20} /></summary>
+            <p>{answer}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function PricingContent({ showTrial }) {
   return (
     <>
@@ -254,23 +287,7 @@ function PricingContent({ showTrial }) {
         </div>
       )}
       <PriceOptions />
-      <section className="faqSection" aria-labelledby="faq-title">
-        <h2 id="faq-title">FAQs</h2>
-        <div className="faqList">
-          {showTrial && (
-            <details>
-              <summary>What happens when the free trial ends?<Icon name="chevron" size={20} /></summary>
-              <p>The trial ends automatically after 72 hours. Choose a plan if you want to keep editing and downloading your work.</p>
-            </details>
-          )}
-          {faqs.map(([question, answer]) => (
-            <details key={question}>
-              <summary>{question}<Icon name="chevron" size={20} /></summary>
-              <p>{answer}</p>
-            </details>
-          ))}
-        </div>
-      </section>
+      <Faqs showTrial={showTrial} />
     </>
   );
 }
@@ -286,7 +303,7 @@ function FooterLinks() {
   );
 }
 
-export function SiteFooter() {
+export function SiteFooter({ home = false }) {
   const copyright = `© ${new Date().getFullYear()} ${PRODUCT_NAME}`;
   return (
     <footer className="siteFooter">
@@ -302,7 +319,11 @@ export function SiteFooter() {
       }}>
         <summary>Site links <Icon name="chevron" size={16} /></summary>
         <div className="footerMenuPanel">
-          <nav aria-label="Site links"><FooterLinks /></nav>
+          <nav aria-label="Site links">
+            <a href={home ? '#home-faq-title' : '/pricing#faq-title'}
+              onClick={(event) => { event.currentTarget.closest('details').open = false; }}>FAQs</a>
+            <FooterLinks />
+          </nav>
           <small>{copyright}</small>
         </div>
       </details>
@@ -340,7 +361,7 @@ export default function Marketing({ page, account, trialOffer: showTrial = false
         {page === 'revisionDemo' && <RevisionDemo />}
         {home && <HomeContent showTrial={showTrial} showVideo={page === 'demo'} />}
       </main>
-      <SiteFooter />
+      <SiteFooter home={home} />
     </div>
   );
 }
