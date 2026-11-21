@@ -21,7 +21,7 @@ const mailingAddress = import.meta.env?.VITE_PLANPATCH_MAILING_ADDRESS?.trim();
 
 function SellerContact() {
   return (
-    <p>Samuel Kumpula, an Oregon sole proprietor, operates Blueprint at EditFloorPlans.com.
+    <p>Samuel Kumpula, an Oregon sole proprietor, operates EditFloorPlans.com.
       {mailingAddress && <> You can write to the operator at {mailingAddress}.</>}
       {' '}Email <SupportContact /> for account, billing or privacy requests.</p>
   );
