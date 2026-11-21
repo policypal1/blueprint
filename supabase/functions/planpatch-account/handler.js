@@ -182,7 +182,7 @@ export function accountHandler({ admin, test, live, clientFor, siteOrigin, webho
         }
         if (body.action === 'checkout' && body.plan === 'monthly'
             && (body.consent?.accepted !== true || body.consent.version !== monthlyVersion)) {
-          return reply(400, { error: 'Review and agree to the current monthly billing terms before checkout.' });
+          return reply(400, { error: 'Refresh the order and agree to the current monthly billing terms before checkout.' });
         }
         const account = await ensureAccount(admin, userId);
         if (!account || account.deletion_started_at) return reply(409, { error: 'Account deletion is in progress.' });
@@ -222,7 +222,10 @@ export function accountHandler({ admin, test, live, clientFor, siteOrigin, webho
         if (error && error.code !== 'user_not_found') throw error;
       }
       return reply(200, { deleted: true });
-    } catch {
+    } catch (error) {
+      if (body.action === 'checkout' && body.plan === 'monthly' && error?.message === 'A checkout with different terms is still open.') {
+        return reply(409, { error: 'A previous monthly checkout is still open. Finish in that tab, or try again when it expires within two hours.' });
+      }
       const errors = {
         status: 'Could not check account access. Try again.',
         billing: 'Could not open billing. Try again.',
